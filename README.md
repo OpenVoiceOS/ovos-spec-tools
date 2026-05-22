@@ -1,8 +1,8 @@
 # ovos-spec-tools
 
-Reference implementation of the OVOS intent specifications — the low-level,
-dependency-light primitives that the [formal
-specifications](https://github.com/OpenVoiceOS/formal-specifications) describe.
+Reference implementation of the OVOS [formal
+specifications](https://github.com/OpenVoiceOS/formal-specifications) — the
+low-level, dependency-light primitives those specifications describe.
 
 OVOS components reimplement template expansion and resource loading in several
 places, and the copies drift. This package is the single conformant
@@ -10,11 +10,12 @@ implementation those components — and any third-party tool — can depend on.
 
 ## Status
 
-| Primitive | Spec | State |
-|-----------|------|-------|
+| Tool | Spec | State |
+|------|------|-------|
 | Sentence template expander | OVOS-INTENT-1 v2 | available |
 | Locale resource loader | OVOS-INTENT-2 | available |
 | Dialog renderer | OVOS-INTENT-2 §4.2 | available |
+| `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 | available |
 
 ## The expander
 
@@ -73,6 +74,25 @@ from ovos_spec_tools import render
 render(res.load_dialog("weather"), slots={"temperature": 21})
 # 'It is 21 degrees.'
 ```
+
+## The locale linter
+
+`ovos-spec-lint` validates every resource file under a locale directory — the
+syntax of every template (OVOS-INTENT-1) and the naming and layout of every
+file (OVOS-INTENT-2) — and reports every problem rather than stopping at the
+first.
+
+```bash
+ovos-spec-lint path/to/locale
+# path/to/locale/en-US/bad.intent: error: unbalanced metacharacters ...
+# 1 error(s), 0 warning(s)
+```
+
+It checks template syntax, malformed forms, empty files, slot-free roles
+carrying a slot, base-name and language-tag naming, duplicate resources, and
+unresolved `<name>` references. The argument may be a `locale/` directory or a
+single `<lang>/` directory. Exit code is non-zero on errors (or, with
+`--strict`, on warnings) — suitable for CI.
 
 ## Install
 
