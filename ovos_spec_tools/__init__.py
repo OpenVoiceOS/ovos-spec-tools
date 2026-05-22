@@ -7,16 +7,19 @@ formal specifications describe:
   template expander;
 - :class:`~ovos_spec_tools.resources.LocaleResources` — the OVOS-INTENT-2
   locale resource-file loader;
-- :func:`~ovos_spec_tools.dialog.render` — the OVOS-INTENT-2 §4.2 dialog
-  renderer;
+- :func:`~ovos_spec_tools.dialog.render` / :class:`~ovos_spec_tools.dialog.DialogRenderer`
+  — the OVOS-INTENT-2 §4.2 dialog renderer;
+- :func:`~ovos_spec_tools.language.standardize_lang` /
+  :func:`~ovos_spec_tools.language.closest_lang` — language-tag normalization
+  and closest-match resolution;
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
 from ovos_spec_tools.dialog import DialogRenderer, UnfilledSlot, render
 from ovos_spec_tools.expansion import MalformedTemplate, expand
+from ovos_spec_tools.language import closest_lang, standardize_lang
 from ovos_spec_tools.lint import Finding, lint_locale
 from ovos_spec_tools.resources import (
-    LanguageMatcher,
     LocaleResources,
     MalformedResource,
     read_resource_file,
@@ -27,12 +30,13 @@ __all__ = [
     "expand",
     "MalformedTemplate",
     "LocaleResources",
-    "LanguageMatcher",
     "MalformedResource",
     "read_resource_file",
     "render",
     "DialogRenderer",
     "UnfilledSlot",
+    "standardize_lang",
+    "closest_lang",
     "lint_locale",
     "Finding",
     "__version__",

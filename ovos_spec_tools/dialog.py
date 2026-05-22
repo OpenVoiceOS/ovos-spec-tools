@@ -3,17 +3,18 @@
 This is the reference implementation of the **Dialog renderer** conformance
 role of OVOS-INTENT-1 §7. Rendering a dialog means: select one phrase from a
 loaded ``.dialog``, expand its ``(a|b)`` / ``[x]`` variety to a single variant,
-and fill every ``{name}`` slot with a caller-supplied value.
+and fill every ``{name}`` slot with a value.
 
 Two interfaces are provided:
 
-- :func:`render` — a stateless one-shot function;
-- :class:`DialogRenderer` — a stateful object that additionally avoids
-  repeating the phrase it chose last time.
+- :func:`render` — a stateless one-shot function over explicit phrases;
+- :class:`DialogRenderer` — a stateful, **multilingual** object backed by a
+  :class:`~ovos_spec_tools.resources.LocaleResources`: the language is given
+  per :meth:`DialogRenderer.render` call, and the renderer avoids repeating
+  the phrase it chose last (independently per language).
 
 Only the single-brace slot form ``{name}`` is recognized; there is no ``{{ }}``
-form (OVOS-INTENT-2 §4.2). Slots are filled by the caller; a chosen phrase with
-a slot the caller did not fill raises :class:`UnfilledSlot`.
+form (OVOS-INTENT-2 §4.2). A slot with no value raises :class:`UnfilledSlot`.
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ class Chooser(Protocol):
 
 
 class UnfilledSlot(ValueError):
-    """A chosen dialog phrase has a named slot the caller did not fill.
+    """A chosen dialog phrase has a named slot with no value.
 
     Per OVOS-INTENT-1 §5.1 the caller must supply a value for every slot in the
     chosen phrase; a phrase with an unfilled slot must not be sent to TTS.
@@ -51,7 +52,11 @@ def render(phrases: Sequence[str],
            slots: Optional[Dict[str, object]] = None,
            vocabularies: Optional[Dict[str, Sequence[str]]] = None,
            rng: Optional[Chooser] = None) -> str:
-    """Render one phrase from a loaded ``.dialog`` (stateless).
+    """Render one phrase from a list of dialog phrases (stateless).
+
+    This is the language-agnostic primitive: the caller has already chosen and
+    loaded the phrases. For a multilingual, resource-backed renderer use
+    :class:`DialogRenderer`.
 
     Args:
         phrases: the phrase strings of a ``.dialog``.
@@ -65,7 +70,7 @@ def render(phrases: Sequence[str],
         One rendered phrase, ready for text-to-speech.
 
     Raises:
-        UnfilledSlot: a slot in the chosen phrase has no caller-supplied value.
+        UnfilledSlot: a slot in the chosen phrase has no value.
         ValueError: ``phrases`` is empty.
         MalformedTemplate: the chosen phrase is not a valid template.
     """
@@ -77,87 +82,77 @@ def render(phrases: Sequence[str],
 
 
 class DialogRenderer:
-    """A stateful renderer for one loaded ``.dialog`` (OVOS-INTENT-2 §4.2).
+    """A stateful, multilingual renderer for one named ``.dialog``.
 
-    An object-oriented alternative to :func:`render`. It holds the dialog's
-    phrases, the vocabularies, and the random source, and — unlike the bare
-    function — **avoids repeating the phrase it chose on the previous call**,
-    so a repeatedly-spoken response does not sound mechanical. Repetition
-    avoidance is an implementation choice the spec explicitly allows (§4.2).
+    Backed by a :class:`~ovos_spec_tools.resources.LocaleResources`: the dialog
+    name is fixed at construction, but the **language is given per**
+    :meth:`render` **call**, so one renderer serves every language the dialog
+    is shipped in. Each call loads that language's phrases, vocabularies, and
+    ``.entity`` value sets afresh.
+
+    Unlike the bare :func:`render`, it **avoids repeating the phrase it chose
+    on the previous call** — tracked independently per language — so a
+    repeatedly-spoken response does not sound mechanical. Repetition avoidance
+    is an implementation choice the spec explicitly allows (§4.2).
     """
 
-    def __init__(self, phrases: Sequence[str],
-                 vocabularies: Optional[Dict[str, Sequence[str]]] = None,
+    def __init__(self, resources, name: str,
                  rng: Optional[Chooser] = None,
-                 slots: Optional[Dict[str, object]] = None,
-                 entities: Optional[Dict[str, Sequence[str]]] = None):
+                 slots: Optional[Dict[str, object]] = None):
         """
         Args:
-            phrases: the phrase strings of a ``.dialog``.
-            vocabularies: vocabularies for any ``<name>`` references.
+            resources: a :class:`~ovos_spec_tools.resources.LocaleResources`
+                (or anything with ``load_dialog``, ``vocabularies`` and
+                ``entities`` methods taking a language).
+            name: the base name of the ``.dialog`` to render.
             rng: an object with a ``choice`` method; defaults to :mod:`random`.
             slots: **default** slot values, held for the renderer's lifetime
-                and reused on every :meth:`render` call. Use this for slots
-                that do not change per render (a unit preference, a name). A
-                per-call value passed to :meth:`render` overrides a default.
-            entities: ``.entity`` value sets, keyed by slot name. A slot that
-                is neither passed per call nor a default is filled with a
-                random value from its entity set, if one is given here.
+                and reused on every :meth:`render` call. A per-call value
+                overrides a default.
         """
-        self.phrases = list(phrases)
-        if not self.phrases:
-            raise ValueError("a DialogRenderer needs at least one phrase")
-        self.vocabularies = vocabularies
+        self.resources = resources
+        self.name = name
         self.rng = rng if rng is not None else _random
         self.default_slots: Dict[str, object] = dict(slots or {})
-        self.entities: Dict[str, Sequence[str]] = dict(entities or {})
-        self._last: Optional[str] = None
+        self._last: Dict[str, str] = {}  # last phrase chosen, per language
 
-    @classmethod
-    def from_resources(cls, resources, name: str,
-                       rng: Optional[Chooser] = None,
-                       slots: Optional[Dict[str, object]] = None
-                       ) -> "DialogRenderer":
-        """Build a renderer for the ``.dialog`` named ``name``.
-
-        ``resources`` is a
-        :class:`~ovos_spec_tools.resources.LocaleResources`; its loaded dialog,
-        its vocabularies, and its ``.entity`` value sets are all used — so a
-        slot left unfilled falls back to its ``.entity``. ``slots`` supplies
-        default slot values.
-        """
-        return cls(resources.load_dialog(name),
-                   vocabularies=resources.vocabularies(),
-                   entities=resources.entities(),
-                   rng=rng, slots=slots)
-
-    def render(self, slots: Optional[Dict[str, object]] = None) -> str:
-        """Render one phrase, avoiding the phrase chosen on the previous call.
+    def render(self, lang: str,
+               slots: Optional[Dict[str, object]] = None) -> str:
+        """Render one phrase of the dialog in ``lang``.
 
         A slot is filled, in order of precedence, from: the per-call ``slots``;
         then the renderer's default slots; then a random value from the slot's
-        ``.entity`` set. A slot none of these supply raises :class:`UnfilledSlot`.
+        ``.entity`` set for ``lang``. A slot none of these supply raises
+        :class:`UnfilledSlot`.
+
+        The phrase chosen on the previous call **for the same language** is
+        avoided when the dialog has more than one phrase.
 
         Args:
-            slots: per-call slot values; each overrides a default of the
-                same name.
+            lang: the BCP-47 language tag to render in.
+            slots: per-call slot values; each overrides a default.
 
         Returns:
             One rendered phrase, ready for text-to-speech.
 
         Raises:
-            UnfilledSlot: a slot in the chosen phrase has no value from any
-                source.
+            UnfilledSlot: a slot in the chosen phrase has no value.
+            FileNotFoundError: the dialog does not exist for ``lang``.
             MalformedTemplate: the chosen phrase is not a valid template.
         """
+        phrases = self.resources.load_dialog(self.name, lang)
         effective = dict(self.default_slots)
         if slots:
             effective.update(slots)
-        choices = [p for p in self.phrases if p != self._last] or self.phrases
+
+        last = self._last.get(lang)
+        choices = [p for p in phrases if p != last] or phrases
         phrase = self.rng.choice(choices)
-        self._last = phrase
-        return _render_phrase(phrase, effective, self.vocabularies, self.rng,
-                              self.entities)
+        self._last[lang] = phrase
+
+        return _render_phrase(phrase, effective,
+                              self.resources.vocabularies(lang), self.rng,
+                              self.resources.entities(lang))
 
 
 def _render_phrase(phrase: str,

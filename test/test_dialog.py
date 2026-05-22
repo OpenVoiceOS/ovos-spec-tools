@@ -15,6 +15,18 @@ class _FixedRng:
         return seq[self.index % len(seq)]
 
 
+def _resources(tmp_path, files):
+    """Build a LocaleResources over a locale with the given {relpath: text}."""
+    locale = tmp_path / "locale"
+    for relpath, text in files.items():
+        path = locale / relpath
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return LocaleResources(str(locale))
+
+
+# --- render() — the stateless function ---------------------------------------
+
 def test_render_fills_slots():
     out = render(["It is {temperature} degrees."],
                  slots={"temperature": 21})
@@ -55,91 +67,93 @@ def test_empty_phrase_list_raises():
         render([])
 
 
-# --- DialogRenderer ----------------------------------------------------------
+# --- DialogRenderer — stateful, multilingual ---------------------------------
 
-def test_renderer_fills_slots():
-    renderer = DialogRenderer(["It is {temperature} degrees."])
-    assert renderer.render({"temperature": 21}) == "It is 21 degrees."
+def test_renderer_fills_slots(tmp_path):
+    res = _resources(tmp_path, {"en-US/t.dialog": "It is {temperature} degrees."})
+    renderer = DialogRenderer(res, "t")
+    assert renderer.render("en-US", {"temperature": 21}) == "It is 21 degrees."
 
 
-def test_renderer_avoids_repeating_the_last_phrase():
+def test_renderer_serves_multiple_languages(tmp_path):
+    res = _resources(tmp_path, {
+        "en-US/hi.dialog": "Hello.",
+        "pt-BR/hi.dialog": "Ola.",
+    })
+    renderer = DialogRenderer(res, "hi")
+    assert renderer.render("en-US") == "Hello."
+    assert renderer.render("pt-BR") == "Ola."
+
+
+def test_renderer_avoids_repeating_the_last_phrase(tmp_path):
     """With two phrases, consecutive renders must alternate (§4.2)."""
-    renderer = DialogRenderer(["alpha", "beta"])
-    first = renderer.render()
-    second = renderer.render()
-    third = renderer.render()
+    res = _resources(tmp_path, {"en-US/c.dialog": "alpha\nbeta\n"})
+    renderer = DialogRenderer(res, "c")
+    first = renderer.render("en-US")
+    second = renderer.render("en-US")
+    third = renderer.render("en-US")
     assert first != second
     assert second != third
     assert {first, second} == {"alpha", "beta"}
 
 
-def test_renderer_with_one_phrase_repeats_it():
-    renderer = DialogRenderer(["only one"])
-    assert renderer.render() == renderer.render() == "only one"
+def test_repetition_avoidance_is_per_language(tmp_path):
+    """The 'last phrase' is tracked separately for each language."""
+    res = _resources(tmp_path, {
+        "en-US/c.dialog": "alpha\nbeta\n",
+        "pt-BR/c.dialog": "um\ndois\n",
+    })
+    renderer = DialogRenderer(res, "c")
+    renderer.render("en-US")
+    # the pt-BR render is unconstrained by the en-US history
+    assert renderer.render("pt-BR") in {"um", "dois"}
 
 
-def test_renderer_unfilled_slot_raises():
-    renderer = DialogRenderer(["say {name}"])
+def test_renderer_unfilled_slot_raises(tmp_path):
+    res = _resources(tmp_path, {"en-US/s.dialog": "say {name}"})
+    renderer = DialogRenderer(res, "s")
     with pytest.raises(UnfilledSlot):
-        renderer.render()
+        renderer.render("en-US")
 
 
-def test_renderer_empty_phrase_list_raises():
-    with pytest.raises(ValueError):
-        DialogRenderer([])
-
-
-def test_renderer_from_resources(tmp_path):
-    locale = tmp_path / "locale"
-    lang = locale / "en-US"
-    lang.mkdir(parents=True)
-    (lang / "hi.dialog").write_text("Hello {name}.\n", encoding="utf-8")
-    res = LocaleResources("en-US", str(locale))
-    renderer = DialogRenderer.from_resources(res, "hi")
-    assert renderer.render({"name": "Sam"}) == "Hello Sam."
+def test_renderer_missing_dialog_for_language_raises(tmp_path):
+    res = _resources(tmp_path, {"en-US/hi.dialog": "Hello."})
+    renderer = DialogRenderer(res, "hi")
+    with pytest.raises(FileNotFoundError):
+        renderer.render("de-DE")
 
 
 # --- default slots and .entity fallback --------------------------------------
 
-def test_renderer_default_slots_are_reused():
-    renderer = DialogRenderer(["Hello {name}."], slots={"name": "Sam"})
-    assert renderer.render() == "Hello Sam."
-    assert renderer.render() == "Hello Sam."
+def test_renderer_default_slots_are_reused(tmp_path):
+    res = _resources(tmp_path, {"en-US/g.dialog": "Hello {name}."})
+    renderer = DialogRenderer(res, "g", slots={"name": "Sam"})
+    assert renderer.render("en-US") == "Hello Sam."
+    assert renderer.render("en-US") == "Hello Sam."
 
 
-def test_per_call_slot_overrides_a_default():
-    renderer = DialogRenderer(["Hello {name}."], slots={"name": "Sam"})
-    assert renderer.render({"name": "Max"}) == "Hello Max."
+def test_per_call_slot_overrides_a_default(tmp_path):
+    res = _resources(tmp_path, {"en-US/g.dialog": "Hello {name}."})
+    renderer = DialogRenderer(res, "g", slots={"name": "Sam"})
+    assert renderer.render("en-US", {"name": "Max"}) == "Hello Max."
 
 
-def test_unfilled_slot_falls_back_to_entity():
-    renderer = DialogRenderer(["today is {day}"],
-                              entities={"day": ["monday"]})
-    assert renderer.render() == "today is monday"
+def test_unfilled_slot_falls_back_to_entity(tmp_path):
+    res = _resources(tmp_path, {
+        "en-US/today.dialog": "today is {day}",
+        "en-US/day.entity": "monday\n",
+    })
+    renderer = DialogRenderer(res, "today")
+    assert renderer.render("en-US") == "today is monday"
 
 
-def test_slot_precedence_call_then_default_then_entity():
-    renderer = DialogRenderer(["value {x}"],
-                              slots={"x": "from_default"},
-                              entities={"x": ["from_entity"]})
-    # default beats entity
-    assert renderer.render() == "value from_default"
-    # per-call beats both
-    assert renderer.render({"x": "from_call"}) == "value from_call"
-
-
-def test_unfilled_with_no_source_still_raises():
-    renderer = DialogRenderer(["say {name}"], entities={"other": ["x"]})
-    with pytest.raises(UnfilledSlot):
-        renderer.render()
-
-
-def test_from_resources_picks_up_entity_fallback(tmp_path):
-    locale = tmp_path / "locale"
-    lang = locale / "en-US"
-    lang.mkdir(parents=True)
-    (lang / "today.dialog").write_text("today is {day}\n", encoding="utf-8")
-    (lang / "day.entity").write_text("monday\n", encoding="utf-8")
-    res = LocaleResources("en-US", str(locale))
-    renderer = DialogRenderer.from_resources(res, "today")
-    assert renderer.render() == "today is monday"
+def test_slot_precedence_call_then_default_then_entity(tmp_path):
+    res = _resources(tmp_path, {
+        "en-US/v.dialog": "value {x}",
+        "en-US/x.entity": "from_entity\n",
+    })
+    renderer = DialogRenderer(res, "v", slots={"x": "from_default"})
+    # default beats the .entity fallback
+    assert renderer.render("en-US") == "value from_default"
+    # a per-call value beats both
+    assert renderer.render("en-US", {"x": "from_call"}) == "value from_call"

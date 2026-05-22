@@ -4,9 +4,10 @@ Reference implementation of the OVOS [formal
 specifications](https://github.com/OpenVoiceOS/formal-specifications) — the
 low-level, dependency-light primitives those specifications describe.
 
-OVOS components reimplement template expansion and resource loading in several
-places, and the copies drift. This package is the single conformant
-implementation those components — and any third-party tool — can depend on.
+OVOS components reimplement template expansion, resource loading, and language
+matching in several places, and the copies drift. This package is the single
+conformant implementation those components — and any third-party tool — can
+depend on.
 
 ## Status
 
@@ -15,6 +16,7 @@ implementation those components — and any third-party tool — can depend on.
 | Sentence template expander | OVOS-INTENT-1 v2 | available |
 | Locale resource loader | OVOS-INTENT-2 | available |
 | Dialog renderer | OVOS-INTENT-2 §4.2 | available |
+| Language-tag matching | OVOS-INTENT-2 §2.2 | available |
 | `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 | available |
 
 ## The expander
@@ -50,13 +52,16 @@ single-spaced, alphanumeric. This package expands; it does not normalize.
 `.blacklist` — through the user → skill → core override precedence, searching
 each `locale/<lang>/` tree recursively.
 
+The **language is given per call**, not at construction: a locale folder is
+the multilingual unit of a skill, so one instance serves every language.
+
 ```python
 from ovos_spec_tools import LocaleResources
 
-res = LocaleResources("en-US", skill_locale="my-skill/locale")
-res.load_intent("play")        # sample set, named slots intact
-res.load_dialog("weather")     # phrase strings, not expanded (§4.2)
-res.load_vocabulary("yes")     # expanded phrase set
+res = LocaleResources(skill_locale="my-skill/locale")
+res.load_intent("play", "en-US")     # sample set, named slots intact
+res.load_intent("play", "pt-BR")     # same instance, another language
+res.load_dialog("weather", "en-US")  # phrase strings, not expanded (§4.2)
 ```
 
 The user-data path of the override precedence is assistant-defined and passed
@@ -64,50 +69,62 @@ in (`user_locale=`); this package imports no configuration.
 
 **Smart language fallback.** When the requested language has no directory,
 `LocaleResources` resolves to the nearest available language instead
-(OVOS-INTENT-2 §2.2) — so a request for `en-AU` finds `en-US`. The nearness
-test is a `LanguageMatcher`; by default the optional `langcodes` dependency
-provides one. Without `langcodes` installed, resolution is exact-match only;
-inject your own `LanguageMatcher` to use a different implementation, or pass
-`max_language_distance=0` to disable the fallback.
+(OVOS-INTENT-2 §2.2) — so a request for `en-AU` finds `en-US`. Resolution uses
+`closest_lang` (below) and is re-run per call. Without `langcodes` installed,
+resolution is exact-match only; pass `max_language_distance=0` to disable the
+fallback, or a custom `lang_resolver` to change it.
+
+## Language matching
+
+`standardize_lang` and `closest_lang` are the language-tag primitives — the
+same logic OVOS reimplements across locale loading, TTS voices, and STT
+models, gathered in one place.
+
+```python
+from ovos_spec_tools import standardize_lang, closest_lang
+
+standardize_lang("en_us")                       # 'en-US'
+closest_lang("en-AU", ["pt-BR", "en-US"])       # 'en-US'  (regional fallback)
+closest_lang("zz-ZZ", ["pt-BR", "en-US"])       # None
+```
+
+`closest_lang` returns the nearest entry whose tag distance is below
+`max_distance` (default 10), or `None`. With `langcodes` absent it resolves
+exact matches only.
 
 ## The dialog renderer
 
 Rendering a dialog selects one phrase from a loaded `.dialog`, expands its
-variety to a single variant, and fills every `{name}` slot with a
-caller-supplied value (OVOS-INTENT-2 §4.2). A phrase with an unfilled slot
-raises `UnfilledSlot`.
+variety to a single variant, and fills every `{name}` slot with a value
+(OVOS-INTENT-2 §4.2). A slot with no value raises `UnfilledSlot`.
 
-`render()` is a stateless one-shot function:
+`render()` is a stateless one-shot function over explicit phrases:
 
 ```python
 from ovos_spec_tools import render
 
-render(res.load_dialog("weather"), slots={"temperature": 21})
+render(res.load_dialog("weather", "en-US"), slots={"temperature": 21})
 # 'It is 21 degrees.'
 ```
 
-`DialogRenderer` is a stateful, object-oriented alternative. It holds the
-dialog and, unlike the function, **avoids repeating the phrase it chose last
-time** — so a repeatedly-spoken response does not sound mechanical:
+`DialogRenderer` is a stateful, **multilingual** alternative, backed by a
+`LocaleResources`. The language is given per `render()` call, and the renderer
+**avoids repeating the phrase it chose last time** — per language — so a
+repeatedly-spoken response does not sound mechanical:
 
 ```python
 from ovos_spec_tools import DialogRenderer
 
-renderer = DialogRenderer.from_resources(res, "weather")
-renderer.render({"temperature": 21})   # a phrase
-renderer.render({"temperature": 22})   # a different phrase
+renderer = DialogRenderer(res, "weather")
+renderer.render("en-US", {"temperature": 21})   # a phrase
+renderer.render("en-US", {"temperature": 22})   # a different phrase
+renderer.render("pt-BR", {"temperature": 23})   # the same dialog, another language
 ```
 
 It also holds **default slot values** set once and reused, and falls back to a
 slot's **`.entity` value set** for anything still unfilled. A slot is resolved
 in order: the per-call value, then a default, then a random `.entity` value,
 then `UnfilledSlot`.
-
-```python
-renderer = DialogRenderer.from_resources(res, "greeting",
-                                         slots={"assistant": "OVOS"})
-renderer.render()              # {assistant} reused; an {day} slot from day.entity
-```
 
 ## The locale linter
 
