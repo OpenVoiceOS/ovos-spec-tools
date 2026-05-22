@@ -1,33 +1,41 @@
-"""Language-tag utilities — standardization and closest-match resolution.
+"""Language-tag utilities — standardization, distance, and closest match.
 
 OVOS resolves "the closest available language for a request" in many places —
 locale resources, TTS voices, STT models — and the logic has been
 reimplemented repeatedly (``ovos_utils.lang.get_language_dir``,
 ``phoonnx.match_lang``, …) with subtle drift between the copies. This module is
-intended to be the **single implementation**: it powers the smart language
-fallback of :class:`~ovos_spec_tools.resources.LocaleResources`
-(OVOS-INTENT-2 §2.2) and is importable on its own to replace those copies.
+intended to be the **single implementation**.
 
-``langcodes`` is an optional dependency. Without it, :func:`standardize_lang`
-does a best-effort normalization and :func:`closest_lang` resolves exact
-matches only.
+It is built on one distance function, :func:`lang_distance`; :func:`closest_lang`
+is simply "the candidate with the smallest distance". All the policy — tag
+standardization, the norm-region preference, the behaviour when ``langcodes``
+is absent — lives inside :func:`lang_distance`, not in branchy callers.
+
+``langcodes`` is an optional dependency. Without it, :func:`lang_distance`
+falls back to a coarse same-language / different-language measure.
 """
 from __future__ import annotations
 
 from typing import Optional, Sequence
 
-__all__ = ["standardize_lang", "closest_lang", "DEFAULT_MAX_LANGUAGE_DISTANCE"]
+__all__ = [
+    "standardize_lang",
+    "lang_distance",
+    "closest_lang",
+    "DEFAULT_MAX_LANGUAGE_DISTANCE",
+]
 
-# A `langcodes` tag distance below 10 is a usable regional match
-# (OVOS-INTENT-2 §2.2; see the langcodes distance-values documentation).
+# A language distance below 10 is a usable regional match (OVOS-INTENT-2 §2.2;
+# see the langcodes distance-values documentation).
 DEFAULT_MAX_LANGUAGE_DISTANCE = 10
 
 # The norm region for a bare language tag. `langcodes` resolves a bare tag to
 # its *most-populous* region — for "pt" that is "pt-BR" — but the unmarked
 # form of a language should resolve to its reference variety. Portuguese is
 # "from Portugal" by name, and every Lusophone country except Brazil follows
-# the pt-PT norm, so bare "pt" favors "pt-PT". Add a language here only when
-# its bare tag has a clear reference region distinct from the populous one.
+# the pt-PT norm, so a bare "pt" is measured from "pt-PT". Add a language here
+# only when its bare tag has a clear reference region distinct from the
+# populous one.
 _NORM_REGION = {
     "pt": "PT",
 }
@@ -55,20 +63,68 @@ def standardize_lang(tag: str) -> str:
         return normalized.lower()
 
 
-def _tag_distance(desired: str, supported: str) -> Optional[int]:
+def _with_norm_region(tag: str) -> str:
+    """Give a bare language tag its norm region (``pt`` -> ``pt-PT``).
+
+    A regioned tag, or a language with no norm region, is returned unchanged.
+    """
+    if "-" in tag:
+        return tag
+    region = _NORM_REGION.get(tag.lower())
+    return f"{tag.lower()}-{region}" if region else tag
+
+
+def _langcodes_distance(desired: str, supported: str) -> Optional[int]:
     """``langcodes.tag_distance``, retried on the primary subtag if the full
-    tag is unparseable. Returns ``None`` if no distance can be computed —
-    including when ``langcodes`` is not installed."""
+    tag is unparseable. ``None`` if no distance can be computed — including
+    when ``langcodes`` is not installed."""
     try:
         from langcodes import tag_distance
     except ImportError:
         return None
     for candidate in (supported, supported.split("-")[0]):
         try:
-            return tag_distance(desired, candidate)
+            return int(tag_distance(desired, candidate))
         except Exception:
             continue
     return None
+
+
+def _coarse_distance(desired: str, supported: str) -> int:
+    """A ``langcodes``-free distance.
+
+    The two tags are already standardized and norm-expanded. A shared primary
+    subtag is near, a differing one is far; the generic (region-less) form of
+    a language counts as nearer than a sibling region of it.
+    """
+    if desired.split("-")[0].lower() != supported.split("-")[0].lower():
+        return 100  # a different language — beyond any usable threshold
+    if "-" not in desired or "-" not in supported:
+        return 3  # one side is the generic language tag
+    return 5  # two different regions of the same language
+
+
+def lang_distance(desired: str, supported: str) -> int:
+    """The distance between two BCP-47 language tags.
+
+    ``0`` is identical; a larger number is further apart; a value of 10 or
+    more is not a usable match. Both tags are standardized, and a bare tag is
+    measured **from its norm region** — so ``lang_distance("pt", "pt-PT")`` is
+    ``0`` while ``lang_distance("pt", "pt-BR")`` is a regional difference,
+    correcting ``langcodes``' population-based default.
+
+    Uses ``langcodes.tag_distance`` when available, and a coarse same-language
+    measure otherwise.
+    """
+    a = standardize_lang(desired)
+    b = standardize_lang(supported)
+    if a.lower() == b.lower():
+        return 0
+    a, b = _with_norm_region(a), _with_norm_region(b)
+    if a.lower() == b.lower():
+        return 0
+    distance = _langcodes_distance(a, b)
+    return distance if distance is not None else _coarse_distance(a, b)
 
 
 def closest_lang(target: str, available: Sequence[str],
@@ -76,64 +132,25 @@ def closest_lang(target: str, available: Sequence[str],
                  ) -> Optional[str]:
     """Return the entry of ``available`` closest to ``target``.
 
-    Resolution is tried in order:
-
-    1. an **exact** match, after standardization (so ``en_US`` matches
-       ``en-US``);
-    2. for a bare language tag with a norm region (see ``_NORM_REGION``), a
-       candidate in that region — so bare ``pt`` favors ``pt-PT`` over
-       ``pt-BR``;
-    3. the nearest tag whose ``langcodes`` distance is **below**
-       ``max_distance``;
-    4. a candidate sharing the **primary subtag** — preferring the bare tag,
-       then the norm region. This is the resolution path when ``langcodes`` is
-       not installed: a request for ``en-AU`` still accepts ``en``, ``en-GB``,
-       ``en-US``, …
-
-    ``None`` is returned if nothing matches, or if ``max_distance`` is not
-    positive (which also disables steps 2–4).
+    The candidate with the smallest :func:`lang_distance` wins. An exact match
+    always resolves; any other match resolves only if its distance is **below**
+    ``max_distance`` (so ``max_distance=0`` accepts exact matches only).
+    ``None`` is returned when nothing qualifies.
 
     The value returned is the original string from ``available``, so a caller
     can map it back to a directory, a voice, a model, and so on.
     """
-    wanted = standardize_lang(target)
+    best: Optional[str] = None
+    best_distance: Optional[int] = None
     for candidate in available:
-        if standardize_lang(candidate).lower() == wanted.lower():
-            return candidate
+        distance = lang_distance(target, candidate)
+        if best_distance is None or distance < best_distance:
+            best, best_distance = candidate, distance
 
-    if max_distance <= 0:
+    if best is None:
         return None
-
-    # A bare language tag favors its norm region over langcodes' populous
-    # default (which would, for "pt", pick "pt-BR").
-    if "-" not in wanted and wanted.lower() in _NORM_REGION:
-        norm = f"{wanted.lower()}-{_NORM_REGION[wanted.lower()]}"
-        for candidate in available:
-            if standardize_lang(candidate).lower() == norm.lower():
-                return candidate
-
-    nearest: Optional[str] = None
-    nearest_distance = max_distance  # accept only a distance strictly below this
-    for candidate in available:
-        distance = _tag_distance(wanted, standardize_lang(candidate))
-        if distance is not None and distance < nearest_distance:
-            nearest, nearest_distance = candidate, distance
-    if nearest is not None:
-        return nearest
-
-    # Final fallback — a shared primary subtag. This is the resolution path
-    # when `langcodes` is unavailable, so no distance could be computed.
-    primary = wanted.split("-")[0].lower()
-    prefix_matches = [c for c in available
-                      if standardize_lang(c).split("-")[0].lower() == primary]
-    if not prefix_matches:
-        return None
-    for candidate in prefix_matches:  # prefer the bare language tag
-        if standardize_lang(candidate).lower() == primary:
-            return candidate
-    if primary in _NORM_REGION:  # then the norm region
-        norm = f"{primary}-{_NORM_REGION[primary]}".lower()
-        for candidate in prefix_matches:
-            if standardize_lang(candidate).lower() == norm:
-                return candidate
-    return prefix_matches[0]
+    if best_distance == 0:
+        return best
+    if max_distance > 0 and best_distance < max_distance:
+        return best
+    return None

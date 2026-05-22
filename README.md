@@ -76,21 +76,26 @@ fallback, or a custom `lang_resolver` to change it.
 
 ## Language matching
 
-`standardize_lang` and `closest_lang` are the language-tag primitives — the
-same logic OVOS reimplements across locale loading, TTS voices, and STT
-models, gathered in one place.
+`standardize_lang`, `lang_distance`, and `closest_lang` are the language-tag
+primitives — the logic OVOS reimplements across locale loading, TTS voices,
+and STT models, gathered in one place.
 
 ```python
-from ovos_spec_tools import standardize_lang, closest_lang
+from ovos_spec_tools import lang_distance, closest_lang
 
-standardize_lang("en_us")                       # 'en-US'
-closest_lang("en-AU", ["pt-BR", "en-US"])       # 'en-US'  (regional fallback)
-closest_lang("zz-ZZ", ["pt-BR", "en-US"])       # None
+lang_distance("pt", "pt-PT")               # 0   — a bare tag's norm region
+lang_distance("pt", "pt-BR")               # > 0 — merely a regional variant
+closest_lang("en-AU", ["pt-BR", "en-US"])  # 'en-US'
+closest_lang("zz-ZZ", ["pt-BR", "en-US"])  # None
 ```
 
-`closest_lang` returns the nearest entry whose tag distance is below
-`max_distance` (default 10), or `None`. With `langcodes` absent it resolves
-exact matches only.
+`closest_lang` is just "the candidate with the smallest `lang_distance`",
+accepted when it is below `max_distance` (default 10). `lang_distance` carries
+all the policy: it standardizes tags, measures a bare tag from its **norm
+region** (correcting langcodes' population-based default — so `pt` favors
+`pt-PT` over `pt-BR`), and uses `langcodes` when available, falling back to a
+coarse same-language measure that still resolves `en-AU` against `en`,
+`en-GB`, … when `langcodes` is absent.
 
 ## The dialog renderer
 
