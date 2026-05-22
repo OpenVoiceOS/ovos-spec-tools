@@ -1,4 +1,4 @@
-# ovos-intent-primitives
+# ovos-spec-tools
 
 Reference implementation of the OVOS intent specifications — the low-level,
 dependency-light primitives that the [formal
@@ -24,7 +24,7 @@ of sentences it denotes (OVOS-INTENT-1 §4). It resolves `(a|b)` alternatives,
 slots are opaque and carried through unchanged.
 
 ```python
-from ovos_intent_primitives import expand
+from ovos_spec_tools import expand
 
 expand("(turn|switch) [the] (light|fan)")
 # ['turn the light', 'turn the fan', 'turn light', 'turn fan',
@@ -50,7 +50,7 @@ single-spaced, alphanumeric. This package expands; it does not normalize.
 each `locale/<lang>/` tree recursively.
 
 ```python
-from ovos_intent_primitives import LocaleResources
+from ovos_spec_tools import LocaleResources
 
 res = LocaleResources("en-US", skill_locale="my-skill/locale")
 res.load_intent("play")        # sample set, named slots intact
@@ -68,7 +68,7 @@ single variant, and fills every `{name}` slot with a caller-supplied value
 (OVOS-INTENT-2 §4.2). A phrase with an unfilled slot raises `UnfilledSlot`.
 
 ```python
-from ovos_intent_primitives import render
+from ovos_spec_tools import render
 
 render(res.load_dialog("weather"), slots={"temperature": 21})
 # 'It is 21 degrees.'
@@ -77,7 +77,7 @@ render(res.load_dialog("weather"), slots={"temperature": 21})
 ## Install
 
 ```bash
-pip install ovos-intent-primitives
+pip install ovos-spec-tools
 ```
 
 ## License

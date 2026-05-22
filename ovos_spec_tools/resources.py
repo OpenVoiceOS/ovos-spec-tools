@@ -20,7 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from ovos_intent_primitives.expansion import MalformedTemplate, expand
+from ovos_spec_tools.expansion import MalformedTemplate, expand
 
 __all__ = [
     "LocaleResources",

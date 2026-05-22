@@ -15,7 +15,7 @@ import random as _random
 import re
 from typing import Dict, Optional, Sequence
 
-from ovos_intent_primitives.expansion import expand
+from ovos_spec_tools.expansion import expand
 
 __all__ = ["render", "UnfilledSlot"]
 
@@ -38,7 +38,7 @@ def render(phrases: Sequence[str],
 
     Args:
         phrases: the phrase strings of a ``.dialog``, as returned by
-            :meth:`~ovos_intent_primitives.resources.LocaleResources.load_dialog`.
+            :meth:`~ovos_spec_tools.resources.LocaleResources.load_dialog`.
         slots: caller-supplied values for the phrase's named slots, keyed by
             slot name. Values are converted to text.
         vocabularies: vocabularies for any ``<name>`` references in the phrase.

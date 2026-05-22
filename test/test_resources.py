@@ -1,7 +1,7 @@
 """Conformance tests for the OVOS-INTENT-2 reference loader."""
 import pytest
 
-from ovos_intent_primitives import (
+from ovos_spec_tools import (
     LocaleResources,
     MalformedResource,
     read_resource_file,

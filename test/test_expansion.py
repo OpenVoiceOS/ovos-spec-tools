@@ -5,7 +5,7 @@ these form the conformance corpus for the Expander role (§7).
 """
 import pytest
 
-from ovos_intent_primitives import MalformedTemplate, expand
+from ovos_spec_tools import MalformedTemplate, expand
 
 
 # --- §4.2 the worked example -------------------------------------------------

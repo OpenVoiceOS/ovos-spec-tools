@@ -1,7 +1,7 @@
 """Conformance tests for the OVOS-INTENT-2 §4.2 reference dialog renderer."""
 import pytest
 
-from ovos_intent_primitives import UnfilledSlot, render
+from ovos_spec_tools import UnfilledSlot, render
 
 
 class _FixedRng:

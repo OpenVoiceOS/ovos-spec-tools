@@ -1,0 +1,31 @@
+"""Reference implementation of the OVOS intent specifications.
+
+`ovos-spec-tools` provides the low-level, dependency-light primitives
+the OVOS intent specifications describe:
+
+- :func:`~ovos_spec_tools.expansion.expand` — the OVOS-INTENT-1
+  sentence template expander;
+- :class:`~ovos_spec_tools.resources.LocaleResources` — the
+  OVOS-INTENT-2 locale resource-file loader;
+- :func:`~ovos_spec_tools.dialog.render` — the OVOS-INTENT-2 §4.2
+  dialog renderer.
+"""
+from ovos_spec_tools.dialog import UnfilledSlot, render
+from ovos_spec_tools.expansion import MalformedTemplate, expand
+from ovos_spec_tools.resources import (
+    LocaleResources,
+    MalformedResource,
+    read_resource_file,
+)
+from ovos_spec_tools.version import __version__
+
+__all__ = [
+    "expand",
+    "MalformedTemplate",
+    "LocaleResources",
+    "MalformedResource",
+    "read_resource_file",
+    "render",
+    "UnfilledSlot",
+    "__version__",
+]
