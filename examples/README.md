@@ -10,10 +10,11 @@ Each script is self-contained and prints its output. Install the package first
 | [`expand.py`](expand.py) | `expand()` — alternatives, optionals, opaque `{slot}`s, `<name>` references, and rejection of malformed templates (OVOS-INTENT-1) |
 | [`load_resources.py`](load_resources.py) | `LocaleResources` — loading `.intent` / `.voc` / `.entity` / `.dialog` from a locale tree (OVOS-INTENT-2) |
 | [`render_dialog.py`](render_dialog.py) | `render()` and `DialogRenderer` — phrase selection, repetition avoidance, default slots, `.entity` fallback (OVOS-INTENT-2 §4.2) |
+| [`render_prompt.py`](render_prompt.py) | `render_prompt()` and `PromptRenderer` — whole-file prompts, conservative `{name}` substitution, fenced-code exemption (OVOS-INTENT-2 §4.4) |
 | [`lint.py`](lint.py) | `lint_locale()` — the linter used as a library |
 
-The loader and dialog scripts read [`skill-locale/`](skill-locale), a small
-valid skill locale; `lint.py` reads `dirty-locale/` (below).
+The loader, dialog and prompt scripts read [`skill-locale/`](skill-locale), a
+small valid skill locale; `lint.py` reads `dirty-locale/` (below).
 
 ## `dirty-locale` — the linter against a broken locale
 

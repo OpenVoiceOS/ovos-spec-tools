@@ -16,6 +16,7 @@ depend on.
 | Sentence template expander | OVOS-INTENT-1 v2 | `expansion.py` |
 | Locale resource loader | OVOS-INTENT-2 |  `resources.py`  |
 | Dialog renderer | OVOS-INTENT-2 §4.2 |  `dialog.py`  |
+| Prompt renderer | OVOS-INTENT-2 §4.4 |  `prompt.py`  |
 | Language-tag matching | OVOS-INTENT-2 §2.2 |  `language.py` |
 | `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 |  `lint.py`  |
 
@@ -31,13 +32,16 @@ Requires Python 3.8+.
 ## Quick taste
 
 ```python
-from ovos_spec_tools import expand, LocaleResources, render, closest_lang
+from ovos_spec_tools import (expand, LocaleResources, render, render_prompt,
+                             closest_lang)
 
 expand("(turn|switch) [the] light")          # all 4 sentences it denotes
 res = LocaleResources("my-skill/locale")
 res.load_intent("play", "en-US")             # a skill's intent samples
 render(res.load_dialog("weather", "en-US"),  # a spoken response
        slots={"temperature": 21})
+render_prompt(res.load_prompt("system", "en-US"),  # a language-model prompt
+              slots={"query": "what time is it"})
 closest_lang("en-AU", ["pt-BR", "en-US"])    # 'en-US'
 ```
 
@@ -54,8 +58,9 @@ A zero-to-hero guide lives in [`docs/`](docs/README.md):
 2. [Sentence templates](docs/templates.md) — the grammar: alternatives,
    optionals, slots, vocabulary references, malformed forms.
 3. [Locale resources](docs/locale-resources.md) — the `locale/` folder, the
-   five file roles, loading across languages, override precedence.
-4. [Dialog](docs/dialog.md) — choosing and filling a spoken response.
+   six file roles, loading across languages, override precedence.
+4. [Dialog](docs/dialog.md) — choosing and filling a spoken response, and
+   rendering language-model prompts.
 5. [Language matching](docs/language-matching.md) — tag standardization,
    distance, and closest-match resolution.
 6. [Linting](docs/linting.md) — validating a locale folder, on the CLI or in CI.

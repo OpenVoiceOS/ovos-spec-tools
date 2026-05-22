@@ -2,15 +2,16 @@
 
 This module is the reference implementation of the loader of OVOS-INTENT-2: it
 discovers a skill's locale resource files, reads them with the common reader
-(§3), and loads each of the five resource roles per its format (§4).
+(§3), and loads each of the six resource roles per its format (§4).
 
-The five roles, by extension:
+The six roles, by extension:
 
 - ``.intent`` — slot-bearing intent training samples;
 - ``.dialog`` — slot-bearing spoken-response phrases;
 - ``.entity`` — slot-free example values for a slot;
 - ``.voc`` — slot-free vocabulary;
-- ``.blacklist`` — slot-free intent-suppression phrases.
+- ``.blacklist`` — slot-free intent-suppression phrases;
+- ``.prompt`` — a whole-file plain-text language-model prompt (§4.4).
 
 The user-data path of the override precedence (§2.1) is **assistant-defined**;
 this module takes it as a parameter and imports no configuration.
@@ -31,13 +32,17 @@ __all__ = [
     "LocaleResources",
     "MalformedResource",
     "read_resource_file",
+    "read_prompt_file",
     "SLOT_BEARING_ROLES",
     "SLOT_FREE_ROLES",
+    "PROMPT_ROLE",
 ]
 
-# Resource roles, by file extension (OVOS-INTENT-2 §1).
+# Resource roles, by file extension (OVOS-INTENT-2 §1). The five template
+# roles are line-oriented; `.prompt` is a single whole-file document (§4.4).
 SLOT_BEARING_ROLES = (".intent", ".dialog")
 SLOT_FREE_ROLES = (".entity", ".voc", ".blacklist")
+PROMPT_ROLE = ".prompt"
 
 # A resolver maps a requested language and the available language tags to the
 # best one, or None — the signature of `ovos_spec_tools.language.closest_lang`.
@@ -68,6 +73,17 @@ def read_resource_file(path: Path) -> List[str]:
             continue
         templates.append(line)
     return templates
+
+
+def read_prompt_file(path: Path) -> str:
+    """Read a ``.prompt`` whole and verbatim (OVOS-INTENT-2 §3, §4.4).
+
+    A ``.prompt`` is **not** line-oriented: it is read whole, with no line
+    stripping and no blank- or ``#``-comment-line filtering, because every
+    character is part of the prompt. The file is UTF-8 and a leading
+    byte-order mark is discarded.
+    """
+    return path.read_text(encoding="utf-8-sig")  # utf-8-sig discards a BOM
 
 
 class LocaleResources:
@@ -233,3 +249,26 @@ class LocaleResources:
                 f"empty resource file {path} — every file must contribute at "
                 f"least one template (§5)")
         return phrases
+
+    def load_prompt(self, base_name: str, lang: str) -> str:
+        """Load a ``.prompt`` as its whole-file string (§4.4).
+
+        A ``.prompt`` is read whole and verbatim — not split into templates,
+        not line-filtered — and is returned for a prompt renderer to fill. See
+        :class:`ovos_spec_tools.prompt.PromptRenderer`.
+
+        Raises:
+            FileNotFoundError: no such ``.prompt`` for ``lang``.
+            MalformedResource: the file is empty or only whitespace (§5).
+        """
+        path = self._locate(base_name, PROMPT_ROLE, lang)
+        if path is None:
+            raise FileNotFoundError(
+                f"no .prompt resource named {base_name!r} for "
+                f"language {lang!r}")
+        text = read_prompt_file(path)
+        if not text.strip():
+            raise MalformedResource(
+                f"empty resource file {path} — every file must contribute "
+                f"content (§5)")
+        return text

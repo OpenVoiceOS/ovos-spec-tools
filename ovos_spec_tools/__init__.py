@@ -9,6 +9,8 @@ formal specifications describe:
   locale resource-file loader;
 - :func:`~ovos_spec_tools.dialog.render` / :class:`~ovos_spec_tools.dialog.DialogRenderer`
   — the OVOS-INTENT-2 §4.2 dialog renderer;
+- :func:`~ovos_spec_tools.prompt.render_prompt` / :class:`~ovos_spec_tools.prompt.PromptRenderer`
+  — the OVOS-INTENT-2 §4.4 ``.prompt`` renderer;
 - :func:`~ovos_spec_tools.language.standardize_lang`,
   :func:`~ovos_spec_tools.language.lang_distance`, and
   :func:`~ovos_spec_tools.language.closest_lang` — language-tag normalization,
@@ -24,9 +26,11 @@ from ovos_spec_tools.language import (
     standardize_lang,
 )
 from ovos_spec_tools.lint import Finding, lint_locale
+from ovos_spec_tools.prompt import PromptRenderer, render_prompt
 from ovos_spec_tools.resources import (
     LocaleResources,
     MalformedResource,
+    read_prompt_file,
     read_resource_file,
 )
 from ovos_spec_tools.version import __version__
@@ -37,9 +41,12 @@ __all__ = [
     "LocaleResources",
     "MalformedResource",
     "read_resource_file",
+    "read_prompt_file",
     "render",
     "DialogRenderer",
     "UnfilledSlot",
+    "render_prompt",
+    "PromptRenderer",
     "standardize_lang",
     "lang_distance",
     "closest_lang",

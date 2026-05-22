@@ -39,6 +39,7 @@ Methods — each takes a resource base name and a BCP-47 `lang`:
 | `load_vocabulary(name, lang)` | expanded phrase set |
 | `load_blacklist(name, lang)` | expanded phrase set |
 | `load_dialog(name, lang)` | raw phrase strings (not expanded) |
+| `load_prompt(name, lang)` | the whole `.prompt` file, as one string |
 | `vocabularies(lang)` | `name -> templates` for every `.voc` |
 | `entities(lang)` | `name -> values` for every `.entity` |
 
@@ -49,6 +50,10 @@ A missing resource raises `FileNotFoundError`; a malformed one raises
 
 Apply the OVOS-INTENT-2 §3 common reader to one file: UTF-8, BOM discarded,
 `LF`/`CRLF` accepted, lines stripped, blank and `#`-comment lines dropped.
+
+### `read_prompt_file(path) -> str`
+
+Read a `.prompt` whole and verbatim — UTF-8, BOM discarded, no line filtering.
 
 ### `MalformedResource`
 
@@ -76,6 +81,24 @@ A stateful, multilingual renderer for the dialog `name`, backed by a
 ### `UnfilledSlot`
 
 `ValueError` subclass — a chosen phrase has a slot with no value.
+
+## Prompts — [chapter 4](dialog.md)
+
+### `render_prompt(text, slots=None) -> str`
+
+Render a `.prompt` string. The whole `text` is the prompt; a `{name}` is
+substituted only when it is a well-formed name, `slots` supplies a value, and
+it is not inside a ``` ``` ``` fenced code block. An unfilled slot, and any
+other `{`/`}`, is left literal. Never raises for an unfilled slot.
+
+### `PromptRenderer(resources, name, slots=None)`
+
+A stateful, multilingual renderer for the prompt `name`, backed by a
+`LocaleResources`. `slots` are default values reused on every call.
+
+- **`render(lang, slots=None) -> str`** — render the prompt in `lang`; a
+  per-call value overrides a default. Raises `FileNotFoundError` if the prompt
+  is missing for `lang`, `MalformedResource` if the file is empty.
 
 ## Language matching — [chapter 5](language-matching.md)
 

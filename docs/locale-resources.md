@@ -27,10 +27,9 @@ an authoring convenience and carry no meaning; a resource is found by a
 recursive search. A resource is identified by its **`(role, base name)`** pair,
 so `confirm.intent` and `confirm.dialog` are two distinct resources.
 
-## The five roles
+## The six roles
 
-Every resource file is a list of templates ([chapter 2](templates.md)). The
-file extension is its **role**:
+The file extension is a resource's **role**:
 
 | Role | Extension | Slots? | What it is |
 |------|-----------|--------|------------|
@@ -39,10 +38,16 @@ file extension is its **role**:
 | Entity | `.entity` | no | example values for a slot |
 | Vocabulary | `.voc` | no | a named keyword / phrase set |
 | Blacklist | `.blacklist` | no | phrases that suppress an intent |
+| Prompt | `.prompt` | yes | a whole-file prompt for a language model |
 
-`.intent` and `.dialog` are **slot-bearing** (they may use `{name}`); the other
-three are **slot-free**. Lines starting with `#` are comments; blank lines are
-ignored.
+The first five are **lists of templates** ([chapter 2](templates.md)) — one
+per line, with `#` comment lines and blank lines ignored. `.intent` and
+`.dialog` are **slot-bearing** (they may use `{name}`); `.entity`, `.voc` and
+`.blacklist` are **slot-free**.
+
+`.prompt` is the exception: not a template list but **one whole-file document**
+read verbatim — every line, including `#` and blank lines, is kept. It carries
+`{name}` substitution points but is otherwise plain text ([chapter 4](dialog.md)).
 
 Legacy OVOS file types (`.rx`, `.value`, `.list`, …) are deliberately *not*
 roles here — the linter flags them ([chapter 6](linting.md)).
@@ -72,13 +77,15 @@ The load methods:
 | `load_vocabulary(name, lang)` | the expanded phrase set |
 | `load_blacklist(name, lang)` | the expanded phrase set |
 | `load_dialog(name, lang)` | the raw phrase strings — **not** expanded (see below) |
+| `load_prompt(name, lang)` | the whole `.prompt` file as one string |
 | `vocabularies(lang)` | every `.voc`, as a `name → templates` dict |
 | `entities(lang)` | every `.entity`, as a `name → values` dict |
 
 `.intent`, `.entity`, `.voc`, and `.blacklist` are expanded at load time. A
 `.dialog` is **not** — its phrases are returned verbatim, because expansion
 happens once per spoken response, on the single phrase chosen
-([chapter 4](dialog.md)).
+([chapter 4](dialog.md)). A `.prompt` is returned as the whole file, for a
+prompt renderer to fill ([chapter 4](dialog.md)).
 
 `<name>` references inside an `.intent` resolve automatically against the
 `.voc` files of the same language — you do not pass vocabularies yourself.

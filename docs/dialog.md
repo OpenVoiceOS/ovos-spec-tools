@@ -97,6 +97,46 @@ rather than a computed value.
 Use `render()` when you already hold the phrases and want one sentence. Use
 `DialogRenderer` for a skill response spoken more than once.
 
+## Rendering `.prompt` files
+
+A `.prompt` is the localized prompt a skill feeds to a language model. Unlike a
+`.dialog` it is **not** a template — it is plain text — and the whole file,
+verbatim, is one prompt. The only special construct is `{name}` substitution,
+and it is **conservative**: a prompt is free-form text full of code and JSON,
+so rendering must never corrupt a brace the author did not write as a slot.
+
+`render_prompt()` is the stateless function:
+
+```python
+from ovos_spec_tools import render_prompt
+
+render_prompt("You are {role}. Answer: {query}", {"role": "concise"})
+# 'You are concise. Answer: {query}'
+```
+
+A `{name}` is replaced **only** when it is a well-formed name, the caller
+supplied a value, and it is not inside a ``` ``` ``` fenced code block.
+Everything else stays literal:
+
+- an **unfilled** slot is left as `{name}` — slots are optional, the opposite
+  of `.dialog`, where every slot must be filled;
+- any other `{`/`}` — `{}`, `{ }`, JSON like `{"k": 1}` — is untouched;
+- a `{name}` inside a fenced code block is never substituted.
+
+`PromptRenderer` is the resource-backed, multilingual form — built from a
+`LocaleResources`, with the language given per call and optional default slots:
+
+```python
+from ovos_spec_tools import PromptRenderer
+
+renderer = PromptRenderer(res, "system", slots={"assistant": "OVOS"})
+renderer.render("en-US", {"query": "what time is it"})
+renderer.render("pt-PT", {"query": "que horas são"})   # same prompt, another language
+```
+
+It has no phrase selection, no repetition avoidance, and no `.entity` fallback
+— a prompt is one whole-file body and its slots are optional.
+
 ## Next
 
 [Language matching](language-matching.md) — the tag logic behind the loader's
