@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ovos-intent-primitives"
+dynamic = ["version"]
+description = "Reference implementation of the OVOS intent specifications"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "jarbasai", email = "jarbasai@mailfence.com" }]
+requires-python = ">=3.8"
+dependencies = [
+    "langcodes",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+
+[project.urls]
+Homepage = "https://github.com/OpenVoiceOS/ovos-intent-primitives"
+
+[tool.setuptools.dynamic]
+version = { attr = "ovos_intent_primitives.version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ovos_intent_primitives*"]
