@@ -143,3 +143,92 @@ def test_lint_accepts_a_single_language_directory(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "ok.intent", "hello world\n")
     assert lint_locale(locale / "en-US") == []
+
+
+# --- slot consistency (OVOS-INTENT-1 §5.5) ----------------------------------
+
+def test_inconsistent_slots_in_one_intent_is_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "p.intent", "play {query}\nstop {engine}\n")
+    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
+
+
+def test_mixing_slotted_and_slotless_lines_is_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "p.intent", "play {query}\njust stop\n")
+    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
+
+
+def test_consistent_slots_across_an_intent_is_clean(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "p.intent",
+           "(play|put on) {query}\ni want {query}\n")
+    assert lint_locale(locale) == []
+
+
+# --- robustness --------------------------------------------------------------
+
+def test_non_utf8_file_is_reported_not_crashed(tmp_path):
+    lang = tmp_path / "locale" / "en-US"
+    lang.mkdir(parents=True)
+    (lang / "bad.intent").write_bytes(b"\xff\xfe not valid utf-8\n")
+    findings = lint_locale(tmp_path / "locale")
+    assert any("cannot read" in f.message for f in findings)
+
+
+def test_empty_language_directory_warns(tmp_path):
+    locale = tmp_path / "locale"
+    (locale / "en-US").mkdir(parents=True)
+    assert any("no resource files" in f.message
+               for f in _warnings(lint_locale(locale)))
+
+
+# --- .blacklist pairing (OVOS-INTENT-2 §4.3) --------------------------------
+
+def test_orphan_blacklist_warns(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "ghost.blacklist", "spam words\n")
+    assert any("no matching" in f.message
+               for f in _warnings(lint_locale(locale)))
+
+
+def test_blacklist_with_a_matching_intent_is_clean(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "play.intent", "play music\n")
+    _write(locale / "en-US" / "play.blacklist", "trailer\n")
+    assert lint_locale(locale) == []
+
+
+# --- the --spec-version flag -------------------------------------------------
+
+def test_spec_version_0_flags_the_blacklist_role(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "play.intent", "play music\n")
+    _write(locale / "en-US" / "play.blacklist", "trailer\n")
+    findings = lint_locale(locale, spec_version=0)
+    assert any("requires spec version" in f.message for f in findings)
+
+
+def test_spec_version_1_flags_a_vocabulary_reference(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greeting.voc", "hello\nhi\n")
+    _write(locale / "en-US" / "greet.intent", "<greeting> there\n")
+    errors = _errors(lint_locale(locale, spec_version=1))
+    assert any("vocabulary reference" in f.message for f in errors)
+
+
+def test_default_spec_version_flags_neither(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greeting.voc", "hello\nhi\n")
+    _write(locale / "en-US" / "greet.intent", "<greeting> there\n")
+    _write(locale / "en-US" / "greet.blacklist", "spam\n")
+    findings = lint_locale(locale)  # default spec-version 2
+    assert not any("spec version" in f.message for f in findings)
+
+
+def test_main_honors_spec_version(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greeting.voc", "hello\nhi\n")
+    _write(locale / "en-US" / "greet.intent", "<greeting> there\n")
+    assert main([str(locale)]) == 0                          # v2 — fine
+    assert main([str(locale), "--spec-version", "1"]) == 1   # <name> is v2

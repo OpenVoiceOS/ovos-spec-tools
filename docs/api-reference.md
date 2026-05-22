@@ -95,9 +95,11 @@ The entry of `available` with the smallest `lang_distance`, if it is below
 
 ## Linting — [chapter 6](linting.md)
 
-### `lint_locale(path) -> list[Finding]`
+### `lint_locale(path, spec_version=2) -> list[Finding]`
 
 Validate every resource file under a locale (or single-language) directory.
+`spec_version` (0, 1, or 2) flags features newer than that target — see
+[chapter 6](linting.md).
 
 ### `Finding`
 
@@ -106,8 +108,9 @@ A dataclass with `severity` (`"error"` / `"warning"`), `path`, and `message`.
 
 ### `ovos-spec-lint` (command)
 
-CLI wrapper over `lint_locale`. `ovos-spec-lint <path> [--strict]`; exit code
-is non-zero on errors (with `--strict`, on warnings too).
+CLI wrapper over `lint_locale`. `ovos-spec-lint <path> [--strict]
+[--spec-version {0,1,2}]`; exit code is non-zero on errors (with `--strict`,
+on warnings too).
 
 ## Package
 

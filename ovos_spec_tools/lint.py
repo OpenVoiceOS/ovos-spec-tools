@@ -10,6 +10,13 @@ Exposed as the ``ovos-spec-lint`` command::
 
 The argument may be a ``locale/`` directory (every language subdirectory is
 checked) or a single ``<lang>/`` directory.
+
+The ``--spec-version`` option additionally flags features newer than a target
+OVOS spec version, for skills that must run on older deployments:
+
+- **0** — the legacy, undocumented Mycroft/OVOS de-facto behaviour;
+- **1** — the formalized specs; adds the ``.blacklist`` role;
+- **2** — adds ``<name>`` inline vocabulary references.
 """
 from __future__ import annotations
 
@@ -34,9 +41,15 @@ ROLE_EXTENSIONS = SLOT_BEARING_ROLES + SLOT_FREE_ROLES
 # File types OVOS-INTENT-2 deliberately does not define — flagged, not parsed.
 LEGACY_EXTENSIONS = (".rx", ".value", ".list", ".word", ".template", ".qml")
 
+# The OVOS spec version that introduced each feature.
+DEFAULT_SPEC_VERSION = 2
+_BLACKLIST_SINCE = 1        # the `.blacklist` role
+_VOCABULARY_REFERENCE_SINCE = 2  # the `<name>` inline vocabulary reference
+
 _BASE_NAME_RE = re.compile(r"[a-z0-9_]+")
 _SLOT_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
 _LANG_TAG_RE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]+)*")
+_SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*)\}")
 
 ERROR = "error"
 WARNING = "warning"
@@ -54,19 +67,22 @@ class Finding:
         return f"{self.path}: {self.severity}: {self.message}"
 
 
-def lint_locale(path) -> List[Finding]:
+def lint_locale(path, spec_version: int = DEFAULT_SPEC_VERSION) -> List[Finding]:
     """Lint a locale directory, or a single language directory.
 
     Returns every :class:`Finding`, in file order. A path whose name is a
     BCP-47 tag is treated as a single language tree; otherwise it is treated as
     a ``locale/`` directory and each language subdirectory is checked.
+
+    ``spec_version`` is the target OVOS spec version: a resource using a
+    feature newer than it is flagged (see the module docstring).
     """
     root = Path(path)
     if not root.is_dir():
         return [Finding(ERROR, str(root), "not a directory")]
 
     if _LANG_TAG_RE.fullmatch(root.name):
-        return _lint_language_tree(root)
+        return _lint_language_tree(root, spec_version)
 
     findings: List[Finding] = []
     for child in sorted(root.iterdir()):
@@ -79,11 +95,11 @@ def lint_locale(path) -> List[Finding]:
         findings.append(Finding(
             WARNING, str(root), "no language directories found"))
     for language_dir in language_dirs:
-        findings.extend(_lint_language_tree(language_dir))
+        findings.extend(_lint_language_tree(language_dir, spec_version))
     return findings
 
 
-def _lint_language_tree(language_dir: Path) -> List[Finding]:
+def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
     """Lint one ``<lang>/`` directory and all its subdirectories."""
     findings: List[Finding] = []
     if not _LANG_TAG_RE.fullmatch(language_dir.name):
@@ -104,6 +120,11 @@ def _lint_language_tree(language_dir: Path) -> List[Finding]:
                 f"{path.suffix} is a legacy file type, not an "
                 f"OVOS-INTENT-2 resource role"))
 
+    if not role_files:
+        findings.append(Finding(
+            WARNING, str(language_dir),
+            "language directory contains no resource files"))
+
     # Duplicate (role, base name) within one language tree (OVOS-INTENT-2 §2).
     first_seen: Dict[tuple, Path] = {}
     for path in role_files:
@@ -116,22 +137,40 @@ def _lint_language_tree(language_dir: Path) -> List[Finding]:
         else:
             first_seen[key] = path
 
+    # `.blacklist`: a spec-version gate, and a pairing check (§4.3).
+    intent_names = {stem for (ext, stem) in first_seen if ext == ".intent"}
+    for path in role_files:
+        if path.suffix != ".blacklist":
+            continue
+        if spec_version < _BLACKLIST_SINCE:
+            findings.append(Finding(
+                WARNING, str(path),
+                f"the .blacklist role requires spec version "
+                f"{_BLACKLIST_SINCE}; a version-{spec_version} runtime "
+                f"ignores it"))
+        if path.stem not in intent_names:
+            findings.append(Finding(
+                WARNING, str(path),
+                f"blacklist {path.stem!r} has no matching "
+                f"{path.stem}.intent to suppress"))
+
     # Vocabularies, for resolving <name> references during expansion.
     vocabularies: Dict[str, List[str]] = {}
     for path in role_files:
         if path.suffix == ".voc":
             try:
                 vocabularies[path.stem] = read_resource_file(path)
-            except OSError:
+            except (OSError, UnicodeError):
                 pass  # _lint_file reports the read error below
 
     for path in role_files:
-        findings.extend(_lint_file(path, vocabularies))
+        findings.extend(_lint_file(path, vocabularies, spec_version))
     return findings
 
 
 def _lint_file(path: Path,
-               vocabularies: Dict[str, Sequence[str]]) -> List[Finding]:
+               vocabularies: Dict[str, Sequence[str]],
+               spec_version: int) -> List[Finding]:
     """Lint one resource file: naming, then the syntax of every template."""
     findings: List[Finding] = []
     extension = path.suffix
@@ -152,10 +191,10 @@ def _lint_file(path: Path,
         findings.append(Finding(
             WARNING, str(path), "file name should be lowercase"))
 
-    # --- syntax (OVOS-INTENT-1) ---------------------------------------------
+    # --- read (OVOS-INTENT-2 §3) --------------------------------------------
     try:
         templates = read_resource_file(path)
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         findings.append(Finding(ERROR, str(path), f"cannot read file: {exc}"))
         return findings
     if not templates:
@@ -165,8 +204,17 @@ def _lint_file(path: Path,
             "template (OVOS-INTENT-2 §5)"))
         return findings
 
+    # --- syntax (OVOS-INTENT-1) ---------------------------------------------
     slot_free = extension in SLOT_FREE_ROLES
+    slot_bearing = extension in SLOT_BEARING_ROLES
+    slot_sets: List[frozenset] = []
     for template in templates:
+        if spec_version < _VOCABULARY_REFERENCE_SINCE and "<" in template:
+            findings.append(Finding(
+                ERROR, str(path),
+                f"an inline vocabulary reference <…> requires spec version "
+                f"{_VOCABULARY_REFERENCE_SINCE}; a version-{spec_version} "
+                f"runtime will not expand this template  [in: {template!r}]"))
         try:
             samples = expand(template, vocabularies)
         except MalformedTemplate as exc:
@@ -178,6 +226,16 @@ def _lint_file(path: Path,
                 ERROR, str(path),
                 f"{extension} is slot-free but a template contains a named "
                 f"slot  [in: {template!r}]"))
+        if slot_bearing:
+            slot_sets.append(frozenset(_SLOT_RE.findall(template)))
+
+    # --- slot consistency (OVOS-INTENT-1 §5.5) ------------------------------
+    if slot_bearing and len(set(slot_sets)) > 1:
+        findings.append(Finding(
+            ERROR, str(path),
+            f"templates declare different slot sets — every template in one "
+            f"{extension} must use the same {{slots}} (OVOS-INTENT-1 §5.5)"))
+
     return findings
 
 
@@ -192,9 +250,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--strict", action="store_true",
         help="exit non-zero if there are warnings as well as errors")
+    parser.add_argument(
+        "--spec-version", type=int, choices=(0, 1, 2),
+        default=DEFAULT_SPEC_VERSION,
+        help="target OVOS spec version; flags features newer than it "
+             "(0: legacy, 1: adds .blacklist, 2: adds <name> references). "
+             f"Default {DEFAULT_SPEC_VERSION}.")
     args = parser.parse_args(argv)
 
-    findings = lint_locale(args.locale)
+    findings = lint_locale(args.locale, spec_version=args.spec_version)
     errors = [f for f in findings if f.severity == ERROR]
     warnings = [f for f in findings if f.severity == WARNING]
 
