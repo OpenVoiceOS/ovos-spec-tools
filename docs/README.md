@@ -1,7 +1,7 @@
 # ovos-spec-tools — documentation
 
 `ovos-spec-tools` is the reference implementation of the
-[OVOS formal specifications](https://github.com/OpenVoiceOS/formal-specifications):
+[OVOS formal specifications](https://github.com/OpenVoiceOS/architecture):
 the small, dependency-light primitives those specs describe, in one place, so
 OVOS components and third-party tools stop reimplementing them and drifting
 apart.

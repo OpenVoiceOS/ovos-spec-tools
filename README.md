@@ -1,7 +1,7 @@
 # ovos-spec-tools
 
 Reference implementation of the OVOS [formal
-specifications](https://github.com/OpenVoiceOS/formal-specifications) — the
+specifications](https://github.com/OpenVoiceOS/architecture) — the
 low-level, dependency-light primitives those specifications describe.
 
 OVOS components reimplement template expansion, resource loading, and language
