@@ -64,15 +64,30 @@ in (`user_locale=`); this package imports no configuration.
 
 ## The dialog renderer
 
-`render()` selects one phrase from a loaded `.dialog`, expands its variety to a
-single variant, and fills every `{name}` slot with a caller-supplied value
-(OVOS-INTENT-2 §4.2). A phrase with an unfilled slot raises `UnfilledSlot`.
+Rendering a dialog selects one phrase from a loaded `.dialog`, expands its
+variety to a single variant, and fills every `{name}` slot with a
+caller-supplied value (OVOS-INTENT-2 §4.2). A phrase with an unfilled slot
+raises `UnfilledSlot`.
+
+`render()` is a stateless one-shot function:
 
 ```python
 from ovos_spec_tools import render
 
 render(res.load_dialog("weather"), slots={"temperature": 21})
 # 'It is 21 degrees.'
+```
+
+`DialogRenderer` is a stateful, object-oriented alternative. It holds the
+dialog and, unlike the function, **avoids repeating the phrase it chose last
+time** — so a repeatedly-spoken response does not sound mechanical:
+
+```python
+from ovos_spec_tools import DialogRenderer
+
+renderer = DialogRenderer.from_resources(res, "weather")
+renderer.render({"temperature": 21})   # a phrase
+renderer.render({"temperature": 22})   # a different phrase
 ```
 
 ## The locale linter

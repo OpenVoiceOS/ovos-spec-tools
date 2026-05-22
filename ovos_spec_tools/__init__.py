@@ -12,7 +12,7 @@ formal specifications describe:
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
-from ovos_spec_tools.dialog import UnfilledSlot, render
+from ovos_spec_tools.dialog import DialogRenderer, UnfilledSlot, render
 from ovos_spec_tools.expansion import MalformedTemplate, expand
 from ovos_spec_tools.lint import Finding, lint_locale
 from ovos_spec_tools.resources import (
@@ -29,6 +29,7 @@ __all__ = [
     "MalformedResource",
     "read_resource_file",
     "render",
+    "DialogRenderer",
     "UnfilledSlot",
     "lint_locale",
     "Finding",

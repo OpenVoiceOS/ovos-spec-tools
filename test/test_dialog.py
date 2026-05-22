@@ -1,7 +1,7 @@
 """Conformance tests for the OVOS-INTENT-2 §4.2 reference dialog renderer."""
 import pytest
 
-from ovos_spec_tools import UnfilledSlot, render
+from ovos_spec_tools import DialogRenderer, LocaleResources, UnfilledSlot, render
 
 
 class _FixedRng:
@@ -53,3 +53,47 @@ def test_render_resolves_vocabulary_references():
 def test_empty_phrase_list_raises():
     with pytest.raises(ValueError):
         render([])
+
+
+# --- DialogRenderer ----------------------------------------------------------
+
+def test_renderer_fills_slots():
+    renderer = DialogRenderer(["It is {temperature} degrees."])
+    assert renderer.render({"temperature": 21}) == "It is 21 degrees."
+
+
+def test_renderer_avoids_repeating_the_last_phrase():
+    """With two phrases, consecutive renders must alternate (§4.2)."""
+    renderer = DialogRenderer(["alpha", "beta"])
+    first = renderer.render()
+    second = renderer.render()
+    third = renderer.render()
+    assert first != second
+    assert second != third
+    assert {first, second} == {"alpha", "beta"}
+
+
+def test_renderer_with_one_phrase_repeats_it():
+    renderer = DialogRenderer(["only one"])
+    assert renderer.render() == renderer.render() == "only one"
+
+
+def test_renderer_unfilled_slot_raises():
+    renderer = DialogRenderer(["say {name}"])
+    with pytest.raises(UnfilledSlot):
+        renderer.render()
+
+
+def test_renderer_empty_phrase_list_raises():
+    with pytest.raises(ValueError):
+        DialogRenderer([])
+
+
+def test_renderer_from_resources(tmp_path):
+    locale = tmp_path / "locale"
+    lang = locale / "en-US"
+    lang.mkdir(parents=True)
+    (lang / "hi.dialog").write_text("Hello {name}.\n", encoding="utf-8")
+    res = LocaleResources("en-US", str(locale))
+    renderer = DialogRenderer.from_resources(res, "hi")
+    assert renderer.render({"name": "Sam"}) == "Hello Sam."
