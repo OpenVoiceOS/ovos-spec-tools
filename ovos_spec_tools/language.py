@@ -22,6 +22,16 @@ __all__ = ["standardize_lang", "closest_lang", "DEFAULT_MAX_LANGUAGE_DISTANCE"]
 # (OVOS-INTENT-2 §2.2; see the langcodes distance-values documentation).
 DEFAULT_MAX_LANGUAGE_DISTANCE = 10
 
+# The norm region for a bare language tag. `langcodes` resolves a bare tag to
+# its *most-populous* region — for "pt" that is "pt-BR" — but the unmarked
+# form of a language should resolve to its reference variety. Portuguese is
+# "from Portugal" by name, and every Lusophone country except Brazil follows
+# the pt-PT norm, so bare "pt" favors "pt-PT". Add a language here only when
+# its bare tag has a clear reference region distinct from the populous one.
+_NORM_REGION = {
+    "pt": "PT",
+}
+
 
 def standardize_lang(tag: str) -> str:
     """Normalize a BCP-47 language tag for comparison.
@@ -67,10 +77,12 @@ def closest_lang(target: str, available: Sequence[str],
     """Return the entry of ``available`` closest to ``target``.
 
     An exact match (after standardization, so ``en_US`` matches ``en-US``)
-    always wins. Otherwise the nearest tag whose distance is **below**
-    ``max_distance`` is returned; if none qualifies, or ``max_distance`` is not
-    positive, ``None`` is returned. Without ``langcodes`` installed only exact
-    matches resolve.
+    always wins. When ``target`` is a bare language tag with a norm region
+    (see ``_NORM_REGION``), a candidate in that region is preferred next — so
+    bare ``pt`` favors ``pt-PT`` over ``pt-BR``. Otherwise the nearest tag
+    whose distance is **below** ``max_distance`` is returned; if none
+    qualifies, or ``max_distance`` is not positive, ``None`` is returned.
+    Without ``langcodes`` installed only exact matches resolve.
 
     The value returned is the original string from ``available``, so a caller
     can map it back to a directory, a voice, a model, and so on.
@@ -82,6 +94,15 @@ def closest_lang(target: str, available: Sequence[str],
 
     if max_distance <= 0:
         return None
+
+    # A bare language tag favors its norm region over langcodes' populous
+    # default (which would, for "pt", pick "pt-BR").
+    if "-" not in wanted and wanted.lower() in _NORM_REGION:
+        norm = f"{wanted.lower()}-{_NORM_REGION[wanted.lower()]}"
+        for candidate in available:
+            if standardize_lang(candidate).lower() == norm.lower():
+                return candidate
+
     nearest: Optional[str] = None
     nearest_distance = max_distance  # accept only a distance strictly below this
     for candidate in available:

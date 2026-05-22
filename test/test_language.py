@@ -48,3 +48,18 @@ def test_closest_lang_skips_a_distant_language(tmp_path):
     pytest.importorskip("langcodes")
     # fr-FR is a different language and beyond the distance cap; en-GB is near.
     assert closest_lang("en-AU", ["fr-FR", "en-GB"]) == "en-GB"
+
+
+def test_closest_lang_prefers_the_norm_region_for_a_bare_tag():
+    """langcodes makes bare `pt` closest to pt-BR; the norm region pt-PT wins."""
+    assert closest_lang("pt", ["pt-BR", "pt-PT"]) == "pt-PT"
+    assert closest_lang("pt", ["pt-PT", "pt-BR"]) == "pt-PT"  # order-independent
+
+
+def test_explicit_region_is_respected_over_the_norm_preference():
+    assert closest_lang("pt-BR", ["pt-PT", "pt-BR"]) == "pt-BR"
+
+
+def test_bare_tag_falls_back_when_norm_region_absent():
+    pytest.importorskip("langcodes")
+    assert closest_lang("pt", ["pt-BR"]) == "pt-BR"
