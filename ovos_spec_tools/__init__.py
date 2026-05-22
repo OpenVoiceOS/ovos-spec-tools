@@ -16,6 +16,7 @@ from ovos_spec_tools.dialog import DialogRenderer, UnfilledSlot, render
 from ovos_spec_tools.expansion import MalformedTemplate, expand
 from ovos_spec_tools.lint import Finding, lint_locale
 from ovos_spec_tools.resources import (
+    LanguageMatcher,
     LocaleResources,
     MalformedResource,
     read_resource_file,
@@ -26,6 +27,7 @@ __all__ = [
     "expand",
     "MalformedTemplate",
     "LocaleResources",
+    "LanguageMatcher",
     "MalformedResource",
     "read_resource_file",
     "render",

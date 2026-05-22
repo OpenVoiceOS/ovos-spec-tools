@@ -10,13 +10,17 @@ readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "jarbasai", email = "jarbasai@mailfence.com" }]
 requires-python = ">=3.8"
-dependencies = [
-    "langcodes",
-]
+dependencies = []
 
 [project.optional-dependencies]
+# `langcodes` powers the smart language fallback of LocaleResources; without
+# it, language resolution is exact-match only.
+langcodes = [
+    "langcodes",
+]
 test = [
     "pytest",
+    "langcodes",
 ]
 
 [project.scripts]

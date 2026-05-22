@@ -62,6 +62,14 @@ res.load_vocabulary("yes")     # expanded phrase set
 The user-data path of the override precedence is assistant-defined and passed
 in (`user_locale=`); this package imports no configuration.
 
+**Smart language fallback.** When the requested language has no directory,
+`LocaleResources` resolves to the nearest available language instead
+(OVOS-INTENT-2 §2.2) — so a request for `en-AU` finds `en-US`. The nearness
+test is a `LanguageMatcher`; by default the optional `langcodes` dependency
+provides one. Without `langcodes` installed, resolution is exact-match only;
+inject your own `LanguageMatcher` to use a different implementation, or pass
+`max_language_distance=0` to disable the fallback.
+
 ## The dialog renderer
 
 Rendering a dialog selects one phrase from a loaded `.dialog`, expands its
@@ -123,7 +131,8 @@ single `<lang>/` directory. Exit code is non-zero on errors (or, with
 ## Install
 
 ```bash
-pip install ovos-spec-tools
+pip install ovos-spec-tools            # core — no dependencies
+pip install ovos-spec-tools[langcodes] # adds the smart language fallback
 ```
 
 ## License

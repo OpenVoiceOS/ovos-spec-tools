@@ -18,12 +18,13 @@ this module takes it as a parameter and imports no configuration.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Protocol
 
 from ovos_spec_tools.expansion import MalformedTemplate, expand
 
 __all__ = [
     "LocaleResources",
+    "LanguageMatcher",
     "MalformedResource",
     "read_resource_file",
     "SLOT_BEARING_ROLES",
@@ -33,6 +34,37 @@ __all__ = [
 # Resource roles, by file extension (OVOS-INTENT-2 §1).
 SLOT_BEARING_ROLES = (".intent", ".dialog")
 SLOT_FREE_ROLES = (".entity", ".voc", ".blacklist")
+
+# Default cap for the smart language fallback (OVOS-INTENT-2 §2.2): the
+# `langcodes` library treats a tag distance below 10 as a usable regional
+# match.
+DEFAULT_MAX_LANGUAGE_DISTANCE = 10
+
+
+class LanguageMatcher(Protocol):
+    """Computes the distance between two BCP-47 language tags.
+
+    A lower distance is a closer match; ``0`` is exact. The ``langcodes``
+    module satisfies this protocol structurally — its ``tag_distance``
+    function has exactly this signature — so `langcodes` itself can be passed
+    wherever a ``LanguageMatcher`` is expected.
+    """
+
+    def tag_distance(self, desired: str, supported: str) -> int:
+        ...
+
+
+def _default_language_matcher() -> Optional["LanguageMatcher"]:
+    """Return the ``langcodes`` module if it is installed, else ``None``.
+
+    `langcodes` is an optional dependency; without it the smart language
+    fallback is disabled and only exact (case-insensitive) tags resolve.
+    """
+    try:
+        import langcodes
+    except ImportError:
+        return None
+    return langcodes
 
 
 class MalformedResource(ValueError):
@@ -67,11 +99,20 @@ class LocaleResources:
     A resource is resolved through the override precedence of §2.1 — user
     overrides, then skill resources, then core resources — searching each
     source's ``<lang>/`` directory and all its subdirectories recursively.
+
+    When the requested language has no directory, a **smart language
+    fallback** (OVOS-INTENT-2 §2.2, non-normative) selects the nearest
+    available language whose tag distance is within
+    ``max_language_distance``. The fallback needs a :class:`LanguageMatcher`;
+    by default the optional ``langcodes`` dependency supplies one, and the
+    fallback is silently disabled if ``langcodes`` is not installed.
     """
 
     def __init__(self, lang: str, skill_locale: str,
                  core_locale: Optional[str] = None,
-                 user_locale: Optional[str] = None):
+                 user_locale: Optional[str] = None,
+                 language_matcher: Optional[LanguageMatcher] = None,
+                 max_language_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE):
         """
         Args:
             lang: a BCP-47 language tag; compared case-insensitively (§2).
@@ -79,6 +120,10 @@ class LocaleResources:
             core_locale: path to the assistant's core ``locale/`` directory.
             user_locale: path to the user-override ``locale/`` directory
                 (its root is assistant-defined, §2.1).
+            language_matcher: a :class:`LanguageMatcher` for the smart language
+                fallback. Defaults to the ``langcodes`` module if installed.
+            max_language_distance: the largest tag distance accepted by the
+                fallback. ``0`` disables the fallback — only exact tags match.
         """
         self.lang = lang
         # Highest precedence first (§2.1): user, skill, core.
@@ -86,16 +131,41 @@ class LocaleResources:
             Path(p) for p in (user_locale, skill_locale, core_locale)
             if p is not None
         ]
+        if language_matcher is None:
+            language_matcher = _default_language_matcher()
+        self._language_matcher = language_matcher
+        self.max_language_distance = max_language_distance
 
     def _lang_dir(self, source: Path) -> Optional[Path]:
-        """The ``<lang>/`` directory under one source, matched
-        case-insensitively (§2)."""
+        """The ``<lang>/`` directory under one source.
+
+        An exact tag (case-insensitive, §2) wins. Failing that, the smart
+        language fallback (§2.2) picks the nearest available language within
+        ``max_language_distance``, if a :class:`LanguageMatcher` is available.
+        """
         if not source.is_dir():
             return None
+        subdirectories = [c for c in source.iterdir() if c.is_dir()]
+
         target = self.lang.lower()
-        for child in source.iterdir():
-            if child.is_dir() and child.name.lower() == target:
+        for child in subdirectories:
+            if child.name.lower() == target:
                 return child
+
+        if self._language_matcher is None or self.max_language_distance <= 0:
+            return None
+        nearest: Optional[Path] = None
+        nearest_distance = self.max_language_distance + 1
+        for child in subdirectories:
+            try:
+                distance = self._language_matcher.tag_distance(
+                    self.lang, child.name)
+            except Exception:
+                continue  # an unparseable directory name is simply not a match
+            if distance < nearest_distance:
+                nearest, nearest_distance = child, distance
+        if nearest is not None and nearest_distance <= self.max_language_distance:
+            return nearest
         return None
 
     def _locate(self, base_name: str, extension: str) -> Optional[Path]:

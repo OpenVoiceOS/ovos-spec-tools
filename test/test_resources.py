@@ -128,3 +128,60 @@ def test_missing_resource_raises(tmp_path):
     res = LocaleResources("en-US", str(locale))
     with pytest.raises(FileNotFoundError):
         res.load_intent("nope")
+
+
+# --- §2.2 smart language fallback -------------------------------------------
+
+class _FakeMatcher:
+    """A LanguageMatcher stub with hand-set distances, for deterministic tests."""
+
+    def __init__(self, distances):
+        self.distances = distances  # {(desired, supported): distance}
+
+    def tag_distance(self, desired, supported):
+        return self.distances.get((desired, supported), 999)
+
+
+def test_fallback_resolves_a_near_language(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.intent", "hello world\n")
+    matcher = _FakeMatcher({("en-AU", "en-US"): 4})
+    res = LocaleResources("en-AU", str(locale), language_matcher=matcher)
+    assert res.load_intent("x") == ["hello world"]
+
+
+def test_fallback_picks_the_nearest_language(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.intent", "us\n")
+    _write(locale / "en-GB" / "x.intent", "gb\n")
+    matcher = _FakeMatcher({("en-AU", "en-US"): 5, ("en-AU", "en-GB"): 3})
+    res = LocaleResources("en-AU", str(locale), language_matcher=matcher)
+    assert res.load_intent("x") == ["gb"]
+
+
+def test_fallback_rejects_a_too_distant_language(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "fr-FR" / "x.intent", "bonjour\n")
+    matcher = _FakeMatcher({("en-US", "fr-FR"): 80})
+    res = LocaleResources("en-US", str(locale), language_matcher=matcher)
+    with pytest.raises(FileNotFoundError):
+        res.load_intent("x")
+
+
+def test_fallback_disabled_with_zero_max_distance(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.intent", "hello\n")
+    matcher = _FakeMatcher({("en-AU", "en-US"): 4})
+    res = LocaleResources("en-AU", str(locale), language_matcher=matcher,
+                          max_language_distance=0)
+    with pytest.raises(FileNotFoundError):
+        res.load_intent("x")
+
+
+def test_fallback_with_real_langcodes(tmp_path):
+    """The default matcher is the langcodes module when it is installed."""
+    pytest.importorskip("langcodes")
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.intent", "hello\n")
+    res = LocaleResources("en-GB", str(locale))  # no explicit matcher
+    assert res.load_intent("x") == ["hello"]
