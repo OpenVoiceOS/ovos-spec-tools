@@ -230,5 +230,48 @@ def test_main_honors_spec_version(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "greeting.voc", "hello\nhi\n")
     _write(locale / "en-US" / "greet.intent", "<greeting> there\n")
-    assert main([str(locale)]) == 0                          # v2 — fine
+    assert main([str(locale)]) == 0                          # v3 — fine
     assert main([str(locale), "--spec-version", "1"]) == 1   # <name> is v2
+
+
+# --- the .prompt role (OVOS-INTENT-2 §4.4) ----------------------------------
+
+def test_prompt_file_is_a_recognized_role(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "system.prompt", "You are {assistant}.\n")
+    assert lint_locale(locale) == []
+
+
+def test_empty_prompt_is_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "system.prompt", "   \n\n")
+    assert any("empty" in f.message for f in _errors(lint_locale(locale)))
+
+
+def test_prompt_is_not_template_checked(tmp_path):
+    """A `.prompt` is plain text — content that would be a malformed template
+    if it were one is perfectly valid."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "sys.prompt", "turn (on|off the lights {a}{b}\n")
+    assert lint_locale(locale) == []
+
+
+def test_non_utf8_prompt_is_reported_not_crashed(tmp_path):
+    lang = tmp_path / "locale" / "en-US"
+    lang.mkdir(parents=True)
+    (lang / "sys.prompt").write_bytes(b"\xff\xfe not valid utf-8")
+    assert any("cannot read" in f.message
+               for f in lint_locale(tmp_path / "locale"))
+
+
+def test_spec_version_2_flags_the_prompt_role(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "system.prompt", "You are helpful.\n")
+    findings = lint_locale(locale, spec_version=2)
+    assert any("requires spec version 3" in f.message for f in findings)
+
+
+def test_default_spec_version_does_not_flag_prompt(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "system.prompt", "You are helpful.\n")
+    assert not any("spec version" in f.message for f in lint_locale(locale))

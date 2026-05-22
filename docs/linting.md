@@ -48,10 +48,13 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 - a resource file sitting outside any language directory;
 - a language directory not named like a BCP-47 tag;
 - a language directory with no resource files;
-- a legacy file type (`.rx`, `.value`, `.list`, …) — not one of the five
+- a legacy file type (`.rx`, `.value`, `.list`, …) — not one of the six
   OVOS-INTENT-2 roles;
 - a `.blacklist` with no matching `.intent` to suppress;
 - a file name that is not lowercase.
+
+A `.prompt` is checked too, but not as a template — it is plain text, so only
+its naming and non-emptiness are checked, never template syntax.
 
 ## Targeting an older spec version
 
@@ -63,17 +66,18 @@ shipping that a skill will not work there:
 |---------|------|
 | `0` | the legacy, undocumented Mycroft/OVOS de-facto behaviour |
 | `1` | the formalized specs — and the `.blacklist` role |
-| `2` | `<name>` inline vocabulary references *(the default)* |
+| `2` | `<name>` inline vocabulary references |
+| `3` | the `.prompt` role *(the default)* |
 
 ```bash
 ovos-spec-lint my-skill/locale --spec-version 1
 ```
 
 With `--spec-version 1`, a template using `<name>` is an **error** — a
-version-1 runtime cannot expand it. With `--spec-version 0`, a `.blacklist`
-file is additionally a **warning** — a version-0 runtime silently ignores it,
-so the suppression simply will not happen. The default, `2`, flags nothing
-extra.
+version-1 runtime cannot expand it. With `--spec-version 2`, a `.prompt` file
+is a **warning**, and with `--spec-version 0` a `.blacklist` file likewise — an
+older runtime silently ignores a role it does not know, so that resource just
+will not take effect. The default, `3`, flags nothing extra.
 
 ## Using it as a library
 

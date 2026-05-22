@@ -16,7 +16,8 @@ OVOS spec version, for skills that must run on older deployments:
 
 - **0** — the legacy, undocumented Mycroft/OVOS de-facto behaviour;
 - **1** — the formalized specs; adds the ``.blacklist`` role;
-- **2** — adds ``<name>`` inline vocabulary references.
+- **2** — adds ``<name>`` inline vocabulary references;
+- **3** — adds the ``.prompt`` role.
 """
 from __future__ import annotations
 
@@ -29,22 +30,27 @@ from typing import Dict, List, Optional, Sequence
 
 from ovos_spec_tools.expansion import MalformedTemplate, expand
 from ovos_spec_tools.resources import (
+    PROMPT_ROLE,
     SLOT_BEARING_ROLES,
     SLOT_FREE_ROLES,
+    read_prompt_file,
     read_resource_file,
 )
 
 __all__ = ["Finding", "lint_locale", "main"]
 
-# The five OVOS-INTENT-2 resource roles.
-ROLE_EXTENSIONS = SLOT_BEARING_ROLES + SLOT_FREE_ROLES
+# The six OVOS-INTENT-2 resource roles.
+ROLE_EXTENSIONS = SLOT_BEARING_ROLES + SLOT_FREE_ROLES + (PROMPT_ROLE,)
 # File types OVOS-INTENT-2 deliberately does not define — flagged, not parsed.
 LEGACY_EXTENSIONS = (".rx", ".value", ".list", ".word", ".template", ".qml")
 
 # The OVOS spec version that introduced each feature.
-DEFAULT_SPEC_VERSION = 2
+DEFAULT_SPEC_VERSION = 3
 _BLACKLIST_SINCE = 1        # the `.blacklist` role
 _VOCABULARY_REFERENCE_SINCE = 2  # the `<name>` inline vocabulary reference
+_PROMPT_ROLE_SINCE = 3      # the `.prompt` role
+# Roles introduced after V0, by the spec version that added them.
+_ROLE_SINCE = {".blacklist": _BLACKLIST_SINCE, PROMPT_ROLE: _PROMPT_ROLE_SINCE}
 
 _BASE_NAME_RE = re.compile(r"[a-z0-9_]+")
 _SLOT_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
@@ -137,18 +143,17 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
         else:
             first_seen[key] = path
 
-    # `.blacklist`: a spec-version gate, and a pairing check (§4.3).
+    # Per-role spec-version gate (a role newer than the target is flagged),
+    # plus the `.blacklist` pairing check (§4.3).
     intent_names = {stem for (ext, stem) in first_seen if ext == ".intent"}
     for path in role_files:
-        if path.suffix != ".blacklist":
-            continue
-        if spec_version < _BLACKLIST_SINCE:
+        since = _ROLE_SINCE.get(path.suffix)
+        if since is not None and spec_version < since:
             findings.append(Finding(
                 WARNING, str(path),
-                f"the .blacklist role requires spec version "
-                f"{_BLACKLIST_SINCE}; a version-{spec_version} runtime "
-                f"ignores it"))
-        if path.stem not in intent_names:
+                f"the {path.suffix} role requires spec version {since}; a "
+                f"version-{spec_version} runtime ignores it"))
+        if path.suffix == ".blacklist" and path.stem not in intent_names:
             findings.append(Finding(
                 WARNING, str(path),
                 f"blacklist {path.stem!r} has no matching "
@@ -190,6 +195,21 @@ def _lint_file(path: Path,
     if path.name != path.name.lower():
         findings.append(Finding(
             WARNING, str(path), "file name should be lowercase"))
+
+    # --- `.prompt` — a whole-file document, not a template list (§4.4) ------
+    if extension == PROMPT_ROLE:
+        try:
+            text = read_prompt_file(path)
+        except (OSError, UnicodeError) as exc:
+            findings.append(Finding(
+                ERROR, str(path), f"cannot read file: {exc}"))
+        else:
+            if not text.strip():
+                findings.append(Finding(
+                    ERROR, str(path),
+                    "empty file — every resource file must contribute "
+                    "content (OVOS-INTENT-2 §5)"))
+        return findings
 
     # --- read (OVOS-INTENT-2 §3) --------------------------------------------
     try:
@@ -251,11 +271,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--strict", action="store_true",
         help="exit non-zero if there are warnings as well as errors")
     parser.add_argument(
-        "--spec-version", type=int, choices=(0, 1, 2),
+        "--spec-version", type=int, choices=(0, 1, 2, 3),
         default=DEFAULT_SPEC_VERSION,
         help="target OVOS spec version; flags features newer than it "
-             "(0: legacy, 1: adds .blacklist, 2: adds <name> references). "
-             f"Default {DEFAULT_SPEC_VERSION}.")
+             "(0: legacy, 1: adds .blacklist, 2: adds <name> references, "
+             f"3: adds the .prompt role). Default {DEFAULT_SPEC_VERSION}.")
     args = parser.parse_args(argv)
 
     findings = lint_locale(args.locale, spec_version=args.spec_version)
