@@ -1,5 +1,20 @@
 # Examples
 
+## Runnable scripts
+
+Each script is self-contained and prints its output. Install the package first
+(`pip install -e .` from the repo root), then run e.g. `python examples/expand.py`.
+
+| Script | Demonstrates |
+|--------|--------------|
+| [`expand.py`](expand.py) | `expand()` — alternatives, optionals, opaque `{slot}`s, `<name>` references, and rejection of malformed templates (OVOS-INTENT-1) |
+| [`load_resources.py`](load_resources.py) | `LocaleResources` — loading `.intent` / `.voc` / `.entity` / `.dialog` from a locale tree (OVOS-INTENT-2) |
+| [`render_dialog.py`](render_dialog.py) | `render()` and `DialogRenderer` — phrase selection, repetition avoidance, default slots, `.entity` fallback (OVOS-INTENT-2 §4.2) |
+| [`lint.py`](lint.py) | `lint_locale()` — the linter used as a library |
+
+The loader and dialog scripts read [`skill-locale/`](skill-locale), a small
+valid skill locale; `lint.py` reads `dirty-locale/` (below).
+
 ## `dirty-locale` — the linter against a broken locale
 
 `dirty-locale/` is a deliberately broken skill locale. Every file in it trips
