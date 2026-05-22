@@ -117,3 +117,29 @@ def test_main_strict_fails_on_warnings(tmp_path):
     _write(locale / "en-US" / "old.list", "a\n")
     assert main([str(locale)]) == 0
     assert main([str(locale), "--strict"]) == 1
+
+
+# --- edge cases --------------------------------------------------------------
+
+def test_lint_nonexistent_path_is_an_error():
+    findings = lint_locale("/no/such/locale/path")
+    assert any(f.severity == ERROR for f in findings)
+
+
+def test_lint_empty_locale_warns(tmp_path):
+    locale = tmp_path / "locale"
+    locale.mkdir()
+    assert any("no language" in f.message for f in lint_locale(locale))
+
+
+def test_unknown_extension_is_ignored(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "notes.txt", "ignore me\n")
+    _write(locale / "en-US" / "ok.intent", "hello world\n")
+    assert lint_locale(locale) == []
+
+
+def test_lint_accepts_a_single_language_directory(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "ok.intent", "hello world\n")
+    assert lint_locale(locale / "en-US") == []

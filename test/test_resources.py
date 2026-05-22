@@ -198,3 +198,83 @@ def test_custom_lang_resolver_is_honored(tmp_path):
 
     res = LocaleResources(str(locale), lang_resolver=resolver)
     assert res.load_intent("x", "zz-ZZ") == ["british"]
+
+
+# --- edge cases --------------------------------------------------------------
+
+def test_core_resources_are_a_fallback(tmp_path):
+    skill = tmp_path / "skill" / "locale"
+    core = tmp_path / "core" / "locale"
+    _write(core / "en-US" / "x.intent", "core version\n")
+    res = LocaleResources(str(skill), core_locale=str(core))
+    assert res.load_intent("x", "en-US") == ["core version"]
+
+
+def test_skill_resources_override_core(tmp_path):
+    skill = tmp_path / "skill" / "locale"
+    core = tmp_path / "core" / "locale"
+    _write(skill / "en-US" / "x.intent", "skill version\n")
+    _write(core / "en-US" / "x.intent", "core version\n")
+    res = LocaleResources(str(skill), core_locale=str(core))
+    assert res.load_intent("x", "en-US") == ["skill version"]
+
+
+def test_empty_dialog_is_malformed(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "e.dialog", "# nothing here\n")
+    res = LocaleResources(str(locale))
+    with pytest.raises(MalformedResource):
+        res.load_dialog("e", "en-US")
+
+
+def test_empty_voc_is_malformed(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "e.voc", "\n\n")
+    res = LocaleResources(str(locale))
+    with pytest.raises(MalformedResource):
+        res.load_vocabulary("e", "en-US")
+
+
+def test_vocabularies_collects_every_voc(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "yes\n")
+    _write(locale / "en-US" / "no.voc", "no\n")
+    res = LocaleResources(str(locale))
+    assert set(res.vocabularies("en-US")) == {"yes", "no"}
+
+
+def test_entities_collects_every_entity(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "day.entity", "monday\n(tues|wednes)day\n")
+    res = LocaleResources(str(locale))
+    assert sorted(res.entities("en-US")["day"]) == [
+        "monday", "tuesday", "wednesday",
+    ]
+
+
+def test_indented_comment_is_skipped(tmp_path):
+    f = tmp_path / "x.voc"
+    _write(f, "   # an indented comment\nyes\n")
+    assert read_resource_file(f) == ["yes"]
+
+
+def test_hash_mid_line_is_literal_not_a_comment(tmp_path):
+    """Only a leading # starts a comment — there are no inline comments (§3)."""
+    f = tmp_path / "x.voc"
+    _write(f, "channel # five\n")
+    assert read_resource_file(f) == ["channel # five"]
+
+
+def test_nonexistent_skill_locale_raises_on_load(tmp_path):
+    res = LocaleResources(str(tmp_path / "does-not-exist"))
+    with pytest.raises(FileNotFoundError):
+        res.load_intent("x", "en-US")
+
+
+def test_intent_with_undefined_voc_reference_is_rejected(tmp_path):
+    from ovos_spec_tools import MalformedTemplate
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "g.intent", "<undefined> hello\n")
+    res = LocaleResources(str(locale))
+    with pytest.raises(MalformedTemplate):
+        res.load_intent("g", "en-US")

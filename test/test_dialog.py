@@ -157,3 +157,33 @@ def test_slot_precedence_call_then_default_then_entity(tmp_path):
     assert renderer.render("en-US") == "value from_default"
     # a per-call value beats both
     assert renderer.render("en-US", {"x": "from_call"}) == "value from_call"
+
+
+# --- edge cases --------------------------------------------------------------
+
+def test_renderer_with_one_phrase_repeats_it(tmp_path):
+    res = _resources(tmp_path, {"en-US/one.dialog": "the only phrase"})
+    renderer = DialogRenderer(res, "one")
+    assert renderer.render("en-US") == "the only phrase"
+    assert renderer.render("en-US") == "the only phrase"
+
+
+def test_render_phrase_with_no_slots():
+    assert render(["a fixed phrase"]) == "a fixed phrase"
+
+
+def test_render_slot_value_with_braces_stays_literal():
+    """The filled value is inserted verbatim — never re-parsed as a slot."""
+    out = render(["you said {echo}"], slots={"echo": "{not a slot}"})
+    assert out == "you said {not a slot}"
+
+
+def test_render_numeric_slot_value_is_stringified():
+    assert render(["count {n}"], slots={"n": 0}) == "count 0"
+
+
+def test_renderer_missing_dialog_raises(tmp_path):
+    res = _resources(tmp_path, {"en-US/x.dialog": "hello"})
+    renderer = DialogRenderer(res, "absent")
+    with pytest.raises(FileNotFoundError):
+        renderer.render("en-US")

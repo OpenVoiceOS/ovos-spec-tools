@@ -177,3 +177,50 @@ def test_repeated_slot_name():
 def test_invalid_names(template):
     with pytest.raises(MalformedTemplate):
         expand(template)
+
+
+# --- edge cases --------------------------------------------------------------
+
+def test_leading_trailing_and_repeated_whitespace_is_normalized():
+    assert expand("  turn   on   the    lights  ") == ["turn on the lights"]
+
+
+def test_tabs_count_as_whitespace():
+    assert expand("turn\ton") == ["turn on"]
+
+
+def test_vocabularies_argument_is_optional():
+    assert expand("plain literal template") == ["plain literal template"]
+
+
+def test_a_bare_vocabulary_reference_is_a_valid_template():
+    assert sorted(expand("<g>", {"g": ["hello", "hi"]})) == ["hello", "hi"]
+
+
+def test_vocabulary_member_may_be_multiple_words():
+    assert expand("<g> there", {"g": ["good morning"]}) == ["good morning there"]
+
+
+def test_empty_vocabulary_is_malformed():
+    with pytest.raises(MalformedTemplate):
+        expand("say <x>", {"x": []})
+
+
+def test_expand_does_not_enforce_slot_consistency():
+    """expand() works one template at a time; the cross-template slot rule
+    (OVOS-INTENT-1 §5.5) is enforced elsewhere, not here."""
+    assert sorted(expand("(buy {item}|leave)")) == ["buy {item}", "leave"]
+
+
+def test_optional_around_a_slot():
+    assert sorted(expand("[really ]want {item}")) == [
+        "really want {item}", "want {item}",
+    ]
+
+
+def test_unicode_literal_words_pass_through():
+    assert expand("ligar a televisão") == ["ligar a televisão"]
+
+
+def test_duplicate_branches_collapse_to_one_sample():
+    assert expand("(go|go) home") == ["go home"]

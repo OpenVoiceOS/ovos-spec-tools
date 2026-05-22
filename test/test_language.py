@@ -98,3 +98,29 @@ def test_distance_without_langcodes_prefers_the_generic_tag(monkeypatch):
 def test_distance_without_langcodes_no_shared_subtag(monkeypatch):
     monkeypatch.setattr(language, "_langcodes_distance", lambda a, b: None)
     assert closest_lang("en-AU", ["pt-BR", "fr-FR"]) is None
+
+
+# --- edge cases --------------------------------------------------------------
+
+def test_closest_lang_empty_available_is_none():
+    assert closest_lang("en-US", []) is None
+
+
+def test_standardize_lang_empty_string():
+    assert standardize_lang("") == ""
+
+
+def test_lang_distance_is_symmetric_enough_for_identity():
+    assert lang_distance("en-US", "en-US") == 0
+    assert lang_distance("EN_us", "en-US") == 0
+
+
+def test_lang_distance_regional_versus_different_language():
+    pytest.importorskip("langcodes")
+    assert lang_distance("de-DE", "de-AT") < 10    # a usable regional match
+    assert lang_distance("de-DE", "nl-NL") >= 10   # a different language
+
+
+def test_closest_lang_regioned_request_falls_back_to_a_sibling(tmp_path):
+    pytest.importorskip("langcodes")
+    assert closest_lang("pt-MZ", ["en-US", "pt-BR"]) == "pt-BR"
