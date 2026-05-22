@@ -63,6 +63,15 @@ A zero-to-hero guide lives in [`docs/`](docs/README.md):
 
 Runnable example scripts are in [`examples/`](examples/README.md).
 
+## Credits
+
+This package was produced as part of a documentation and interoperability
+effort for OpenVoiceOS, funded by NLnet's
+[NGI0 Commons Fund](https://nlnet.nl/project/OpenVoiceOS) under grant
+agreement No [101135429](https://cordis.europa.eu/project/id/101135429).
+
+![NGI0 / NLnet](./ngi.png)
+
 ## License
 
 Apache 2.0
