@@ -97,3 +97,49 @@ def test_renderer_from_resources(tmp_path):
     res = LocaleResources("en-US", str(locale))
     renderer = DialogRenderer.from_resources(res, "hi")
     assert renderer.render({"name": "Sam"}) == "Hello Sam."
+
+
+# --- default slots and .entity fallback --------------------------------------
+
+def test_renderer_default_slots_are_reused():
+    renderer = DialogRenderer(["Hello {name}."], slots={"name": "Sam"})
+    assert renderer.render() == "Hello Sam."
+    assert renderer.render() == "Hello Sam."
+
+
+def test_per_call_slot_overrides_a_default():
+    renderer = DialogRenderer(["Hello {name}."], slots={"name": "Sam"})
+    assert renderer.render({"name": "Max"}) == "Hello Max."
+
+
+def test_unfilled_slot_falls_back_to_entity():
+    renderer = DialogRenderer(["today is {day}"],
+                              entities={"day": ["monday"]})
+    assert renderer.render() == "today is monday"
+
+
+def test_slot_precedence_call_then_default_then_entity():
+    renderer = DialogRenderer(["value {x}"],
+                              slots={"x": "from_default"},
+                              entities={"x": ["from_entity"]})
+    # default beats entity
+    assert renderer.render() == "value from_default"
+    # per-call beats both
+    assert renderer.render({"x": "from_call"}) == "value from_call"
+
+
+def test_unfilled_with_no_source_still_raises():
+    renderer = DialogRenderer(["say {name}"], entities={"other": ["x"]})
+    with pytest.raises(UnfilledSlot):
+        renderer.render()
+
+
+def test_from_resources_picks_up_entity_fallback(tmp_path):
+    locale = tmp_path / "locale"
+    lang = locale / "en-US"
+    lang.mkdir(parents=True)
+    (lang / "today.dialog").write_text("today is {day}\n", encoding="utf-8")
+    (lang / "day.entity").write_text("monday\n", encoding="utf-8")
+    res = LocaleResources("en-US", str(locale))
+    renderer = DialogRenderer.from_resources(res, "today")
+    assert renderer.render() == "today is monday"

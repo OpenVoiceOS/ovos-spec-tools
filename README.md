@@ -90,6 +90,17 @@ renderer.render({"temperature": 21})   # a phrase
 renderer.render({"temperature": 22})   # a different phrase
 ```
 
+It also holds **default slot values** set once and reused, and falls back to a
+slot's **`.entity` value set** for anything still unfilled. A slot is resolved
+in order: the per-call value, then a default, then a random `.entity` value,
+then `UnfilledSlot`.
+
+```python
+renderer = DialogRenderer.from_resources(res, "greeting",
+                                         slots={"assistant": "OVOS"})
+renderer.render()              # {assistant} reused; an {day} slot from day.entity
+```
+
 ## The locale linter
 
 `ovos-spec-lint` validates every resource file under a locale directory — the

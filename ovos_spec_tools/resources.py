@@ -129,6 +129,19 @@ class LocaleResources:
                     vocs[path.stem] = read_resource_file(path)
         return vocs
 
+    def entities(self) -> Dict[str, List[str]]:
+        """Every ``.entity`` reachable for this language, as a name→value-set
+        map — each value set expanded, with override precedence applied."""
+        names = set()
+        for source in self._sources:
+            lang_dir = self._lang_dir(source)
+            if lang_dir is None:
+                continue
+            for path in lang_dir.rglob("*.entity"):
+                if path.is_file():
+                    names.add(path.stem)
+        return {name: self.load_entity(name) for name in sorted(names)}
+
     def _load_expanded(self, base_name: str, extension: str) -> List[str]:
         """Load a resource and expand it to its sample set."""
         path = self._locate(base_name, extension)
