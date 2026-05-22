@@ -76,13 +76,22 @@ def closest_lang(target: str, available: Sequence[str],
                  ) -> Optional[str]:
     """Return the entry of ``available`` closest to ``target``.
 
-    An exact match (after standardization, so ``en_US`` matches ``en-US``)
-    always wins. When ``target`` is a bare language tag with a norm region
-    (see ``_NORM_REGION``), a candidate in that region is preferred next — so
-    bare ``pt`` favors ``pt-PT`` over ``pt-BR``. Otherwise the nearest tag
-    whose distance is **below** ``max_distance`` is returned; if none
-    qualifies, or ``max_distance`` is not positive, ``None`` is returned.
-    Without ``langcodes`` installed only exact matches resolve.
+    Resolution is tried in order:
+
+    1. an **exact** match, after standardization (so ``en_US`` matches
+       ``en-US``);
+    2. for a bare language tag with a norm region (see ``_NORM_REGION``), a
+       candidate in that region — so bare ``pt`` favors ``pt-PT`` over
+       ``pt-BR``;
+    3. the nearest tag whose ``langcodes`` distance is **below**
+       ``max_distance``;
+    4. a candidate sharing the **primary subtag** — preferring the bare tag,
+       then the norm region. This is the resolution path when ``langcodes`` is
+       not installed: a request for ``en-AU`` still accepts ``en``, ``en-GB``,
+       ``en-US``, …
+
+    ``None`` is returned if nothing matches, or if ``max_distance`` is not
+    positive (which also disables steps 2–4).
 
     The value returned is the original string from ``available``, so a caller
     can map it back to a directory, a voice, a model, and so on.
@@ -109,4 +118,22 @@ def closest_lang(target: str, available: Sequence[str],
         distance = _tag_distance(wanted, standardize_lang(candidate))
         if distance is not None and distance < nearest_distance:
             nearest, nearest_distance = candidate, distance
-    return nearest
+    if nearest is not None:
+        return nearest
+
+    # Final fallback — a shared primary subtag. This is the resolution path
+    # when `langcodes` is unavailable, so no distance could be computed.
+    primary = wanted.split("-")[0].lower()
+    prefix_matches = [c for c in available
+                      if standardize_lang(c).split("-")[0].lower() == primary]
+    if not prefix_matches:
+        return None
+    for candidate in prefix_matches:  # prefer the bare language tag
+        if standardize_lang(candidate).lower() == primary:
+            return candidate
+    if primary in _NORM_REGION:  # then the norm region
+        norm = f"{primary}-{_NORM_REGION[primary]}".lower()
+        for candidate in prefix_matches:
+            if standardize_lang(candidate).lower() == norm:
+                return candidate
+    return prefix_matches[0]

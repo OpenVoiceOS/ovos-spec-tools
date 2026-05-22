@@ -63,3 +63,24 @@ def test_explicit_region_is_respected_over_the_norm_preference():
 def test_bare_tag_falls_back_when_norm_region_absent():
     pytest.importorskip("langcodes")
     assert closest_lang("pt", ["pt-BR"]) == "pt-BR"
+
+
+# --- primary-subtag fallback (the `langcodes`-absent path) -------------------
+
+def test_primary_subtag_fallback_without_langcodes(monkeypatch):
+    """With no distance available, a shared primary subtag still resolves."""
+    import ovos_spec_tools.language as language
+    monkeypatch.setattr(language, "_tag_distance", lambda desired, supported: None)
+    assert language.closest_lang("en-AU", ["pt-BR", "en-GB", "fr-FR"]) == "en-GB"
+
+
+def test_primary_subtag_fallback_prefers_the_bare_tag(monkeypatch):
+    import ovos_spec_tools.language as language
+    monkeypatch.setattr(language, "_tag_distance", lambda desired, supported: None)
+    assert language.closest_lang("en-AU", ["en-US", "en", "en-GB"]) == "en"
+
+
+def test_primary_subtag_fallback_with_no_shared_subtag(monkeypatch):
+    import ovos_spec_tools.language as language
+    monkeypatch.setattr(language, "_tag_distance", lambda desired, supported: None)
+    assert language.closest_lang("en-AU", ["pt-BR", "fr-FR"]) is None
