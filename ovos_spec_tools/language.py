@@ -71,7 +71,7 @@ def _with_norm_region(tag: str) -> str:
     if "-" in tag:
         return tag
     region = _NORM_REGION.get(tag.lower())
-    return f"{tag.lower()}-{region}" if region else tag
+    return f"{tag.lower()}-{region.upper()}" if region else tag
 
 
 def _langcodes_distance(desired: str, supported: str) -> Optional[int]:
