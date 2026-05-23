@@ -25,7 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
-from ovos_spec_tools.expansion import MalformedTemplate, expand
+from ovos_spec_tools.expansion import expand
 from ovos_spec_tools.language import (
     DEFAULT_MAX_LANGUAGE_DISTANCE,
     closest_lang,
@@ -106,7 +106,7 @@ def iter_locale_dirs(root: Path,
     locales_root = root / "locale"
     if not locales_root.is_dir():
         return
-    natives_norm = ([standardize_lang(l) for l in native_langs]
+    natives_norm = ([standardize_lang(lang) for lang in native_langs]
                     if native_langs is not None else None)
     for entry in sorted(locales_root.iterdir()):
         if not entry.is_dir():

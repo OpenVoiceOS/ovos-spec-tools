@@ -12,9 +12,12 @@ formal specifications describe:
 - :func:`~ovos_spec_tools.prompt.render_prompt` / :class:`~ovos_spec_tools.prompt.PromptRenderer`
   — the OVOS-INTENT-2 §4.4 ``.prompt`` renderer;
 - :func:`~ovos_spec_tools.language.standardize_lang`,
-  :func:`~ovos_spec_tools.language.lang_distance`, and
+  :func:`~ovos_spec_tools.language.lang_distance`,
+  :func:`~ovos_spec_tools.language.lang_matches`, and
   :func:`~ovos_spec_tools.language.closest_lang` — language-tag normalization,
-  distance, and closest-match resolution;
+  distance, match checking, and closest-match resolution;
+- :func:`~ovos_spec_tools.resources.iter_locale_dirs` — locale subdirectory
+  discovery with optional native-language filtering;
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
