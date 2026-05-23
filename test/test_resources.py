@@ -728,3 +728,17 @@ def test_voc_match_and_remove_voc_resolve_smart_lang_fallback(tmp_path):
     res = LocaleResources(str(locale))
     assert res.voc_match("yes please", "yes", "en-AU")
     assert "yes" not in res.remove_voc("yes please", "yes", "en-AU").split()
+
+
+def test_voc_list_returns_expanded_samples(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "(yes|yeah)\n")
+    res = LocaleResources(str(locale))
+    assert sorted(res.voc_list("yes", "en-US")) == ["yeah", "yes"]
+
+
+def test_voc_list_missing_resource_returns_empty(tmp_path):
+    locale = tmp_path / "locale"
+    (locale / "en-US").mkdir(parents=True)
+    res = LocaleResources(str(locale))
+    assert res.voc_list("nope", "en-US") == []

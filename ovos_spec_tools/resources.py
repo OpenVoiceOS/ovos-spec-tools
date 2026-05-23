@@ -412,6 +412,19 @@ class LocaleResources:
         slot-free template format (§4.3)."""
         return self._keywords_for(".entity", lang)
 
+    def voc_list(self, base_name: str, lang: str) -> List[str]:
+        """Load a ``.voc`` as its flat sample list — the same content
+        :meth:`load_vocabulary` returns, named consistently with
+        :meth:`voc_match` and :meth:`remove_voc` for callers that want
+        to inspect or cache the phrase set independently.
+
+        Returns ``[]`` when the resource does not exist for the language.
+        """
+        try:
+            return self.load_vocabulary(base_name, lang)
+        except FileNotFoundError:
+            return []
+
     def voc_match(self, utterance: str, base_name: str, lang: str, *,
                   exact: bool = False,
                   strip_diacritics: bool = True,
