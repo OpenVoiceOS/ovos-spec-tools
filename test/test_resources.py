@@ -278,3 +278,63 @@ def test_intent_with_undefined_voc_reference_is_rejected(tmp_path):
     res = LocaleResources(str(locale))
     with pytest.raises(MalformedTemplate):
         res.load_intent("g", "en-US")
+
+
+# --- LocaleResources.find ----------------------------------------------------
+
+def test_find_returns_path_when_resource_exists(tmp_path):
+    locale = tmp_path / "locale"
+    f = locale / "en-US" / "play.intent"
+    _write(f, "play {query}\n")
+    res = LocaleResources(str(locale))
+    assert res.find("play", ".intent", "en-US") == f
+
+
+def test_find_returns_none_when_resource_missing(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "play.intent", "play {query}\n")
+    res = LocaleResources(str(locale))
+    assert res.find("stop", ".intent", "en-US") is None
+
+
+def test_find_recurses_into_subdirectories(tmp_path):
+    """A resource may live in a nested category folder under <lang>/."""
+    locale = tmp_path / "locale"
+    f = locale / "en-US" / "media" / "play.intent"
+    _write(f, "play {query}\n")
+    res = LocaleResources(str(locale))
+    assert res.find("play", ".intent", "en-US") == f
+
+
+def test_find_resolves_lang_via_closest_match(tmp_path):
+    """A request for ``en`` matches an ``en-US/`` tree."""
+    pytest.importorskip("langcodes")
+    locale = tmp_path / "locale"
+    f = locale / "en-US" / "play.intent"
+    _write(f, "play {query}\n")
+    res = LocaleResources(str(locale))
+    assert res.find("play", ".intent", "en") == f
+
+
+def test_find_walks_override_precedence(tmp_path):
+    """user > skill > core: the first source carrying the file wins."""
+    core = tmp_path / "core"
+    skill = tmp_path / "skill"
+    user = tmp_path / "user"
+    _write(core / "en-US" / "play.intent", "core-version\n")
+    _write(skill / "en-US" / "play.intent", "skill-version\n")
+    _write(user / "en-US" / "play.intent", "user-version\n")
+    res = LocaleResources(str(skill),
+                          core_locale=str(core),
+                          user_locale=str(user))
+    assert res.find("play", ".intent", "en-US").parent == user / "en-US"
+
+
+def test_find_raises_on_duplicate_within_language_tree(tmp_path):
+    """OVOS-INTENT-2 §2: a (role, base name) must be unique per language tree."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "a" / "play.intent", "play one\n")
+    _write(locale / "en-US" / "b" / "play.intent", "play two\n")
+    res = LocaleResources(str(locale))
+    with pytest.raises(MalformedResource):
+        res.find("play", ".intent", "en-US")
