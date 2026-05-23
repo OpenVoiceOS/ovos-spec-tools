@@ -103,6 +103,31 @@ class TestSerialization:
         with pytest.raises(ValueError):
             m.serialize()
 
+    def test_serialize_calls_dot_serialize_on_nested_objects(self):
+        """Carrier objects (Session, nested Messages, …) exposing a
+        ``.serialize()`` method are converted before JSON encoding so
+        callers don't have to pre-dictify their context."""
+
+        class _Carrier:
+            def __init__(self, sid):
+                self.sid = sid
+
+            def serialize(self):
+                return {"session_id": self.sid, "lang": "en-US"}
+
+        m = Message("ovos.test", {}, {"session": _Carrier("s-42")})
+        parsed = json.loads(m.serialize())
+        assert parsed["context"]["session"] == {
+            "session_id": "s-42", "lang": "en-US"}
+
+    def test_serialize_walks_nested_lists_and_dicts(self):
+        class _C:
+            def serialize(self):
+                return "C-payload"
+        m = Message("ovos.test", {"items": [_C(), {"k": _C()}]})
+        parsed = json.loads(m.serialize())
+        assert parsed["data"]["items"] == ["C-payload", {"k": "C-payload"}]
+
     def test_serialize_data_can_be_empty(self):
         """§2.2: ``data`` MAY be empty (`{}`)."""
         parsed = json.loads(Message("ovos.test").serialize())

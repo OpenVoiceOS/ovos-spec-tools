@@ -92,18 +92,49 @@ class Message:
 
     # --- §6 serialization ---------------------------------------------------
 
+    @staticmethod
+    def _to_jsonable(value: Any) -> Any:
+        """Convert ``value`` to a JSON-friendly form.
+
+        Recursively walks containers and converts any object exposing a
+        ``.serialize()`` method (the duck-typed protocol used by OVOS
+        carrier objects like ``Session``) by calling it. Plain JSON
+        types pass through unchanged.
+
+        This keeps :class:`Message` an honest pure-envelope class — it
+        doesn't know about ``Session`` or any other carrier type — while
+        letting callers stuff such objects directly into ``data`` /
+        ``context`` and serialize the result.
+        """
+        # Direct .serialize() — Session, nested Message, etc.
+        ser = getattr(value, "serialize", None)
+        if callable(ser) and not isinstance(value, (dict, list, tuple)):
+            try:
+                value = ser()
+            except Exception:
+                pass
+        if isinstance(value, dict):
+            return {k: Message._to_jsonable(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [Message._to_jsonable(v) for v in value]
+        return value
+
     def serialize(self) -> str:
         """Render the Message as a single UTF-8 JSON object per §6.
 
         Object key order is not significant; ``NaN`` / ``Infinity`` are
-        forbidden (``allow_nan=False``). Subclasses may override to add
-        transport-layer concerns — encryption, framing, GUI-specific
-        serialization — which the spec explicitly leaves out (§7).
+        forbidden (``allow_nan=False``). Nested objects in ``data`` or
+        ``context`` that expose ``.serialize()`` (e.g. OVOS ``Session``
+        carriers) are converted via that method before serialization.
+
+        Subclasses may override to add transport-layer concerns —
+        encryption, framing, alternative encoders — which the spec
+        explicitly leaves out (§7).
         """
         return json.dumps(
             {"type": self.msg_type,
-             "data": self.data,
-             "context": self.context},
+             "data": self._to_jsonable(self.data),
+             "context": self._to_jsonable(self.context)},
             ensure_ascii=False, allow_nan=False)
 
     @classmethod
