@@ -156,32 +156,43 @@ def keyword_form(template_line: str,
     return options[0], options[1:]
 
 
-def normalize_for_match(text: str, ensure_ascii: bool = True) -> str:
-    """Lowercase, strip, and optionally fold accents and punctuation.
+def normalize_for_match(text: str, *,
+                        strip_diacritics: bool = True,
+                        strip_punct: bool = True) -> str:
+    """Lowercase, strip, and optionally fold diacritics / ASCII punctuation.
 
     Used as the comparison normalization for :func:`utterance_contains` and
-    :func:`strip_samples`. ``ensure_ascii=True`` (the default) removes
-    diacritics and ASCII punctuation, leaving alphanumerics and whitespace;
-    set to ``False`` to keep the input as-is apart from case and trimming.
-    Curly braces ``{`` and ``}`` are preserved so slot markers survive a
-    pre-render pass.
+    :func:`strip_samples`. The two folding steps are independent:
+
+    - ``strip_diacritics=True`` (default) decomposes combining marks (NFD)
+      and drops them — ``"olá"`` becomes ``"ola"``, ``"über"`` becomes
+      ``"uber"`` — so the comparison is accent-insensitive.
+    - ``strip_punct=True`` (default) removes ASCII punctuation. Curly
+      braces ``{`` and ``}`` are preserved so slot markers survive a
+      pre-render pass.
+
+    Set either flag to ``False`` for languages where the distinction is
+    semantic (e.g. French ``ou``/``où``).
     """
-    text = text.strip().lower()
-    if not ensure_ascii:
-        return text
-    import string
     import unicodedata
-    rm_chars = set(c for c in string.punctuation if c not in ("{", "}"))
-    decomposed = unicodedata.normalize("NFD", text)
-    return "".join(
-        c for c in decomposed
-        if not unicodedata.combining(c) and c not in rm_chars
-    )
+    text = text.strip().lower()
+    if strip_diacritics:
+        text = "".join(
+            c for c in unicodedata.normalize("NFD", text)
+            if not unicodedata.combining(c)
+        )
+    if strip_punct:
+        import string
+        rm_chars = set(c for c in string.punctuation if c not in ("{", "}"))
+        text = "".join(c for c in text if c not in rm_chars)
+    return text
 
 
 def utterance_contains(utterance: str, samples: Sequence[str],
+                       *,
                        exact: bool = False,
-                       ensure_ascii: bool = True) -> bool:
+                       strip_diacritics: bool = True,
+                       strip_punct: bool = True) -> bool:
     """True iff ``utterance`` matches any item in ``samples``.
 
     With ``exact=True`` the utterance must equal a sample after
@@ -189,21 +200,26 @@ def utterance_contains(utterance: str, samples: Sequence[str],
     when it appears in the utterance as a whole-word substring — so a
     sample ``yes`` matches ``"yes, please"`` but not ``"yesterday"``.
 
-    Normalization is applied to both sides via :func:`normalize_for_match`
-    so case, surrounding whitespace, and (by default) accents and ASCII
-    punctuation do not affect the comparison.
+    Both sides are normalized via :func:`normalize_for_match`. The
+    ``strip_diacritics`` and ``strip_punct`` flags are independent —
+    forward each one as required by the target language.
 
     An empty utterance or empty sample set returns ``False``.
     """
     if not utterance or not samples:
         return False
-    utt = normalize_for_match(utterance, ensure_ascii)
-    norm_samples = [normalize_for_match(s, ensure_ascii) for s in samples]
+    norm = lambda s: normalize_for_match(
+        s, strip_diacritics=strip_diacritics, strip_punct=strip_punct)
+    utt = norm(utterance)
+    norm_samples = [norm(s) for s in samples]
     if exact:
         return any(s and s == utt for s in norm_samples)
     import re
+    # `(?<!\w)...(?!\w)` is whole-word like `\b...\b` but also matches
+    # samples that begin or end in non-word characters (e.g. ``c++``).
     return any(
-        s and re.search(r"\b" + re.escape(s) + r"\b", utt) is not None
+        s and re.search(
+            r"(?<!\w)" + re.escape(s) + r"(?!\w)", utt) is not None
         for s in norm_samples
     )
 
@@ -218,9 +234,13 @@ def strip_samples(utterance: str, samples: Sequence[str]) -> str:
     is otherwise returned with original casing and punctuation.
     """
     import re
-    for s in sorted({s for s in samples if s}, key=len, reverse=True):
+    for s in sorted({s for s in samples if s and s.strip()},
+                    key=len, reverse=True):
+        # `(?<!\w)...(?!\w)` rather than `\b...\b` so samples ending in
+        # non-word characters (``c++``, ``yes!``) still strip cleanly.
         utterance = re.sub(
-            r"\b" + re.escape(s) + r"\b", "", utterance, flags=re.IGNORECASE)
+            r"(?<!\w)" + re.escape(s) + r"(?!\w)",
+            "", utterance, flags=re.IGNORECASE)
     return utterance
 
 

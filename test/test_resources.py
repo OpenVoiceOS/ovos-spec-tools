@@ -420,10 +420,39 @@ def test_utterance_contains_folds_accents_and_punct_by_default():
     assert utterance_contains("Olá!", ["ola"])
 
 
-def test_utterance_contains_keeps_accents_when_ensure_ascii_false():
+def test_utterance_contains_keeps_diacritics_when_disabled():
     from ovos_spec_tools import utterance_contains
-    assert utterance_contains("ola", ["olá"], ensure_ascii=False) is False
-    assert utterance_contains("olá", ["olá"], ensure_ascii=False)
+    assert utterance_contains("ola", ["olá"], strip_diacritics=False) is False
+    assert utterance_contains("olá", ["olá"], strip_diacritics=False)
+
+
+def test_utterance_contains_keeps_punct_when_disabled():
+    """Punctuation stays significant when strip_punct=False."""
+    from ovos_spec_tools import utterance_contains
+    assert utterance_contains("i love c++", ["c++"], strip_punct=False)
+    assert utterance_contains(
+        "i love c plus plus", ["c++"], strip_punct=False) is False
+
+
+def test_utterance_contains_punct_and_diacritics_flags_compose():
+    """The two flags are independent — any combination is valid."""
+    from ovos_spec_tools import utterance_contains
+    # both stripped (default) — matches across accents and punctuation
+    assert utterance_contains("olá!", ["ola"])
+    # diacritics stripped, punctuation kept — `!` becomes a word boundary
+    assert utterance_contains(
+        "olá!", ["ola"], strip_diacritics=True, strip_punct=False)
+    # punct stripped, diacritics kept — `olá!` → `olá`; sample `ola` misses
+    assert utterance_contains(
+        "olá!", ["ola"], strip_diacritics=False, strip_punct=True) is False
+
+
+def test_utterance_contains_exact_mode_normalizes_both_sides():
+    """Exact comparison still applies the configured normalization."""
+    from ovos_spec_tools import utterance_contains
+    assert utterance_contains("  Olá!  ", ["ola"], exact=True)
+    assert utterance_contains(
+        "  Olá!  ", ["ola"], exact=True, strip_diacritics=False) is False
 
 
 def test_utterance_contains_empty_inputs_return_false():
@@ -459,3 +488,172 @@ def test_strip_samples_case_insensitive():
 def test_strip_samples_no_match_returns_input_unchanged():
     from ovos_spec_tools import strip_samples
     assert strip_samples("no match here", ["xyzzy"]) == "no match here"
+
+
+# --- normalize_for_match -----------------------------------------------------
+
+def test_normalize_for_match_lowercases_and_trims():
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("  YES  ") == "yes"
+
+
+def test_normalize_for_match_strips_diacritics_by_default():
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("Olá") == "ola"
+    assert normalize_for_match("über") == "uber"
+
+
+def test_normalize_for_match_strips_punct_by_default():
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("yes, please!") == "yes please"
+
+
+def test_normalize_for_match_preserves_slot_markers():
+    """``{`` and ``}`` survive punctuation stripping so pre-render-pass
+    slot markers stay intact."""
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("play {song}") == "play {song}"
+
+
+def test_normalize_for_match_keeps_punct_when_disabled():
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("yes, please!", strip_punct=False) == "yes, please!"
+
+
+def test_normalize_for_match_keeps_diacritics_when_disabled():
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("Olá", strip_diacritics=False) == "olá"
+
+
+def test_normalize_for_match_both_flags_off_only_lowercases_and_trims():
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match(
+        "  Olá, World!  ",
+        strip_diacritics=False, strip_punct=False) == "olá, world!"
+
+
+def test_normalize_for_match_empty_string():
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("") == ""
+    assert normalize_for_match("   ") == ""
+
+
+def test_normalize_for_match_is_keyword_only_for_flags():
+    """The two flags are keyword-only — positional misuse can't silently
+    flip the wrong knob."""
+    from ovos_spec_tools import normalize_for_match
+    import pytest as _pytest
+    with _pytest.raises(TypeError):
+        normalize_for_match("hi", False)  # would have to be keyword
+
+
+# --- strip_samples extra coverage --------------------------------------------
+
+def test_strip_samples_empty_samples_returns_input_unchanged():
+    from ovos_spec_tools import strip_samples
+    assert strip_samples("hello world", []) == "hello world"
+
+
+def test_strip_samples_ignores_blank_samples():
+    """A blank or whitespace-only sample is dropped silently."""
+    from ovos_spec_tools import strip_samples
+    assert strip_samples("hello world", ["", "  ", "world"]).strip() == "hello"
+
+
+def test_strip_samples_escapes_regex_metacharacters_in_samples():
+    """A sample like ``c++`` must not be treated as a regex pattern."""
+    from ovos_spec_tools import strip_samples
+    out = strip_samples("i love c++ programming", ["c++"])
+    assert "c++" not in out
+
+
+def test_strip_samples_preserves_casing_of_remaining_text():
+    from ovos_spec_tools import strip_samples
+    out = strip_samples("Yes Please", ["yes"])
+    assert "Please" in out  # capital P preserved
+    assert "Yes" not in out.split()
+
+
+# --- vocabulary_keywords / entity_keywords extra coverage --------------------
+
+def test_vocabulary_keywords_walks_override_precedence(tmp_path):
+    """A user-locale .voc overrides the same-name skill-locale one."""
+    skill = tmp_path / "skill"
+    user = tmp_path / "user"
+    _write(skill / "en-US" / "color.voc", "(red|crimson)\n")
+    _write(user / "en-US" / "color.voc", "(blue|azure)\n")
+    res = LocaleResources(str(skill), user_locale=str(user))
+    triples = sorted(res.vocabulary_keywords("en-US"))
+    # both files contribute — user overrides core, but both are reachable
+    # because each source is walked for its own .voc files
+    names = {entity for _, entity, _ in triples}
+    assert "azure" in names
+
+
+def test_vocabulary_keywords_handles_missing_locale_gracefully(tmp_path):
+    """A skill that ships no .voc files yields nothing — no exception."""
+    locale = tmp_path / "locale"
+    (locale / "en-US").mkdir(parents=True)
+    res = LocaleResources(str(locale))
+    assert list(res.vocabulary_keywords("en-US")) == []
+
+
+def test_vocabulary_keywords_resolves_voc_references_in_template(tmp_path):
+    """A ``<other>`` reference in one .voc is resolved against the lang's
+    full vocab map at expansion time."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.voc", "hi\nhello\n")
+    _write(locale / "en-US" / "greet_friend.voc", "<greet> friend\n")
+    res = LocaleResources(str(locale))
+    triples = sorted(res.vocabulary_keywords("en-US"))
+    # the greet_friend.voc line expands its <greet> reference
+    friend_triples = [t for t in triples if t[0] == "greet_friend"]
+    assert friend_triples == [("greet_friend", "hello friend", ["hi friend"])]
+
+
+def test_vocabulary_keywords_skips_malformed_lines(tmp_path):
+    """A malformed template inside a .voc yields no keyword for that line
+    rather than raising — well-formed neighbours still register."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "things.voc",
+           "(hi|hello)\n(broken\nfine\n")
+    res = LocaleResources(str(locale))
+    entities = {e for _, e, _ in res.vocabulary_keywords("en-US")}
+    assert "fine" in entities  # well-formed line survived
+    # ``(broken`` does not yield (entity, [])
+    assert "(broken" not in entities
+
+
+# --- keyword_form extra coverage ---------------------------------------------
+
+def test_keyword_form_blank_line_returns_empty_pair():
+    from ovos_spec_tools import keyword_form
+    assert keyword_form("   \n  ") == ("", [])
+
+
+def test_keyword_form_malformed_template_returns_empty_pair():
+    """A line that expansion rejects yields ('', []) — never propagates."""
+    from ovos_spec_tools import keyword_form
+    assert keyword_form("(unclosed") == ("", [])
+
+
+def test_keyword_form_single_alternative_yields_no_aliases():
+    """A line without alternatives has the line itself as the entity."""
+    from ovos_spec_tools import keyword_form
+    assert keyword_form("hello") == ("hello", [])
+
+
+def test_vocabulary_keywords_returns_empty_when_language_has_no_dir(tmp_path):
+    """Asking for a language with no directory yields nothing (no exception)
+    — covers the `lang_dir is None: continue` branch in _keywords_for."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    res = LocaleResources(str(locale), max_language_distance=0)
+    assert list(res.vocabulary_keywords("ja-JP")) == []
+    assert list(res.entity_keywords("ja-JP")) == []
+
+
+def test_strip_samples_handles_unicode_samples():
+    """Unicode samples that need escaping in regex still strip cleanly."""
+    from ovos_spec_tools import strip_samples
+    assert "olá" not in strip_samples("ola olá", ["olá"]).split()
