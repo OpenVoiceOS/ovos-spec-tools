@@ -191,10 +191,24 @@ class LocaleResources:
         match = self._lang_resolver(lang, names, self.max_language_distance)
         return (source / match) if match is not None else None
 
-    def _locate(self, base_name: str, extension: str,
-                lang: str) -> Optional[Path]:
-        """Find a resource file by ``(base name, extension)`` in ``lang``
-        through the precedence chain. Returns the first match, or ``None``."""
+    def find(self, base_name: str, extension: str,
+             lang: str) -> Optional[Path]:
+        """Locate a resource file by ``(base name, extension)`` in ``lang``.
+
+        Walks the override precedence (§2.1) — user, then skill, then core —
+        and inside each source's ``<lang>/`` directory descends recursively
+        looking for ``<base_name><extension>``. The first match wins.
+
+        ``lang`` is resolved against each source's available subdirectories
+        via the language resolver, so a request for ``en`` matches an
+        ``en-US/`` tree (and vice versa) within the configured distance.
+
+        Raises :class:`MalformedResource` if more than one file with the
+        same ``(role, base name)`` exists within one language tree —
+        OVOS-INTENT-2 §2 requires uniqueness.
+
+        Returns the resolved path, or ``None`` if no source has it.
+        """
         filename = base_name + extension
         for source in self._sources:
             lang_dir = self._lang_dir(source, lang)
@@ -239,7 +253,7 @@ class LocaleResources:
     def _load_expanded(self, base_name: str, extension: str,
                        lang: str) -> List[str]:
         """Load a resource and expand it to its sample set."""
-        path = self._locate(base_name, extension, lang)
+        path = self.find(base_name, extension, lang)
         if path is None:
             raise FileNotFoundError(
                 f"no {extension} resource named {base_name!r} for "
@@ -285,7 +299,7 @@ class LocaleResources:
         expansion happens per render, on the one phrase chosen (§4.2). The
         phrase strings are returned verbatim, for a dialog renderer to consume.
         """
-        path = self._locate(base_name, ".dialog", lang)
+        path = self.find(base_name, ".dialog", lang)
         if path is None:
             raise FileNotFoundError(
                 f"no .dialog resource named {base_name!r} for "
@@ -308,7 +322,7 @@ class LocaleResources:
             FileNotFoundError: no such ``.prompt`` for ``lang``.
             MalformedResource: the file is empty or only whitespace (§5).
         """
-        path = self._locate(base_name, PROMPT_ROLE, lang)
+        path = self.find(base_name, PROMPT_ROLE, lang)
         if path is None:
             raise FileNotFoundError(
                 f"no .prompt resource named {base_name!r} for "
