@@ -18,6 +18,7 @@ depend on.
 | Dialog renderer | OVOS-INTENT-2 §4.2 |  `dialog.py`  |
 | Prompt renderer | OVOS-INTENT-2 §4.4 |  `prompt.py`  |
 | Language-tag matching | OVOS-INTENT-2 §2.2 |  `language.py` |
+| Bus message envelope | OVOS-MSG-1 |  `message.py`  |
 | `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 |  `lint.py`  |
 
 ## Install
@@ -27,13 +28,13 @@ pip install ovos-spec-tools            # core — no dependencies
 pip install ovos-spec-tools[langcodes] # adds the smart language fallback
 ```
 
-Requires Python 3.8+.
+Requires Python 3.10+.
 
 ## Quick taste
 
 ```python
 from ovos_spec_tools import (expand, LocaleResources, render, render_prompt,
-                             closest_lang)
+                             closest_lang, Message)
 
 expand("(turn|switch) [the] light")          # all 4 sentences it denotes
 res = LocaleResources("my-skill/locale")
@@ -43,6 +44,11 @@ render(res.load_dialog("weather", "en-US"),  # a spoken response
 render_prompt(res.load_prompt("system", "en-US"),  # a language-model prompt
               slots={"query": "what time is it"})
 closest_lang("en-AU", ["pt-BR", "en-US"])    # 'en-US'
+
+# OVOS-MSG-1 envelope: a bus message and its 'send back to the asker' reply
+m = Message("ovos.intent.list", {}, {"source": "skill.id"})
+res = m.response({"intents": ["..."]})       # 'ovos.intent.list.response'
+res.serialize()                              # single UTF-8 JSON object
 ```
 
 ```bash
@@ -63,7 +69,9 @@ A zero-to-hero guide lives in [`docs/`](docs/README.md):
    rendering language-model prompts.
 5. [Language matching](docs/language-matching.md) — tag standardization,
    distance, and closest-match resolution.
-6. [Linting](docs/linting.md) — validating a locale folder, on the CLI or in CI.
+6. [Bus messages](docs/message.md) — the on-the-wire envelope, the
+   `forward` / `reply` / `response` derivations, and the session carrier.
+7. [Linting](docs/linting.md) — validating a locale folder, on the CLI or in CI.
 7. [API reference](docs/api-reference.md) — every public name, in brief.
 
 Runnable example scripts are in [`examples/`](examples/README.md).
