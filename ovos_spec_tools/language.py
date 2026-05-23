@@ -21,6 +21,7 @@ from typing import Optional, Sequence
 __all__ = [
     "standardize_lang",
     "lang_distance",
+    "lang_matches",
     "closest_lang",
     "DEFAULT_MAX_LANGUAGE_DISTANCE",
 ]
@@ -125,6 +126,22 @@ def lang_distance(desired: str, supported: str) -> int:
         return 0
     distance = _langcodes_distance(a, b)
     return distance if distance is not None else _coarse_distance(a, b)
+
+
+def lang_matches(a: str, b: str,
+                 max_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE) -> bool:
+    """Return ``True`` when two BCP-47 tags are close enough to interchange.
+
+    Convenience wrapper around :func:`lang_distance` for the common
+    ``if score < threshold`` check that cross-component boundaries (intent
+    engines, TTS/STT plugin routing, locale lookup) reimplement by hand. The
+    default threshold matches :data:`DEFAULT_MAX_LANGUAGE_DISTANCE` — an exact
+    match always matches; pass ``max_distance=0`` to require an exact match.
+    """
+    distance = lang_distance(a, b)
+    if distance == 0:
+        return True
+    return max_distance > 0 and distance < max_distance
 
 
 def closest_lang(target: str, available: Sequence[str],

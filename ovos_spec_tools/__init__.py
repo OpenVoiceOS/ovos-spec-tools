@@ -23,6 +23,7 @@ from ovos_spec_tools.expansion import MalformedTemplate, expand
 from ovos_spec_tools.language import (
     closest_lang,
     lang_distance,
+    lang_matches,
     standardize_lang,
 )
 from ovos_spec_tools.lint import Finding, lint_locale
@@ -30,6 +31,7 @@ from ovos_spec_tools.prompt import PromptRenderer, render_prompt
 from ovos_spec_tools.resources import (
     LocaleResources,
     MalformedResource,
+    iter_locale_dirs,
     read_prompt_file,
     read_resource_file,
 )
@@ -40,6 +42,7 @@ __all__ = [
     "MalformedTemplate",
     "LocaleResources",
     "MalformedResource",
+    "iter_locale_dirs",
     "read_resource_file",
     "read_prompt_file",
     "render",
@@ -49,6 +52,7 @@ __all__ = [
     "PromptRenderer",
     "standardize_lang",
     "lang_distance",
+    "lang_matches",
     "closest_lang",
     "lint_locale",
     "Finding",
