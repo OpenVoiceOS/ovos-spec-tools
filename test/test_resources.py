@@ -657,3 +657,74 @@ def test_strip_samples_handles_unicode_samples():
     """Unicode samples that need escaping in regex still strip cleanly."""
     from ovos_spec_tools import strip_samples
     assert "olá" not in strip_samples("ola olá", ["olá"]).split()
+
+
+# --- LocaleResources.voc_match / .remove_voc ---------------------------------
+
+def test_voc_match_whole_word_default(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "(yes|yeah|yep)\n")
+    res = LocaleResources(str(locale))
+    assert res.voc_match("yes, please", "yes", "en-US")
+    assert res.voc_match("yeah whatever", "yes", "en-US")
+    assert res.voc_match("yesterday", "yes", "en-US") is False
+
+
+def test_voc_match_exact_mode(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "yes\n")
+    res = LocaleResources(str(locale))
+    assert res.voc_match("Yes", "yes", "en-US", exact=True)
+    assert res.voc_match("yes please", "yes", "en-US", exact=True) is False
+
+
+def test_voc_match_missing_resource_returns_false(tmp_path):
+    locale = tmp_path / "locale"
+    (locale / "en-US").mkdir(parents=True)
+    res = LocaleResources(str(locale))
+    assert res.voc_match("anything", "nope", "en-US") is False
+
+
+def test_voc_match_forwards_normalization_flags(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.voc", "ola\n")
+    res = LocaleResources(str(locale))
+    # default: diacritics stripped, "Olá" matches
+    assert res.voc_match("Olá", "greet", "en-US")
+    # with strip_diacritics=False, distinct
+    assert res.voc_match("Olá", "greet", "en-US",
+                         strip_diacritics=False) is False
+
+
+def test_remove_voc_strips_voc_phrases(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "fillers.voc", "(please|kindly)\n")
+    res = LocaleResources(str(locale))
+    out = res.remove_voc("please set volume to ten kindly", "fillers", "en-US")
+    assert "please" not in out.split()
+    assert "kindly" not in out.split()
+    assert "volume" in out.split()
+
+
+def test_remove_voc_missing_resource_returns_input_unchanged(tmp_path):
+    locale = tmp_path / "locale"
+    (locale / "en-US").mkdir(parents=True)
+    res = LocaleResources(str(locale))
+    assert res.remove_voc("hello world", "nope", "en-US") == "hello world"
+
+
+def test_remove_voc_empty_utterance_returns_empty(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    res = LocaleResources(str(locale))
+    assert res.remove_voc("", "x", "en-US") == ""
+
+
+def test_voc_match_and_remove_voc_resolve_smart_lang_fallback(tmp_path):
+    """en-AU falls back to en-US for both methods."""
+    pytest.importorskip("langcodes")
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "yes\n")
+    res = LocaleResources(str(locale))
+    assert res.voc_match("yes please", "yes", "en-AU")
+    assert "yes" not in res.remove_voc("yes please", "yes", "en-AU").split()
