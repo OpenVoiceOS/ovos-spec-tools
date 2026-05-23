@@ -18,6 +18,10 @@ formal specifications describe:
   distance, match checking, and closest-match resolution;
 - :func:`~ovos_spec_tools.resources.iter_locale_dirs` — locale subdirectory
   discovery with optional native-language filtering;
+- :func:`~ovos_spec_tools.resources.keyword_form`,
+  :func:`~ovos_spec_tools.resources.utterance_contains`,
+  :func:`~ovos_spec_tools.resources.strip_samples` — slot-free template
+  grouping (§4.3) and utterance match / strip primitives;
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
@@ -35,8 +39,12 @@ from ovos_spec_tools.resources import (
     LocaleResources,
     MalformedResource,
     iter_locale_dirs,
+    keyword_form,
+    normalize_for_match,
     read_prompt_file,
     read_resource_file,
+    strip_samples,
+    utterance_contains,
 )
 from ovos_spec_tools.version import __version__
 
@@ -46,8 +54,12 @@ __all__ = [
     "LocaleResources",
     "MalformedResource",
     "iter_locale_dirs",
+    "keyword_form",
+    "normalize_for_match",
     "read_resource_file",
     "read_prompt_file",
+    "strip_samples",
+    "utterance_contains",
     "render",
     "DialogRenderer",
     "UnfilledSlot",

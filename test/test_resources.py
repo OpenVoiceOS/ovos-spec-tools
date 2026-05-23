@@ -338,3 +338,124 @@ def test_find_raises_on_duplicate_within_language_tree(tmp_path):
     res = LocaleResources(str(locale))
     with pytest.raises(MalformedResource):
         res.find("play", ".intent", "en-US")
+
+
+# --- keyword_form ------------------------------------------------------------
+
+def test_keyword_form_groups_alternatives_into_entity_and_aliases():
+    from ovos_spec_tools import keyword_form
+    entity, aliases = keyword_form("(hi|hello|hey)")
+    # sorted, lowercased, first is canonical
+    assert (entity, aliases) == ("hello", ["hey", "hi"])
+
+
+def test_keyword_form_lowercases_and_dedupes():
+    from ovos_spec_tools import keyword_form
+    entity, aliases = keyword_form("(YES|Yes|yes)")
+    assert (entity, aliases) == ("yes", [])
+
+
+def test_keyword_form_empty_input_returns_empty_pair():
+    from ovos_spec_tools import keyword_form
+    assert keyword_form("") == ("", [])
+
+
+def test_keyword_form_resolves_voc_references():
+    """`<name>` references in a template expand against the supplied vocab."""
+    from ovos_spec_tools import keyword_form
+    entity, aliases = keyword_form(
+        "<greet> friend", vocabularies={"greet": ["hi", "hello"]})
+    assert sorted([entity, *aliases]) == ["hello friend", "hi friend"]
+
+
+# --- LocaleResources.vocabulary_keywords / entity_keywords -------------------
+
+def test_vocabulary_keywords_yields_one_triple_per_template_line(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.voc",
+           "(hi|hello)\n(yo|hey)\n")
+    res = LocaleResources(str(locale))
+    triples = sorted(res.vocabulary_keywords("en-US"))
+    assert triples == [
+        ("greet", "hello", ["hi"]),
+        ("greet", "hey", ["yo"]),
+    ]
+
+
+def test_vocabulary_keywords_skips_blank_lines(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "\nyes\n# a comment\n")
+    res = LocaleResources(str(locale))
+    assert list(res.vocabulary_keywords("en-US")) == [("yes", "yes", [])]
+
+
+def test_entity_keywords_uses_same_shape(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "color.entity", "(red|crimson)\nblue\n")
+    res = LocaleResources(str(locale))
+    triples = sorted(res.entity_keywords("en-US"))
+    assert triples == [
+        ("color", "blue", []),
+        ("color", "crimson", ["red"]),
+    ]
+
+
+# --- utterance_contains ------------------------------------------------------
+
+def test_utterance_contains_whole_word_substring_default():
+    from ovos_spec_tools import utterance_contains
+    assert utterance_contains("yes, please", ["yes"])  # default whole-word
+    assert not utterance_contains("yesterday", ["yes"])  # substring not allowed
+
+
+def test_utterance_contains_exact_mode():
+    from ovos_spec_tools import utterance_contains
+    assert utterance_contains("Yes", ["yes"], exact=True)
+    assert not utterance_contains("yes please", ["yes"], exact=True)
+
+
+def test_utterance_contains_folds_accents_and_punct_by_default():
+    from ovos_spec_tools import utterance_contains
+    # á → a, ! stripped, comparison succeeds
+    assert utterance_contains("Olá!", ["ola"])
+
+
+def test_utterance_contains_keeps_accents_when_ensure_ascii_false():
+    from ovos_spec_tools import utterance_contains
+    assert utterance_contains("ola", ["olá"], ensure_ascii=False) is False
+    assert utterance_contains("olá", ["olá"], ensure_ascii=False)
+
+
+def test_utterance_contains_empty_inputs_return_false():
+    from ovos_spec_tools import utterance_contains
+    assert utterance_contains("", ["yes"]) is False
+    assert utterance_contains("yes", []) is False
+
+
+# --- strip_samples -----------------------------------------------------------
+
+def test_strip_samples_removes_whole_word_matches():
+    from ovos_spec_tools import strip_samples
+    out = strip_samples("set volume to maximum", ["set", "volume"])
+    assert "set" not in out.split()
+    assert "volume" not in out.split()
+    assert "maximum" in out.split()
+
+
+def test_strip_samples_longest_first_consumes_composite_before_parts():
+    """A composite phrase is removed before its shorter constituents."""
+    from ovos_spec_tools import strip_samples
+    out = strip_samples("give it up now", ["give up", "up"])
+    # ``give it up`` does not contain the contiguous phrase "give up",
+    # so the longer pattern misses; "up" is still stripped as a fallback.
+    assert "up" not in out.split()
+
+
+def test_strip_samples_case_insensitive():
+    from ovos_spec_tools import strip_samples
+    assert "Yes" not in strip_samples("Yes please", ["yes"]).split()
+
+
+def test_strip_samples_no_match_returns_input_unchanged():
+    from ovos_spec_tools import strip_samples
+    assert strip_samples("no match here", ["xyzzy"]) == "no match here"

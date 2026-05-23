@@ -23,7 +23,7 @@ serves every language the skill ships.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
 from ovos_spec_tools.expansion import expand
 from ovos_spec_tools.language import (
@@ -36,8 +36,12 @@ __all__ = [
     "LocaleResources",
     "MalformedResource",
     "iter_locale_dirs",
+    "keyword_form",
+    "normalize_for_match",
     "read_resource_file",
     "read_prompt_file",
+    "strip_samples",
+    "utterance_contains",
     "SLOT_BEARING_ROLES",
     "SLOT_FREE_ROLES",
     "PROMPT_ROLE",
@@ -120,6 +124,104 @@ def iter_locale_dirs(root: Path,
                             max_distance=max_distance) is None:
                 continue
         yield lang_norm, entry
+
+
+def keyword_form(template_line: str,
+                 vocabularies: Optional[Dict[str, List[str]]] = None
+                 ) -> Tuple[str, List[str]]:
+    """Split one slot-free template line into ``(entity, aliases)``.
+
+    The line is expanded via :func:`expand` (with ``vocabularies`` available
+    for ``<name>`` references), lowercased, deduplicated and sorted. The
+    first item is the canonical **entity**; the rest are **aliases** that
+    canonicalize to it.
+
+    A ``.voc`` line like ``(hi|hello|hey)`` becomes one keyword whose entity
+    value is ``"hi"`` and whose aliases are ``["hello", "hey"]`` — any
+    consumer that distinguishes a canonical form from synonyms can use this
+    grouping directly (OVOS-INTENT-2 §4.3).
+
+    An empty or whitespace-only line yields ``("", [])``.
+    """
+    if not template_line.strip():
+        return "", []
+    try:
+        samples = expand(template_line, vocabularies)
+    except Exception:
+        # A malformed line yields no keyword rather than poisoning the batch.
+        return "", []
+    options = sorted({s.lower() for s in samples})
+    if not options:
+        return "", []
+    return options[0], options[1:]
+
+
+def normalize_for_match(text: str, ensure_ascii: bool = True) -> str:
+    """Lowercase, strip, and optionally fold accents and punctuation.
+
+    Used as the comparison normalization for :func:`utterance_contains` and
+    :func:`strip_samples`. ``ensure_ascii=True`` (the default) removes
+    diacritics and ASCII punctuation, leaving alphanumerics and whitespace;
+    set to ``False`` to keep the input as-is apart from case and trimming.
+    Curly braces ``{`` and ``}`` are preserved so slot markers survive a
+    pre-render pass.
+    """
+    text = text.strip().lower()
+    if not ensure_ascii:
+        return text
+    import string
+    import unicodedata
+    rm_chars = set(c for c in string.punctuation if c not in ("{", "}"))
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(
+        c for c in decomposed
+        if not unicodedata.combining(c) and c not in rm_chars
+    )
+
+
+def utterance_contains(utterance: str, samples: Sequence[str],
+                       exact: bool = False,
+                       ensure_ascii: bool = True) -> bool:
+    """True iff ``utterance`` matches any item in ``samples``.
+
+    With ``exact=True`` the utterance must equal a sample after
+    normalization. With ``exact=False`` (the default) a sample is found
+    when it appears in the utterance as a whole-word substring — so a
+    sample ``yes`` matches ``"yes, please"`` but not ``"yesterday"``.
+
+    Normalization is applied to both sides via :func:`normalize_for_match`
+    so case, surrounding whitespace, and (by default) accents and ASCII
+    punctuation do not affect the comparison.
+
+    An empty utterance or empty sample set returns ``False``.
+    """
+    if not utterance or not samples:
+        return False
+    utt = normalize_for_match(utterance, ensure_ascii)
+    norm_samples = [normalize_for_match(s, ensure_ascii) for s in samples]
+    if exact:
+        return any(s and s == utt for s in norm_samples)
+    import re
+    return any(
+        s and re.search(r"\b" + re.escape(s) + r"\b", utt) is not None
+        for s in norm_samples
+    )
+
+
+def strip_samples(utterance: str, samples: Sequence[str]) -> str:
+    """Return ``utterance`` with every whole-word occurrence of any sample
+    removed.
+
+    Samples are stripped longest first so that a composite match is
+    consumed before any of its shorter constituents (``"give up"`` before
+    ``"up"``). The match is whole-word and case-insensitive; the utterance
+    is otherwise returned with original casing and punctuation.
+    """
+    import re
+    for s in sorted({s for s in samples if s}, key=len, reverse=True):
+        utterance = re.sub(
+            r"\b" + re.escape(s) + r"\b", "", utterance, flags=re.IGNORECASE)
+    return utterance
 
 
 def read_prompt_file(path: Path) -> str:
@@ -249,6 +351,46 @@ class LocaleResources:
                 if path.is_file():
                     names.add(path.stem)
         return {name: self.load_entity(name, lang) for name in sorted(names)}
+
+    def _keywords_for(self, extension: str, lang: str
+                      ) -> Iterator[Tuple[str, str, List[str]]]:
+        """Walk every slot-free resource of one role and group expansions
+        line-by-line. Yields ``(resource_name, entity, aliases)`` triples
+        — one yield per non-empty template line, with the OVOS-INTENT-2
+        §4.3 ``(entity, aliases)`` convention applied via
+        :func:`keyword_form`."""
+        vocabularies = self.vocabularies(lang)
+        for source in self._sources:
+            lang_dir = self._lang_dir(source, lang)
+            if lang_dir is None:
+                continue
+            for path in sorted(lang_dir.rglob(f"*{extension}")):
+                if not path.is_file():
+                    continue
+                for template in read_resource_file(path):
+                    entity, aliases = keyword_form(template, vocabularies)
+                    if entity:
+                        yield path.stem, entity, aliases
+
+    def vocabulary_keywords(self, lang: str
+                            ) -> Iterator[Tuple[str, str, List[str]]]:
+        """Yield ``(voc_name, entity, aliases)`` for every line of every
+        ``.voc`` reachable for ``lang``.
+
+        One yield per template line: the line's expansion is split into a
+        canonical entity (first sorted alternative) and its aliases via
+        :func:`keyword_form`. Suits any consumer that registers keyword
+        sets with a primary/alias distinction (OVOS-INTENT-2 §4.3).
+        """
+        return self._keywords_for(".voc", lang)
+
+    def entity_keywords(self, lang: str
+                        ) -> Iterator[Tuple[str, str, List[str]]]:
+        """Yield ``(entity_name, entity, aliases)`` for every line of every
+        ``.entity`` reachable for ``lang``. Same shape as
+        :meth:`vocabulary_keywords`; ``.entity`` and ``.voc`` share the
+        slot-free template format (§4.3)."""
+        return self._keywords_for(".entity", lang)
 
     def _load_expanded(self, base_name: str, extension: str,
                        lang: str) -> List[str]:
