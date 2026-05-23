@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.3.0a1) (2026-05-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.2.0a1...0.3.0a1)
+
+**Merged pull requests:**
+
+- feat: keyword\_form / vocabulary\_keywords + utterance\_contains / strip\_samples [\#8](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/8) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.2.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.2.0a1) (2026-05-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.1.0a1...0.2.0a1)
