@@ -8,3 +8,10 @@ on:
 jobs:
   license_check:
     uses: OpenVoiceOS/gh-automations/.github/workflows/license-check.yml@dev
+    with:
+      # pilosus/action-pip-license-checker queries PyPI metadata for each
+      # installed package. The PyPI release of ovos-spec-tools predates the
+      # SPDX License classifier in pyproject.toml, so it audits itself as
+      # "Error" (unknown). Exclude the package from its own audit until the
+      # next alpha republishes with the corrected metadata.
+      exclude_packages: "^ovos-spec-tools$"
