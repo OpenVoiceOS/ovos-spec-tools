@@ -412,6 +412,60 @@ class LocaleResources:
         slot-free template format (§4.3)."""
         return self._keywords_for(".entity", lang)
 
+    def voc_list(self, base_name: str, lang: str) -> List[str]:
+        """Load a ``.voc`` as its flat sample list — the same content
+        :meth:`load_vocabulary` returns, named consistently with
+        :meth:`voc_match` and :meth:`remove_voc` for callers that want
+        to inspect or cache the phrase set independently.
+
+        Returns ``[]`` when the resource does not exist for the language.
+        """
+        try:
+            return self.load_vocabulary(base_name, lang)
+        except FileNotFoundError:
+            return []
+
+    def voc_match(self, utterance: str, base_name: str, lang: str, *,
+                  exact: bool = False,
+                  strip_diacritics: bool = True,
+                  strip_punct: bool = True) -> bool:
+        """Convenience: load a ``.voc`` for ``lang`` and check whether
+        ``utterance`` matches any of its samples.
+
+        Equivalent to ``utterance_contains(utterance,
+        self.load_vocabulary(base_name, lang), ...)`` with the same flag
+        semantics, including the ``(?<!\\w)...(?!\\w)`` whole-word anchor
+        (so a sample ``yes`` matches ``"yes, please"`` but not
+        ``"yesterday"``). Returns ``False`` when the resource does not
+        exist for the language.
+        """
+        try:
+            samples = self.load_vocabulary(base_name, lang)
+        except FileNotFoundError:
+            return False
+        return utterance_contains(
+            utterance, samples, exact=exact,
+            strip_diacritics=strip_diacritics, strip_punct=strip_punct)
+
+    def remove_voc(self, utterance: str, base_name: str,
+                   lang: str) -> str:
+        """Convenience: load a ``.voc`` for ``lang`` and strip every
+        whole-word occurrence of any sample from ``utterance``.
+
+        Equivalent to ``strip_samples(utterance,
+        self.load_vocabulary(base_name, lang))``; samples are stripped
+        longest-first so a composite phrase consumes its parts before
+        any shorter fallback. Returns ``utterance`` unchanged if the
+        resource does not exist for the language.
+        """
+        if not utterance:
+            return utterance
+        try:
+            samples = self.load_vocabulary(base_name, lang)
+        except FileNotFoundError:
+            return utterance
+        return strip_samples(utterance, samples)
+
     def _load_expanded(self, base_name: str, extension: str,
                        lang: str) -> List[str]:
         """Load a resource and expand it to its sample set."""
