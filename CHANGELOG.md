@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.2.0a1) (2026-05-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.1.0a1...0.2.0a1)
+
+**Merged pull requests:**
+
+- feat: LocaleResources.find — public resource lookup by \(name, ext, lang\) [\#6](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/6) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.1.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.1.0a1) (2026-05-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.0.1a2...0.1.0a1)
