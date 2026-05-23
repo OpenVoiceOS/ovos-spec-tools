@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.1.0a1) (2026-05-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.0.1a2...0.1.0a1)
+
+**Merged pull requests:**
+
+- feat: lang\_matches and iter\_locale\_dirs — pin the cross-component lang policy [\#4](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/4) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.0.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.0.1a2) (2026-05-22)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/13d694e2960b7ede0533f4029442301c21c86a8c...0.0.1a2)
