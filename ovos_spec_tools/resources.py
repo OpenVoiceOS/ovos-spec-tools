@@ -25,12 +25,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
-from ovos_spec_tools.expansion import MalformedTemplate, expand
-from ovos_spec_tools.language import DEFAULT_MAX_LANGUAGE_DISTANCE, closest_lang
+from ovos_spec_tools.expansion import expand
+from ovos_spec_tools.language import (
+    DEFAULT_MAX_LANGUAGE_DISTANCE,
+    closest_lang,
+    standardize_lang,
+)
 
 __all__ = [
     "LocaleResources",
     "MalformedResource",
+    "iter_locale_dirs",
     "read_resource_file",
     "read_prompt_file",
     "SLOT_BEARING_ROLES",
@@ -73,6 +78,48 @@ def read_resource_file(path: Path) -> List[str]:
             continue
         templates.append(line)
     return templates
+
+
+def iter_locale_dirs(root: Path,
+                     native_langs: Optional[Sequence[str]] = None,
+                     max_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE
+                     ):
+    """Iterate ``<root>/locale/<lang>/`` subdirs as ``(lang, path)`` pairs.
+
+    Each immediate subdirectory of ``<root>/locale/`` is treated as a locale
+    tree; its name is normalized with :func:`standardize_lang` and yielded as
+    the first item of the pair. The second item is the directory ``Path``.
+
+    When ``native_langs`` is given, each subdir is matched against the natives
+    via :func:`closest_lang` and yielded only when its closest native is within
+    ``max_distance`` — useful for "a skill declares ``en``, the locale tree has
+    ``en-US``, accept it" without forcing the caller to repeat that walk.
+
+    Resource loaders (``.rx``, ``.dialog``, ``.voc``, ``.intent``, ``.json``)
+    reinvent this walk by hand and disagree on the macro/full-tag policy. Use
+    this and the disagreement goes away — locales are always discovered as
+    full-tag directories, ``closest_lang`` reconciles at query time.
+
+    ``root`` without a ``locale/`` child yields nothing.
+    """
+    root = Path(root)
+    locales_root = root / "locale"
+    if not locales_root.is_dir():
+        return
+    natives_norm = ([standardize_lang(lang) for lang in native_langs]
+                    if native_langs is not None else None)
+    for entry in sorted(locales_root.iterdir()):
+        if not entry.is_dir():
+            continue
+        try:
+            lang_norm = standardize_lang(entry.name)
+        except Exception:
+            continue
+        if natives_norm is not None:
+            if closest_lang(lang_norm, natives_norm,
+                            max_distance=max_distance) is None:
+                continue
+        yield lang_norm, entry
 
 
 def read_prompt_file(path: Path) -> str:

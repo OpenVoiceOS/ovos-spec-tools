@@ -2,7 +2,7 @@
 import pytest
 
 import ovos_spec_tools.language as language
-from ovos_spec_tools import closest_lang, lang_distance, standardize_lang
+from ovos_spec_tools import closest_lang, lang_distance, lang_matches, standardize_lang
 
 
 # --- standardize_lang --------------------------------------------------------
@@ -124,3 +124,25 @@ def test_lang_distance_regional_versus_different_language():
 def test_closest_lang_regioned_request_falls_back_to_a_sibling(tmp_path):
     pytest.importorskip("langcodes")
     assert closest_lang("pt-MZ", ["en-US", "pt-BR"]) == "pt-BR"
+
+
+# --- lang_matches ------------------------------------------------------------
+
+def test_lang_matches_identical_tags():
+    assert lang_matches("en-US", "en_us") is True
+
+
+def test_lang_matches_different_languages():
+    pytest.importorskip("langcodes")
+    assert lang_matches("en-US", "fr-FR") is False
+
+
+def test_lang_matches_regional_sibling_within_default_threshold():
+    pytest.importorskip("langcodes")
+    assert lang_matches("de-DE", "de-AT") is True
+
+
+def test_lang_matches_exact_only_when_max_distance_zero():
+    from ovos_spec_tools import lang_matches as lm
+    assert lm("en-US", "en-US", max_distance=0) is True
+    assert lm("en-US", "en-GB", max_distance=0) is False
