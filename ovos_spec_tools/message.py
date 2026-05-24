@@ -68,9 +68,15 @@ class Message:
     def __init__(self, msg_type: str,
                  data: Optional[Dict[str, Any]] = None,
                  context: Optional[Dict[str, Any]] = None):
-        if not isinstance(msg_type, str) or not msg_type:
-            raise MalformedMessage(
-                "msg_type must be a non-empty string (§2.1)")
+        # §2.1 requires the wire ``type`` to be non-empty, but it is a
+        # spec rule for **emitted** Messages — the construct-then-forward
+        # pattern (``Message("").forward(real_type, data)``) is widely
+        # used to build a routing scaffold before the real topic is
+        # known, so the constructor accepts an empty string here and
+        # :meth:`serialize` is the gate that flags non-conformant wire
+        # output (see §7 producer rules).
+        if not isinstance(msg_type, str):
+            raise MalformedMessage("msg_type must be a string (§2.1)")
         if data is not None and not isinstance(data, dict):
             raise MalformedMessage("data must be a dict (§2.2)")
         if context is not None and not isinstance(context, dict):

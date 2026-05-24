@@ -30,10 +30,13 @@ class TestEnvelope:
         assert m.data == {"a": 1}
         assert m.context == {"source": "x"}
 
-    def test_rejects_empty_msg_type(self):
-        """§2.1: ``type`` is a non-empty string."""
-        with pytest.raises(MalformedMessage):
-            Message("")
+    def test_accepts_empty_msg_type_at_construction(self):
+        """§2.1 (non-empty ``type``) gates the **wire** form, not
+        intermediate objects. The ``Message("").forward(real_type)``
+        pattern is widely used to build a routing scaffold before the
+        real topic is known."""
+        m = Message("")
+        assert m.msg_type == ""
 
     def test_rejects_non_string_msg_type(self):
         with pytest.raises(MalformedMessage):
