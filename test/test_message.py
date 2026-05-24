@@ -298,3 +298,11 @@ class TestSubclassDerivations:
         assert isinstance(
             self._BusClientMessage.deserialize(payload),
             self._BusClientMessage)
+
+
+def test_malformed_message_is_catchable_as_assertion_error():
+    """Legacy ``ovos_bus_client.Message`` raised ``AssertionError`` from
+    bare ``assert`` constructor checks; downstream code that catches
+    that type must keep working through the migration."""
+    with pytest.raises(AssertionError):
+        Message("ok", data="not a dict")

@@ -34,13 +34,20 @@ __all__ = ["Message", "MalformedMessage", "DEFAULT_SESSION_ID"]
 DEFAULT_SESSION_ID = "default"
 
 
-class MalformedMessage(ValueError):
+class MalformedMessage(ValueError, AssertionError):
     """A serialized payload that does not conform to OVOS-MSG-1 §2 / §6.
 
     Raised by :meth:`Message.deserialize` when the payload fails any
     structural rule the spec calls out as ``MUST``: unknown top-level
     keys (§2), missing ``type`` (§2), wrong value types, or unparsable
     JSON (§6).
+
+    Inherits from both :class:`ValueError` (the modern,
+    correctly-typed exception class) **and** :class:`AssertionError`
+    (the type historically raised by ``ovos_bus_client.Message``'s
+    bare ``assert`` constructor checks), so legacy ``except
+    AssertionError`` handlers in downstream code continue to catch
+    the same conditions.
     """
 
 
