@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.5.0a1) (2026-05-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.4.0a1...0.5.0a1)
+
+**Merged pull requests:**
+
+- feat: OVOS-MSG-1 Message envelope [\#12](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/12) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.4.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.4.0a1) (2026-05-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.3.0a1...0.4.0a1)
