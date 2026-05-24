@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.5.1a1) (2026-05-24)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.5.0a1...0.5.1a1)
+
+**Merged pull requests:**
+
+- fix\(Message\): three follow-ups missed by the 0.5.0a1 cut [\#14](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/14) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.5.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.5.0a1) (2026-05-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.4.0a1...0.5.0a1)
