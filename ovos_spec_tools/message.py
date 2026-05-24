@@ -34,13 +34,20 @@ __all__ = ["Message", "MalformedMessage", "DEFAULT_SESSION_ID"]
 DEFAULT_SESSION_ID = "default"
 
 
-class MalformedMessage(ValueError):
+class MalformedMessage(ValueError, AssertionError):
     """A serialized payload that does not conform to OVOS-MSG-1 §2 / §6.
 
     Raised by :meth:`Message.deserialize` when the payload fails any
     structural rule the spec calls out as ``MUST``: unknown top-level
     keys (§2), missing ``type`` (§2), wrong value types, or unparsable
     JSON (§6).
+
+    Inherits from both :class:`ValueError` (the modern,
+    correctly-typed exception class) **and** :class:`AssertionError`
+    (the type historically raised by ``ovos_bus_client.Message``'s
+    bare ``assert`` constructor checks), so legacy ``except
+    AssertionError`` handlers in downstream code continue to catch
+    the same conditions.
     """
 
 
@@ -68,9 +75,15 @@ class Message:
     def __init__(self, msg_type: str,
                  data: Optional[Dict[str, Any]] = None,
                  context: Optional[Dict[str, Any]] = None):
-        if not isinstance(msg_type, str) or not msg_type:
-            raise MalformedMessage(
-                "msg_type must be a non-empty string (§2.1)")
+        # §2.1 requires the wire ``type`` to be non-empty, but it is a
+        # spec rule for **emitted** Messages — the construct-then-forward
+        # pattern (``Message("").forward(real_type, data)``) is widely
+        # used to build a routing scaffold before the real topic is
+        # known, so the constructor accepts an empty string here and
+        # :meth:`serialize` is the gate that flags non-conformant wire
+        # output (see §7 producer rules).
+        if not isinstance(msg_type, str):
+            raise MalformedMessage("msg_type must be a string (§2.1)")
         if data is not None and not isinstance(data, dict):
             raise MalformedMessage("data must be a dict (§2.2)")
         if context is not None and not isinstance(context, dict):
@@ -91,6 +104,17 @@ class Message:
                 f"data={self.data!r}, context={self.context!r})")
 
     # --- §6 serialization ---------------------------------------------------
+
+    @property
+    def as_dict(self) -> Dict[str, Any]:
+        """The Message rendered as a JSON-decoded dictionary —
+        ``{"type": ..., "data": ..., "context": ...}``.
+
+        Equivalent to ``json.loads(self.serialize())`` and round-trips
+        through :meth:`deserialize`; offered as a property for callers
+        that want a one-shot dict view without the JSON intermediate.
+        """
+        return json.loads(self.serialize())
 
     @staticmethod
     def _to_jsonable(value: Any) -> Any:

@@ -144,6 +144,9 @@ of their own subclass.
 - `m.serialize() -> str` — single UTF-8 JSON object per OVOS-MSG-1 §6;
   recursively converts nested objects exposing a `.serialize()` method
   (e.g. `Session`).
+- `m.as_dict -> dict` (property) — JSON-decoded envelope, equivalent
+  to `json.loads(m.serialize())`. Nested `.serialize()`-walking carriers
+  are converted the same way they would be on the wire.
 - `Message.deserialize(payload) -> Message` — parse a JSON string,
   bytes, or already-parsed dict. Rejects unknown top-level keys, missing
   `type`, wrong value types, NaN/Infinity as `MalformedMessage`.

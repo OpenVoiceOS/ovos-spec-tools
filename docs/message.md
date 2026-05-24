@@ -127,6 +127,13 @@ similar carriers) are converted before JSON encoding — `Message`
 itself doesn't know about Session or any specific carrier type, but
 its `.serialize()` walks containers and calls the method when present.
 
+For a JSON-decoded view without the string intermediate, `m.as_dict`
+returns the same envelope as a dictionary:
+
+```python
+m.as_dict   # {'type': 'ovos.test', 'data': {...}, 'context': {...}}
+```
+
 `deserialize` rejects malformed payloads as `MalformedMessage`:
 unparsable JSON, non-object root, unknown top-level keys, missing
 `type`, wrong value types. Both `str` and `bytes` are accepted, and an

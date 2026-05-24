@@ -30,10 +30,13 @@ class TestEnvelope:
         assert m.data == {"a": 1}
         assert m.context == {"source": "x"}
 
-    def test_rejects_empty_msg_type(self):
-        """§2.1: ``type`` is a non-empty string."""
-        with pytest.raises(MalformedMessage):
-            Message("")
+    def test_accepts_empty_msg_type_at_construction(self):
+        """§2.1 (non-empty ``type``) gates the **wire** form, not
+        intermediate objects. The ``Message("").forward(real_type)``
+        pattern is widely used to build a routing scaffold before the
+        real topic is known."""
+        m = Message("")
+        assert m.msg_type == ""
 
     def test_rejects_non_string_msg_type(self):
         with pytest.raises(MalformedMessage):
@@ -295,3 +298,33 @@ class TestSubclassDerivations:
         assert isinstance(
             self._BusClientMessage.deserialize(payload),
             self._BusClientMessage)
+
+
+def test_malformed_message_is_catchable_as_assertion_error():
+    """Legacy ``ovos_bus_client.Message`` raised ``AssertionError`` from
+    bare ``assert`` constructor checks; downstream code that catches
+    that type must keep working through the migration."""
+    with pytest.raises(AssertionError):
+        Message("ok", data="not a dict")
+
+
+# --- as_dict ----------------------------------------------------------------
+
+def test_as_dict_returns_envelope_as_dict():
+    m = Message("ovos.test", {"a": 1}, {"source": "skill"})
+    d = m.as_dict
+    assert isinstance(d, dict)
+    assert d == {"type": "ovos.test", "data": {"a": 1},
+                 "context": {"source": "skill"}}
+
+
+def test_as_dict_walks_carrier_serialize_protocol():
+    """``as_dict`` round-trips through ``serialize`` so nested objects
+    with a ``.serialize()`` method are converted, same as on the wire."""
+
+    class _Carrier:
+        def serialize(self):
+            return {"session_id": "s-7"}
+
+    m = Message("ovos.test", {}, {"session": _Carrier()})
+    assert m.as_dict["context"]["session"] == {"session_id": "s-7"}
