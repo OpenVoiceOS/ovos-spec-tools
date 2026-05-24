@@ -306,3 +306,25 @@ def test_malformed_message_is_catchable_as_assertion_error():
     that type must keep working through the migration."""
     with pytest.raises(AssertionError):
         Message("ok", data="not a dict")
+
+
+# --- as_dict ----------------------------------------------------------------
+
+def test_as_dict_returns_envelope_as_dict():
+    m = Message("ovos.test", {"a": 1}, {"source": "skill"})
+    d = m.as_dict
+    assert isinstance(d, dict)
+    assert d == {"type": "ovos.test", "data": {"a": 1},
+                 "context": {"source": "skill"}}
+
+
+def test_as_dict_walks_carrier_serialize_protocol():
+    """``as_dict`` round-trips through ``serialize`` so nested objects
+    with a ``.serialize()`` method are converted, same as on the wire."""
+
+    class _Carrier:
+        def serialize(self):
+            return {"session_id": "s-7"}
+
+    m = Message("ovos.test", {}, {"session": _Carrier()})
+    assert m.as_dict["context"]["session"] == {"session_id": "s-7"}

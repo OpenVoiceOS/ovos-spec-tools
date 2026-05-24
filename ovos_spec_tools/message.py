@@ -105,6 +105,17 @@ class Message:
 
     # --- §6 serialization ---------------------------------------------------
 
+    @property
+    def as_dict(self) -> Dict[str, Any]:
+        """The Message rendered as a JSON-decoded dictionary —
+        ``{"type": ..., "data": ..., "context": ...}``.
+
+        Equivalent to ``json.loads(self.serialize())`` and round-trips
+        through :meth:`deserialize`; offered as a property for callers
+        that want a one-shot dict view without the JSON intermediate.
+        """
+        return json.loads(self.serialize())
+
     @staticmethod
     def _to_jsonable(value: Any) -> Any:
         """Convert ``value`` to a JSON-friendly form.
