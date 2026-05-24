@@ -83,6 +83,19 @@ closest_lang("en-AU", ["pt-BR", "en-US", "de-DE"])   # 'en-US'
 
 → [Language matching](language-matching.md)
 
+### Construct a bus message
+
+`Message` is the JSON envelope OVOS components exchange:
+
+```python
+from ovos_spec_tools import Message
+
+m = Message("ovos.intent.list", {}, {"source": "skill.id"})
+res = m.response({"intents": ["..."]})   # 'ovos.intent.list.response'
+```
+
+→ [Bus messages](message.md)
+
 ### Lint a locale folder
 
 From the command line:

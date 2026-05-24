@@ -50,7 +50,7 @@ read verbatim — every line, including `#` and blank lines, is kept. It carries
 `{name}` substitution points but is otherwise plain text ([chapter 4](dialog.md)).
 
 Legacy OVOS file types (`.rx`, `.value`, `.list`, …) are deliberately *not*
-roles here — the linter flags them ([chapter 6](linting.md)).
+roles here — the linter flags them ([chapter 7](linting.md)).
 
 ## Loading with `LocaleResources`
 

@@ -6,13 +6,15 @@ the small, dependency-light primitives those specs describe, in one place, so
 OVOS components and third-party tools stop reimplementing them and drifting
 apart.
 
-It gives you four things:
+It gives you five things:
 
 - an **expander** — turns a sentence template into the set of sentences it
   stands for (OVOS-INTENT-1);
 - a **resource loader** — reads a skill's `locale/` folder (OVOS-INTENT-2);
 - a **dialog renderer** — picks and fills a spoken response (OVOS-INTENT-2 §4.2);
 - **language matching** — normalizes tags and finds the closest one;
+- a **bus message envelope** — the `type` / `data` / `context` JSON contract
+  and its `forward` / `reply` / `response` derivations (OVOS-MSG-1);
 
 plus **`ovos-spec-lint`**, a command-line linter for locale folders.
 
@@ -31,13 +33,20 @@ are the foundation everything else rests on.
    stateless function and the stateful renderer.
 5. [Language matching](language-matching.md) — tag standardization, distance,
    and closest-match resolution.
-6. [Linting](linting.md) — validating a locale folder, from the command line
+6. [Bus messages](message.md) — the on-the-wire envelope, the three
+   derivations (`forward` / `reply` / `response`), and the session carrier.
+7. [Linting](linting.md) — validating a locale folder, from the command line
    or in CI.
-7. [API reference](api-reference.md) — every public name, in brief.
+8. [API reference](api-reference.md) — every public name, in brief.
 
 ## A note on scope
 
-This package **expands, loads, renders, matches language, and lints**. It does not
-*recognize* intents — matching an utterance to an intent is the job of an
-intent engine, and is deliberately out of scope (see OVOS-INTENT-1 §4). What
-you get here is the data those engines consume and the tooling around it.
+This package **expands, loads, renders, matches language, lints, and provides
+the bus message envelope**. It does not *recognize* intents — matching an
+utterance to an intent is the job of an intent engine, and is deliberately
+out of scope (see OVOS-INTENT-1 §4). It does not *transport* messages either
+— wire framing, encryption, websocket clients, multi-tenant routing, and
+session lifecycle all belong to the layers that consume the envelope
+(`ovos-bus-client` for the websocket transport; HiveMind for layer-2
+routing). What you get here is the data those engines consume, the message
+shape they exchange, and the tooling around them.

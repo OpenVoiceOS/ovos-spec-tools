@@ -22,11 +22,18 @@ formal specifications describe:
   :func:`~ovos_spec_tools.resources.utterance_contains`,
   :func:`~ovos_spec_tools.resources.strip_samples` — slot-free template
   grouping (§4.3) and utterance match / strip primitives;
+- :class:`~ovos_spec_tools.message.Message` — the OVOS-MSG-1 bus message
+  envelope with the ``forward`` / ``reply`` / ``response`` derivations;
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
 from ovos_spec_tools.dialog import DialogRenderer, UnfilledSlot, render
 from ovos_spec_tools.expansion import MalformedTemplate, expand
+from ovos_spec_tools.message import (
+    DEFAULT_SESSION_ID,
+    MalformedMessage,
+    Message,
+)
 from ovos_spec_tools.language import (
     closest_lang,
     lang_distance,
@@ -49,6 +56,9 @@ from ovos_spec_tools.resources import (
 from ovos_spec_tools.version import __version__
 
 __all__ = [
+    "Message",
+    "MalformedMessage",
+    "DEFAULT_SESSION_ID",
     "expand",
     "MalformedTemplate",
     "LocaleResources",

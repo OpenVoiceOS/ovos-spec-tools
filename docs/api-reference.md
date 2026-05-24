@@ -116,13 +116,56 @@ bare tag is measured from its norm region.
 The entry of `available` with the smallest `lang_distance`, if it is below
 `max_distance` (or exact). Returns the original string, or `None`.
 
-## Linting — [chapter 6](linting.md)
+## Bus messages — [chapter 6](message.md)
+
+### `Message(msg_type, data=None, context=None)`
+
+The OVOS-MSG-1 envelope: exactly three top-level fields — `msg_type`
+(the wire field `type`), `data`, `context`. The constructor rejects
+malformed input as `MalformedMessage`. `data` and `context` default to
+empty dicts and are stored by reference.
+
+#### Derivations
+
+- `m.forward(msg_type, data=None) -> Message` — same context, new
+  type/data; the forwarder does not become the new `source`.
+- `m.reply(msg_type, data=None, context=None) -> Message` — copies
+  context, overlays the optional `context`, swaps `source` and
+  `destination`. Other context keys (including `session`) pass through
+  unchanged.
+- `m.response(data=None, context=None) -> Message` — sugar for
+  `reply(msg_type + ".response", ...)`.
+
+All three preserve the runtime class — subclasses get back instances
+of their own subclass.
+
+#### Serialization
+
+- `m.serialize() -> str` — single UTF-8 JSON object per OVOS-MSG-1 §6;
+  recursively converts nested objects exposing a `.serialize()` method
+  (e.g. `Session`).
+- `Message.deserialize(payload) -> Message` — parse a JSON string,
+  bytes, or already-parsed dict. Rejects unknown top-level keys, missing
+  `type`, wrong value types, NaN/Infinity as `MalformedMessage`.
+
+### `MalformedMessage`
+
+`ValueError` subclass raised by the constructor and `deserialize` when a
+payload violates OVOS-MSG-1 §2 / §6 / §7.
+
+### `DEFAULT_SESSION_ID`
+
+The reserved `"default"` value (OVOS-MSG-1 §4.1) — *the Message
+originates from the device itself*. An absent `session` on a Message is
+equivalent for every policy decision.
+
+## Linting — [chapter 7](linting.md)
 
 ### `lint_locale(path, spec_version=2) -> list[Finding]`
 
 Validate every resource file under a locale (or single-language) directory.
 `spec_version` (0, 1, or 2) flags features newer than that target — see
-[chapter 6](linting.md).
+[chapter 7](linting.md).
 
 ### `Finding`
 
