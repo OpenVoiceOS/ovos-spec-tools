@@ -23,7 +23,7 @@ serves every language the skill ships.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 from ovos_spec_tools.expansion import expand
 from ovos_spec_tools.language import (
@@ -35,6 +35,7 @@ from ovos_spec_tools.language import (
 __all__ = [
     "LocaleResources",
     "MalformedResource",
+    "find_lang_dir",
     "iter_locale_dirs",
     "keyword_form",
     "normalize_for_match",
@@ -124,6 +125,47 @@ def iter_locale_dirs(root: Path,
                             max_distance=max_distance) is None:
                 continue
         yield lang_norm, entry
+
+
+def find_lang_dir(base_path: Union[str, Path], lang: str,
+                  lang_resolver: Optional["LanguageResolver"] = None,
+                  max_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE
+                  ) -> Optional[Path]:
+    """Resolve the best ``<base_path>/<lang>/`` subdirectory for *lang*.
+
+    The immediate subdirectories of ``base_path`` are taken as the set of
+    available languages; the resolver (default :func:`closest_lang`)
+    picks the closest match within ``max_distance`` (OVOS-INTENT-2 §2.2
+    smart fallback). Case-mismatch (``en-US`` vs ``en-us``) and
+    minor regional fallback (``en-AU`` to ``en-US``) both resolve
+    through :func:`closest_lang` — no separate exact-match short-circuit
+    is needed.
+
+    Returns the resolved :class:`Path`, or ``None`` if ``base_path`` is
+    not a directory or no available subdir is close enough.
+
+    This is the standalone primitive backing
+    :meth:`LocaleResources._lang_dir` — use this when you want one
+    language-aware directory lookup without constructing a full
+    :class:`LocaleResources`. Skills typically use ``LocaleResources``
+    (which wires the override-precedence search); tools that walk a
+    single locale tree (``locate this lang's resource root``) call this.
+    """
+    base = Path(base_path)
+    if not base.is_dir():
+        return None
+    names = [c.name for c in base.iterdir() if c.is_dir()]
+    resolver = lang_resolver if lang_resolver is not None else closest_lang
+    match = resolver(lang, names, max_distance)
+    if match is None:
+        return None
+    # `match` is one of the candidate names normalized by the resolver;
+    # find the original directory entry that standardizes to it so we
+    # return the on-disk casing.
+    for name in names:
+        if standardize_lang(name) == standardize_lang(match):
+            return base / name
+    return None
 
 
 def keyword_form(template_line: str,
@@ -307,11 +349,9 @@ class LocaleResources:
         The language is resolved against the available subdirectories by the
         ``lang_resolver`` — an exact tag, or the smart fallback of §2.2.
         """
-        if not source.is_dir():
-            return None
-        names = [c.name for c in source.iterdir() if c.is_dir()]
-        match = self._lang_resolver(lang, names, self.max_language_distance)
-        return (source / match) if match is not None else None
+        return find_lang_dir(source, lang,
+                             lang_resolver=self._lang_resolver,
+                             max_distance=self.max_language_distance)
 
     def find(self, base_name: str, extension: str,
              lang: str) -> Optional[Path]:

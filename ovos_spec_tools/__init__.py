@@ -45,6 +45,7 @@ from ovos_spec_tools.prompt import PromptRenderer, render_prompt
 from ovos_spec_tools.resources import (
     LocaleResources,
     MalformedResource,
+    find_lang_dir,
     iter_locale_dirs,
     keyword_form,
     normalize_for_match,
@@ -63,6 +64,7 @@ __all__ = [
     "MalformedTemplate",
     "LocaleResources",
     "MalformedResource",
+    "find_lang_dir",
     "iter_locale_dirs",
     "keyword_form",
     "normalize_for_match",
