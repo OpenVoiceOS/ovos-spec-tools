@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.6.0a1) (2026-05-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.5.1a1...0.6.0a1)
+
+**Merged pull requests:**
+
+- feat: find\_lang\_dir — standalone language-aware directory resolver [\#17](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/17) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.5.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.5.1a1) (2026-05-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.5.0a1...0.5.1a1)
