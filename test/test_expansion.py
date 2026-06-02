@@ -259,7 +259,7 @@ def test_inline_keywords_none_vocab():
 def test_inline_keywords_strips_unresolved():
     vocab = {"known": ["yes"]}
     result = inline_keywords("<unknown> <known>", vocab)
-    assert result == "<unknown> yes"
+    assert result == "<unknown> (yes)"  # brackets kept for unresolvable
 
 
 def test_inline_keywords_max_values():

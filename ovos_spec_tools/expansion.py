@@ -272,7 +272,7 @@ def inline_keywords(
         vals = vocabularies.get(m.group(1))
         if vals:
             return "(" + "|".join(vals[:max_values]) + ")"
-        return m.group(1)  # strip brackets for unresolvable
+        return m.group(0)  # keep brackets for unresolvable keywords
 
     # Iterate until stable — handles nested refs like <a> inside <everywhere>
     for _ in range(8):
