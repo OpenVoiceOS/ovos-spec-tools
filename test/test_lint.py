@@ -149,15 +149,19 @@ def test_lint_accepts_a_single_language_directory(tmp_path):
 
 # .intent allows union slot sets — templates MAY declare different slots.
 
-def test_inconsistent_slots_in_one_intent_is_accepted(tmp_path):
+def test_inconsistent_slots_in_one_intent_warns(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\nstop {engine}\n")
+    warnings = _warnings(lint_locale(locale))
+    assert any("slot sets" in f.message for f in warnings)
     assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
-def test_mixing_slotted_and_slotless_lines_in_intent_is_accepted(tmp_path):
+def test_mixing_slotted_and_slotless_lines_in_intent_warns(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\njust stop\n")
+    warnings = _warnings(lint_locale(locale))
+    assert any("slot sets" in f.message for f in warnings)
     assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 

@@ -251,11 +251,17 @@ def _lint_file(path: Path,
 
     # --- slot consistency (OVOS-INTENT-1 §5.5) ------------------------------
     # .dialog requires identical slot sets; .intent allows union slot sets.
-    if extension == ".dialog" and len(set(slot_sets)) > 1:
-        findings.append(Finding(
-            ERROR, str(path),
-            f"templates declare different slot sets — every template in one "
-            f"{extension} must use the same {{slots}} (OVOS-INTENT-1 §5.5)"))
+    if len(set(slot_sets)) > 1:
+        if extension == ".dialog":
+            findings.append(Finding(
+                ERROR, str(path),
+                f"templates declare different slot sets — every template in one "
+                f"{extension} must use the same {{slots}} (OVOS-INTENT-1 §5.5)"))
+        else:
+            findings.append(Finding(
+                WARNING, str(path),
+                f"templates declare different slot sets — this is valid for "
+                f".intent but unusual; verify this is intentional (OVOS-INTENT-1 §5.5)"))
 
     return findings
 
