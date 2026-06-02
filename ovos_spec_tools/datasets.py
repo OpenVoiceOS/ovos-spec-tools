@@ -208,6 +208,65 @@ def expand_hf_template(
     return results
 
 
+def inline_keywords(
+    template: str,
+    expansions: Sequence[dict] | None = None,
+    *,
+    flat_vocab: dict[str, list[str]] | None = None,
+    max_values: int = 10,
+) -> str:
+    """Inline ``<keyword>`` references as ``(v1|v2|…)`` alternation groups.
+
+    Engines like Padatious don't look up ``.voc`` files at runtime — they
+    need keywords inlined into the template body.  This utility replaces
+    every ``<keyword>`` reference with its values in alternation syntax,
+    handling nested references recursively.
+
+    Parameters
+    ----------
+    template
+        Template string with ``<keyword>`` references.
+    expansions
+        List of ``{"keyword", "values"}`` dicts (from the ``expansions``
+        column of the hass-intent-templates dataset).
+    flat_vocab
+        Flat ``{keyword: [values]}`` mapping, alternative to ``expansions``.
+    max_values
+        Cap the number of values per keyword inlined.  Default 10.
+
+    Returns
+    -------
+    str
+        Template with all ``<keyword>`` references inlined.
+    """
+    vocab: dict[str, list[str]] = {}
+    if flat_vocab:
+        vocab.update(flat_vocab)
+    if expansions:
+        for entry in expansions:
+            kw = entry.get("keyword", "")
+            vals = entry.get("values") or []
+            if kw and vals:
+                vocab[kw] = list(vals)
+
+    if not vocab:
+        return template
+
+    def _sub(m: re.Match[str]) -> str:
+        vals = vocab.get(m.group(1))
+        if vals:
+            return "(" + "|".join(vals[:max_values]) + ")"
+        return m.group(1)  # strip brackets for unresolvable keywords
+
+    # Iterate until stable — handles nested refs like <a> inside <everywhere>
+    for _ in range(8):
+        new = VOC_RE.sub(_sub, template)
+        if new == template:
+            break
+        template = new
+    return template
+
+
 def _strip_domain(intent_id: str) -> str:
     """Strip the ``domain:`` prefix from an intent ID to get the base name."""
     return intent_id.split(":", 1)[-1] if ":" in intent_id else intent_id
