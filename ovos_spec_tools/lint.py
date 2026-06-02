@@ -250,7 +250,8 @@ def _lint_file(path: Path,
             slot_sets.append(frozenset(_SLOT_RE.findall(template)))
 
     # --- slot consistency (OVOS-INTENT-1 §5.5) ------------------------------
-    if slot_bearing and len(set(slot_sets)) > 1:
+    # .dialog requires identical slot sets; .intent allows union slot sets.
+    if extension == ".dialog" and len(set(slot_sets)) > 1:
         findings.append(Finding(
             ERROR, str(path),
             f"templates declare different slot sets — every template in one "
