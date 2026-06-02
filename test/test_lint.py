@@ -147,16 +147,22 @@ def test_lint_accepts_a_single_language_directory(tmp_path):
 
 # --- slot consistency (OVOS-INTENT-1 §5.5) ----------------------------------
 
-def test_inconsistent_slots_in_one_intent_is_an_error(tmp_path):
+# .intent allows union slot sets — templates MAY declare different slots.
+
+def test_inconsistent_slots_in_one_intent_warns(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\nstop {engine}\n")
-    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
+    warnings = _warnings(lint_locale(locale))
+    assert any("slot sets" in f.message for f in warnings)
+    assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
-def test_mixing_slotted_and_slotless_lines_is_an_error(tmp_path):
+def test_mixing_slotted_and_slotless_lines_in_intent_warns(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\njust stop\n")
-    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
+    warnings = _warnings(lint_locale(locale))
+    assert any("slot sets" in f.message for f in warnings)
+    assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
 def test_consistent_slots_across_an_intent_is_clean(tmp_path):
@@ -164,6 +170,22 @@ def test_consistent_slots_across_an_intent_is_clean(tmp_path):
     _write(locale / "en-US" / "p.intent",
            "(play|put on) {query}\ni want {query}\n")
     assert lint_locale(locale) == []
+
+
+# .dialog still requires identical slot sets.
+
+def test_inconsistent_slots_in_one_dialog_is_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.dialog",
+           "Hello {name}.\nNice to meet you, {title} and {surname}.\n")
+    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
+
+
+def test_mixing_slotted_and_slotless_lines_in_dialog_is_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.dialog",
+           "Hello {name}.\nWelcome back.\n")
+    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
 # --- robustness --------------------------------------------------------------
