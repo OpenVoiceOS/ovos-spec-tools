@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.7.0a1) (2026-06-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.6.0a1...0.7.0a1)
+
+**Merged pull requests:**
+
+- feat: union slot sets for .intent \(OVOS-INTENT-1 §5.5\) [\#19](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/19) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.6.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.6.0a1) (2026-05-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.5.1a1...0.6.0a1)
