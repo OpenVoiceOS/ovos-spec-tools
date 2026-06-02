@@ -5,7 +5,7 @@ these form the conformance corpus for the Expander role (§7).
 """
 import pytest
 
-from ovos_spec_tools import MalformedTemplate, expand
+from ovos_spec_tools import MalformedTemplate, expand, inline_keywords
 
 
 # --- §4.2 the worked example -------------------------------------------------
@@ -224,3 +224,51 @@ def test_unicode_literal_words_pass_through():
 
 def test_duplicate_branches_collapse_to_one_sample():
     assert expand("(go|go) home") == ["go home"]
+
+
+# --- inline_keywords ----------------------------------------------------------
+
+
+def test_inline_keywords_basic():
+    tpl = "<turn_on> [the] {name}"
+    vocab = {"turn_on": ["turn on", "switch on"]}
+    assert inline_keywords(tpl, vocab) == "(turn on|switch on) [the] {name}"
+
+
+def test_inline_keywords_nested():
+    tpl = "<broadcast> <everywhere>"
+    vocab = {
+        "broadcast": ["<a>ذع", "بلغ"],
+        "a": ["آ", "أ"],
+        "everywhere": ["كل مكان"],
+    }
+    result = inline_keywords(tpl, vocab)
+    assert "بلغ" in result
+    assert "كل مكان" in result
+    assert "(آ|أ)" in result
+
+
+def test_inline_keywords_empty_vocab():
+    assert inline_keywords("<x> lights", {}) == "<x> lights"
+
+
+def test_inline_keywords_none_vocab():
+    assert inline_keywords("<x> lights", None) == "<x> lights"
+
+
+def test_inline_keywords_strips_unresolved():
+    vocab = {"known": ["yes"]}
+    result = inline_keywords("<unknown> <known>", vocab)
+    assert result == "<unknown> (yes)"  # brackets kept for unresolvable
+
+
+def test_inline_keywords_max_values():
+    vocab = {"x": [str(i) for i in range(20)]}
+    result = inline_keywords("<x>", vocab, max_values=5)
+    assert "10" not in result
+    assert "0" in result
+
+
+def test_inline_keywords_no_refs():
+    assert inline_keywords("hello world", {"x": ["y"]}) == "hello world"
+
