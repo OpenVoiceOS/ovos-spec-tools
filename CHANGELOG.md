@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.8.0a1) (2026-06-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.7.0a1...0.8.0a1)
+
+**Merged pull requests:**
+
+- feat: inline\_keywords — resolve \<keyword\> refs as \(a|b|c\) for engines without .voc support [\#22](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/22) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.7.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.7.0a1) (2026-06-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.6.0a1...0.7.0a1)
