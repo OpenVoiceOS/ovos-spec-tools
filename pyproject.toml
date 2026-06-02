@@ -27,6 +27,9 @@ dependencies = []
 langcodes = [
     "langcodes",
 ]
+datasets = [
+    "datasets",
+]
 test = [
     "pytest",
     "langcodes",
