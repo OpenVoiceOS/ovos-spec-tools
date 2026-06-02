@@ -162,13 +162,42 @@ The reserved `"default"` value (OVOS-MSG-1 §4.1) — *the Message
 originates from the device itself*. An absent `session` on a Message is
 equivalent for every policy decision.
 
-## Linting — [chapter 7](linting.md)
+## Datasets — [chapter 7](datasets.md)
+
+These functions require the `datasets` extra (`pip install ovos-spec-tools[datasets]`).
+
+### `SUPPORTED_DATASETS`
+
+```python
+{"hassil-intents": "OpenVoiceOS/hass-intent-templates",
+ "intents-for-eval": "OpenVoiceOS/intents-for-eval",
+ "massive-templates": "OpenVoiceOS/massive-templates"}
+```
+
+### `load_dataset_templates(dataset_id, lang, *, split="train", streaming=True) -> list[dict]`
+
+Load template rows from a supported HuggingFace dataset. Returns a list of
+normalized dicts with keys `intent_id`, `template`, `slots`, and (when the
+dataset has it) `expansions`.
+
+### `expand_hf_template(template, expansions=None, max_samples=2048) -> list[str]`
+
+Expand a template into concrete utterances. `expansions` is a list of
+`{"keyword", "values"}` dicts (as found in the `expansions` column of
+hassil-intents). Uses `ovos_spec_tools.expansion.expand` under the hood.
+
+### `export_to_locale(dataset_id, lang, output_dir, *, split="train", streaming=True) -> int`
+
+Export templates from a HF dataset into an OVOS-INTENT-2 locale directory at
+`<output_dir>/locale/<lang>/`. Returns the number of template lines written.
+
+## Linting — [chapter 8](linting.md)
 
 ### `lint_locale(path, spec_version=2) -> list[Finding]`
 
 Validate every resource file under a locale (or single-language) directory.
 `spec_version` (0, 1, or 2) flags features newer than that target — see
-[chapter 7](linting.md).
+[chapter 8](linting.md).
 
 ### `Finding`
 
