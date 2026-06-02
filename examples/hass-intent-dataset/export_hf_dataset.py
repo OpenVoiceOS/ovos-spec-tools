@@ -46,6 +46,80 @@ except Exception:
 SLOT_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 VOC_RE = re.compile(r"<([a-zA-Z_][a-zA-Z0-9_]*)>")
 
+# Domain-specific device name examples for the {name} slot
+DOMAIN_DEVICE_NAMES: dict[str, list[str]] = {
+    "light": [
+        "kitchen light", "living room light", "bedroom light",
+        "ceiling light", "lamp", "desk lamp", "floor lamp",
+        "hallway light", "bathroom light", "overhead light",
+    ],
+    "fan": [
+        "ceiling fan", "bathroom fan", "kitchen fan",
+        "stand fan", "desk fan", "exhaust fan",
+        "living room fan", "bedroom fan", "tower fan",
+    ],
+    "cover": [
+        "living room blinds", "bedroom curtain", "kitchen blinds",
+        "garage door", "front gate", "back door",
+        "roller shutter", "sun shade", "window blind",
+    ],
+    "lock": [
+        "front door", "back door", "garage door",
+        "main door", "side door", "patio door",
+    ],
+    "climate": [
+        "thermostat", "living room thermostat", "bedroom thermostat",
+        "air conditioner", "heater", "hvac",
+    ],
+    "media_player": [
+        "tv", "speaker", "living room speaker",
+        "stereo", "soundbar", "kitchen speaker",
+    ],
+    "vacuum": [
+        "vacuum", "robot vacuum", "living room vacuum",
+        "downstairs vacuum", "upstairs vacuum",
+    ],
+    "scene": [
+        "movie night", "good night", "good morning",
+        "dinner time", "party mode", "relax",
+    ],
+    "script": [
+        "good night routine", "morning routine",
+        "away mode", "arrive home",
+    ],
+    "sensor": [
+        "temperature sensor", "motion sensor", "door sensor",
+        "humidity sensor", "window sensor",
+    ],
+    "switch": [
+        "kitchen switch", "living room outlet", "hallway switch",
+        "porch light", "christmas lights",
+    ],
+    "water_heater": [
+        "water heater", "boiler", "hot water tank",
+    ],
+    "humidifier": [
+        "humidifier", "dehumidifier", "living room humidifier",
+        "bedroom humidifier",
+    ],
+    "homeassistant": [
+        "kitchen light", "living room light", "bedroom light",
+        "front door", "thermostat", "tv", "ceiling fan",
+        "garage door", "speaker", "vacuum",
+    ],
+}
+
+
+def _extract_domain(intent_name: str) -> str:
+    """Extract sub-domain from an intent name like ``hass_light_turn_on``.
+
+    Returns the second segment (``light``) or ``"homeassistant"`` as fallback.
+    """
+    parts = intent_name.split("_")
+    if len(parts) >= 3 and parts[0] == "hass":
+        return parts[1]
+    return "homeassistant"
+
 
 def _extract_slots(template: str) -> list[str]:
     """Return ordered slot names from a template."""
@@ -82,15 +156,22 @@ def _load_locale_file(path: Path) -> list[str]:
 def _build_slot_schema(
     slot_names: list[str],
     entity_dir: Path,
+    lang: str = "en",
+    domain: str | None = None,
 ) -> list[dict]:
     """For each slot name, try to find a matching ``.entity`` file and load
-    example values."""
+    example values.  For the ``name`` slot, domain-specific device names are
+    only provided for English — other languages leave ``name`` as a wildcard
+    with empty examples unless an actual ``.entity`` file exists."""
     schema: list[dict] = []
     for name in slot_names:
-        entity_path = entity_dir / f"{name}.entity"
         examples: list[str] = []
-        if entity_path.is_file():
-            examples = _load_locale_file(entity_path)[:20]  # cap examples
+        if name == "name" and domain and lang.startswith("en"):
+            examples = DOMAIN_DEVICE_NAMES.get(domain, [])[:20]
+        else:
+            entity_path = entity_dir / f"{name}.entity"
+            if entity_path.is_file():
+                examples = _load_locale_file(entity_path)[:20]
         schema.append({"name": name, "examples": examples})
     return schema
 
@@ -146,11 +227,11 @@ def export_templates(
 
     for intent_file in sorted(lang_dir.glob("*.intent")):
         intent_name = intent_file.stem
-        # Domain is always "homeassistant" for this corpus
+        sub_domain = _extract_domain(intent_name)
         domain = "homeassistant"
         for template in _load_locale_file(intent_file):
             slot_names = _extract_slots(template)
-            slots = _build_slot_schema(slot_names, entity_dir)
+            slots = _build_slot_schema(slot_names, entity_dir, lang=lang, domain=sub_domain)
             rows.append(
                 {
                     "intent_id": f"{domain}:{intent_name}",
