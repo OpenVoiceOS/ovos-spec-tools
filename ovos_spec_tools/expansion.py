@@ -226,3 +226,58 @@ def _check_sample(sentence: str, template: str) -> None:
         raise MalformedTemplate(
             f"repeated slot name in sample {sentence!r} of template "
             f"{template!r}: each slot is defined once per sample")
+
+
+def inline_keywords(
+    template: str,
+    vocabularies: Dict[str, Sequence[str]] | None = None,
+    *,
+    max_values: int = 10,
+) -> str:
+    """Inline ``<keyword>`` references as ``(v1|v2|…)`` alternation groups.
+
+    Engines like Padatious don't look up ``.voc`` files at runtime — they
+    need keywords baked into the template body as standard ``(a|b|c)``
+    alternations.  This utility replaces every ``<keyword>`` reference
+    with its values in alternation syntax, handling nested references
+    recursively.
+
+    Parameters
+    ----------
+    template
+        Template string with ``<keyword>`` references.
+    vocabularies
+        Flat ``{keyword: [values]}`` mapping.  If ``None`` or empty the
+        template is returned unchanged.
+    max_values
+        Cap the number of values per keyword inlined.  Default 10.
+
+    Returns
+    -------
+    str
+        Template with all ``<keyword>`` references inlined as ``(a|b|c)``
+        groups.  Keywords not found in ``vocabularies`` have their angle
+        brackets stripped and become literal text.
+
+    Example
+    -------
+    >>> inline_keywords("<turn_on> [the] {name}",
+    ...                 {"turn_on": ["turn on", "switch on"]})
+    '(turn on|switch on) [the] {name}'
+    """
+    if not vocabularies:
+        return template
+
+    def _sub(m: re.Match[str]) -> str:
+        vals = vocabularies.get(m.group(1))
+        if vals:
+            return "(" + "|".join(vals[:max_values]) + ")"
+        return m.group(1)  # strip brackets for unresolvable
+
+    # Iterate until stable — handles nested refs like <a> inside <everywhere>
+    for _ in range(8):
+        new = _VOC_TOKEN_RE.sub(_sub, template)
+        if new == template:
+            break
+        template = new
+    return template

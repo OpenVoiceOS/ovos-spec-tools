@@ -28,7 +28,7 @@ formal specifications describe:
   exposed as the ``ovos-spec-lint`` command.
 """
 from ovos_spec_tools.dialog import DialogRenderer, UnfilledSlot, render
-from ovos_spec_tools.expansion import MalformedTemplate, expand
+from ovos_spec_tools.expansion import MalformedTemplate, expand, inline_keywords
 from ovos_spec_tools.message import (
     DEFAULT_SESSION_ID,
     MalformedMessage,
@@ -61,6 +61,7 @@ __all__ = [
     "MalformedMessage",
     "DEFAULT_SESSION_ID",
     "expand",
+    "inline_keywords",
     "MalformedTemplate",
     "LocaleResources",
     "MalformedResource",
