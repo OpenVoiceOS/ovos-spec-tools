@@ -46,81 +46,6 @@ except Exception:
 SLOT_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 VOC_RE = re.compile(r"<([a-zA-Z_][a-zA-Z0-9_]*)>")
 
-# Domain-specific device name examples for the {name} slot
-DOMAIN_DEVICE_NAMES: dict[str, list[str]] = {
-    "light": [
-        "kitchen light", "living room light", "bedroom light",
-        "ceiling light", "lamp", "desk lamp", "floor lamp",
-        "hallway light", "bathroom light", "overhead light",
-    ],
-    "fan": [
-        "ceiling fan", "bathroom fan", "kitchen fan",
-        "stand fan", "desk fan", "exhaust fan",
-        "living room fan", "bedroom fan", "tower fan",
-    ],
-    "cover": [
-        "living room blinds", "bedroom curtain", "kitchen blinds",
-        "garage door", "front gate", "back door",
-        "roller shutter", "sun shade", "window blind",
-    ],
-    "lock": [
-        "front door", "back door", "garage door",
-        "main door", "side door", "patio door",
-    ],
-    "climate": [
-        "thermostat", "living room thermostat", "bedroom thermostat",
-        "air conditioner", "heater", "hvac",
-    ],
-    "media_player": [
-        "tv", "speaker", "living room speaker",
-        "stereo", "soundbar", "kitchen speaker",
-    ],
-    "vacuum": [
-        "vacuum", "robot vacuum", "living room vacuum",
-        "downstairs vacuum", "upstairs vacuum",
-    ],
-    "scene": [
-        "movie night", "good night", "good morning",
-        "dinner time", "party mode", "relax",
-    ],
-    "script": [
-        "good night routine", "morning routine",
-        "away mode", "arrive home",
-    ],
-    "sensor": [
-        "temperature sensor", "motion sensor", "door sensor",
-        "humidity sensor", "window sensor",
-    ],
-    "switch": [
-        "kitchen switch", "living room outlet", "hallway switch",
-        "porch light", "christmas lights",
-    ],
-    "water_heater": [
-        "water heater", "boiler", "hot water tank",
-    ],
-    "humidifier": [
-        "humidifier", "dehumidifier", "living room humidifier",
-        "bedroom humidifier",
-    ],
-    "homeassistant": [
-        "kitchen light", "living room light", "bedroom light",
-        "front door", "thermostat", "tv", "ceiling fan",
-        "garage door", "speaker", "vacuum",
-    ],
-}
-
-
-def _extract_domain(intent_name: str) -> str:
-    """Extract sub-domain from an intent name like ``hass_light_turn_on``.
-
-    Returns the second segment (``light``) or ``"homeassistant"`` as fallback.
-    """
-    parts = intent_name.split("_")
-    if len(parts) >= 3 and parts[0] == "hass":
-        return parts[1]
-    return "homeassistant"
-
-
 def _extract_slots(template: str) -> list[str]:
     """Return ordered slot names from a template."""
     return SLOT_RE.findall(template)
@@ -153,25 +78,33 @@ def _load_locale_file(path: Path) -> list[str]:
     return lines
 
 
+def _base_locale_dir() -> Path:
+    return Path(__file__).resolve().parent / "base_locale"
+
+
 def _build_slot_schema(
     slot_names: list[str],
     entity_dir: Path,
     lang: str = "en",
-    domain: str | None = None,
+    base_locale: Path | None = None,
 ) -> list[dict]:
-    """For each slot name, try to find a matching ``.entity`` file and load
-    example values.  For the ``name`` slot, domain-specific device names are
-    only provided for English — other languages leave ``name`` as a wildcard
-    with empty examples unless an actual ``.entity`` file exists."""
+    """For each slot name, load example values from ``base_locale/<lang>/<slot>.entity``
+    or fall back to ``<entity_dir>/<slot>.entity`` from the locale tree."""
+    if base_locale is None:
+        base_locale = _base_locale_dir()
+
     schema: list[dict] = []
     for name in slot_names:
         examples: list[str] = []
-        if name == "name" and domain and lang.startswith("en"):
-            examples = DOMAIN_DEVICE_NAMES.get(domain, [])[:20]
+
+        bl_path = base_locale / lang / f"{name}.entity"
+        if bl_path.is_file():
+            examples = _load_locale_file(bl_path)[:20]
         else:
             entity_path = entity_dir / f"{name}.entity"
             if entity_path.is_file():
                 examples = _load_locale_file(entity_path)[:20]
+
         schema.append({"name": name, "examples": examples})
     return schema
 
@@ -180,19 +113,29 @@ def _realise_template(
     template: str,
     slot_names: list[str],
     entity_dir: Path,
+    lang: str = "en",
     max_combos: int = 50,
+    base_locale: Path | None = None,
 ) -> list[tuple[str, dict[str, str | None]]]:
     """Generate concrete utterances by filling slots with entity values.
     Returns ``(utterance, slot_map)`` pairs."""
+    if base_locale is None:
+        base_locale = _base_locale_dir()
     if not slot_names:
         return [(template, {})]
 
-    # Load value pools for each slot
+    # Load value pools for each slot — prefer base_locale over locale tree
     pools: list[list[str]] = []
     for name in slot_names:
-        entity_path = entity_dir / f"{name}.entity"
-        if entity_path.is_file():
-            values = _load_locale_file(entity_path)
+        values: list[str] = []
+        bl_path = base_locale / lang / f"{name}.entity"
+        if bl_path.is_file():
+            values = _load_locale_file(bl_path)
+        if not values:
+            entity_path = entity_dir / f"{name}.entity"
+            if entity_path.is_file():
+                values = _load_locale_file(entity_path)
+        if values:
             pools.append(values[:10])  # cap per slot
         else:
             pools.append([f"__{name}__"])  # placeholder when no entity file
@@ -227,11 +170,10 @@ def export_templates(
 
     for intent_file in sorted(lang_dir.glob("*.intent")):
         intent_name = intent_file.stem
-        sub_domain = _extract_domain(intent_name)
         domain = "homeassistant"
         for template in _load_locale_file(intent_file):
             slot_names = _extract_slots(template)
-            slots = _build_slot_schema(slot_names, entity_dir, lang=lang, domain=sub_domain)
+            slots = _build_slot_schema(slot_names, entity_dir, lang=lang)
             rows.append(
                 {
                     "intent_id": f"{domain}:{intent_name}",
@@ -332,7 +274,7 @@ def export_test(
             expanded = _expand_alternations(template)
             for exp in expanded:
                 slot_names = _extract_slots(exp)
-                realised = _realise_template(exp, slot_names, entity_dir, max_combos=20)
+                realised = _realise_template(exp, slot_names, entity_dir, lang=lang, max_combos=20)
                 for utterance, slot_map in realised:
                     if utterance in seen_utterances:
                         continue

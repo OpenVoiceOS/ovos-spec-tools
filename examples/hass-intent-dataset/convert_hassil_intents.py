@@ -709,72 +709,20 @@ CANONICAL_RULE_NAMES: dict[str, dict[str, str]] = {
 # best-effort list; contributors can extend it for missing languages.
 # ---------------------------------------------------------------------------
 
-COMMON_AREA_NAMES: dict[str, list[str]] = {
-    "en": ["kitchen", "living room", "bedroom", "bathroom", "office", "garage", "hallway", "basement", "dining room", "garden", "terrace", "laundry room"],
-    "de": ["Küche", "Wohnzimmer", "Schlafzimmer", "Badezimmer", "Büro", "Garage", "Flur", "Keller", "Esszimmer", "Garten", "Terrasse", "Waschküche"],
-    "fr": ["cuisine", "salon", "chambre", "salle de bain", "bureau", "garage", "couloir", "sous-sol", "salle à manger", "jardin", "terrasse", "buanderie"],
-    "es": ["cocina", "salón", "dormitorio", "baño", "oficina", "garaje", "pasillo", "sótano", "comedor", "jardín", "terraza", "lavandería"],
-    "pt": ["cozinha", "sala de estar", "quarto", "casa de banho", "escritório", "garagem", "corredor", "cave", "sala de jantar", "jardim", "terraço", "lavandaria"],
-    "pt-BR": ["cozinha", "sala", "quarto", "banheiro", "escritório", "garagem", "corredor", "porão", "sala de jantar", "jardim", "terraço", "lavanderia"],
-    "it": ["cucina", "soggiorno", "camera da letto", "bagno", "ufficio", "garage", "corridoio", "seminterrato", "sala da pranzo", "giardino", "terrazza", "lavanderia"],
-    "nl": ["keuken", "woonkamer", "slaapkamer", "badkamer", "kantoor", "garage", "gang", "kelder", "eetkamer", "tuin", "terras", "wasruimte"],
-    "ca": ["cuina", "sala d'estar", "dormitori", "bany", "oficina", "garatge", "passadís", "soterrani", "sala de dinar", "jardí", "terrassa", "sala de bugada"],
-    "da": ["køkken", "stue", "soveværelse", "badeværelse", "kontor", "garage", "gang", "kælder", "spisestue", "have", "terrasse", "vaskerum"],
-    "sv": ["kök", "vardagsrum", "sovrum", "badrum", "kontor", "garage", "hall", "källare", "matsal", "trädgård", "terrass", "tvättstuga"],
-    "nb": ["kjøkken", "stue", "soverom", "bad", "kontor", "garasje", "gang", "kjeller", "spisestue", "hage", "terrasse", "vaskerom"],
-    "fi": ["keittiö", "olohuone", "makuuhuone", "kylpyhuone", "toimisto", "autotalli", "käytävä", "kellari", "ruokailuhuone", "puutarha", "terassi", "pesula"],
-    "pl": ["kuchnia", "salon", "sypialnia", "łazienka", "biuro", "garaż", "korytarz", "piwnica", "jadalnia", "ogród", "taras", "pralnia"],
-    "ru": ["кухня", "гостиная", "спальня", "ванная", "офис", "гараж", "коридор", "подвал", "столовая", "сад", "терраса", "прачечная"],
-    "ro": ["bucătărie", "sufragerie", "dormitor", "baie", "birou", "garaj", "hol", "subsol", "sală de mese", "grădină", "terasă", "spălătorie"],
-    "ar": ["مطبخ", "غرفة المعيشة", "غرفة النوم", "حمام", "مكتب", "مرآب", "ممر", "قبو", "غرفة الطعام", "حديقة", "شرفة", "غرفة الغسيل"],
-    "he": ["מטבח", "סלון", "חדר שינה", "אמבטיה", "משרד", "מוסך", "מסדרון", "מרתף", "חדר אוכל", "גן", "מרפסת", "חדר כביסה"],
-    "ja": ["キッチン", "リビング", "寝室", "浴室", "書斎", "ガレージ", "廊下", "地下室", "ダイニング", "庭", "テラス", "洗濯室"],
-    "ko": ["부엌", "거실", "침실", "욕실", "사무실", "차고", "복도", "지하실", "식당", "정원", "테라스", "세탁실"],
-    "zh-CN": ["厨房", "客厅", "卧室", "浴室", "办公室", "车库", "走廊", "地下室", "餐厅", "花园", "露台", "洗衣房"],
-    "zh-TW": ["廚房", "客廳", "臥室", "浴室", "辦公室", "車庫", "走廊", "地下室", "餐廳", "花園", "露台", "洗衣房"],
-    "zh-HK": ["廚房", "客廳", "臥室", "浴室", "辦公室", "車庫", "走廊", "地下室", "餐廳", "花園", "露台", "洗衣房"],
-    "el": ["κουζίνα", "σαλόνι", "υπνοδωμάτιο", "μπάνιο", "γραφείο", "γκαράζ", "διάδρομος", "υπόγειο", "τραπεζαρία", "κήπος", "βεράντα", "πλυντήριο"],
-    "hu": ["konyha", "nappali", "hálószoba", "fürdőszoba", "iroda", "garázs", "folyosó", "pince", "étkező", "kert", "terasz", "mosókonyha"],
-    "cs": ["kuchyně", "obývací pokoj", "ložnice", "koupelna", "kancelář", "garáž", "chodba", "sklep", "jídelna", "zahrada", "terasa", "prádelna"],
-    "sk": ["kuchyňa", "obývačka", "spálňa", "kúpeľňa", "kancelária", "garáž", "chodba", "pivnica", "jedáleň", "záhrada", "terasa", "práčovňa"],
-    "sl": ["kuhinja", "dnevna soba", "spalnica", "kopalnica", "pisarna", "garaža", "hodnik", "klet", "jedilnica", "vrt", "terasa", "pralnica"],
-    "hr": ["kuhinja", "dnevni boravak", "spavaća soba", "kupaonica", "ured", "garaža", "hodnik", "podrum", "blagovaonica", "vrt", "terasa", "praona"],
-    "sr": ["кухиња", "дневна соба", "спаваћа соба", "купатило", "канцеларија", "гаража", "ходник", "подрум", "трпезарија", "башта", "тераса", "пераоница"],
-    "sr-Latn": ["kuhinja", "dnevna soba", "spavaća soba", "kupatilo", "kancelarija", "garaža", "hodnik", "podrum", "trpezarija", "bašta", "terasa", "peraonica"],
-    "bg": ["кухня", "хол", "спалня", "баня", "офис", "гараж", "коридор", "мазе", "трапезария", "градина", "тераса", "пералня"],
-    "uk": ["кухня", "вітальня", "спальня", "ванна кімната", "офіс", "гараж", "коридор", "підвал", "їдальня", "сад", "тераса", "пральня"],
-    "tr": ["mutfak", "oturma odası", "yatak odası", "banyo", "ofis", "garaj", "koridor", "bodrum", "yemek odası", "bahçe", "teras", "çamaşır odası"],
-    "th": ["ครัว", "ห้องนั่งเล่น", "ห้องนอน", "ห้องน้ำ", "ห้องทำงาน", "โรงรถ", "ทางเดิน", "ใต้ดิน", "ห้องอาหาร", "สวน", "ระเบียง", "ห้องซักรีด"],
-    "vi": ["nhà bếp", "phòng khách", "phòng ngủ", "phòng tắm", "văn phòng", "ga-ra", "hành lang", "tầng hầm", "phòng ăn", "vườn", "hiên", "phòng giặt"],
-    "id": ["dapur", "ruang tamu", "kamar tidur", "kamar mandi", "kantor", "garasi", "koridor", "ruang bawah tanah", "ruang makan", "taman", "teras", "ruang cuci"],
-    "ms": ["dapur", "ruang tamu", "bilik tidur", "bilik air", "pejabat", "garaj", "koridor", "ruang bawah tanah", "ruang makan", "taman", "teres", "bilik dobi"],
-    "ga": ["cistin", "seomra suí", "seomra codlata", "seomra folctha", "oifig", "garáiste", "halla", "bunús", "seomra bia", "gairdín", "terrás", "seomra níocháin"],
-    "cy": ["gegin", "ystafell fyw", "ystafell wely", "ystafell ymolchi", "swyddfa", "garej", "coridor", "celar", "ystafell fwyta", "gardd", "teras", "ystafell golchi"],
-    "et": ["köök", "elutuba", "magamistuba", "vannituba", "kontor", "garaaž", "koridor", "kelder", "söögituba", "aed", "terass", "pesuruum"],
-    "lt": ["virtuvė", "svetainė", "miegamasis", "vonios kambarys", "biuras", "garažas", "koridorius", "rūsys", "valgomasis", "sodas", "terasa", "skalbykla"],
-    "lv": ["virtuve", "dzīvojamā istaba", "guļamistaba", "vannas istaba", "birojs", "garāža", "koridors", "pagrabs", "ēdamistaba", "dārzs", "terase", "veļas mazgātava"],
-    "is": ["eldhús", "stofa", "svefnherbergi", "baðherbergi", "skrifstofa", "bílskúr", "gangur", "kjallari", "borðstofa", "garður", "svalir", "þvottahús"],
-    "af": ["kombuis", "sitkamer", "slaapkamer", "badkamer", "kantoor", "motorhuis", "gang", "kelder", "eetkamer", "tuin", "terras", "wasgoedkamer"],
-    "sw": ["jiko", "sebule", "chumba cha kulala", "bafu", "ofisi", "jengo la magari", "njia", "chumba cha chini", "chumba cha kula", "bustani", "varanda", "chumba cha kufulia"],
-    "eu": ["sukaldea", "egongela", "logela", "bainugela", "bulegoa", "garajea", "korridorea", "sotoa", "janogela", "lorategia", "terraza", "garbitze-gela"],
-    "gl": ["cociña", "sala de estar", "dormitorio", "cuarto de baño", "oficina", "garaxe", "corredor", "sótano", "comedor", "xardín", "terraza", "lavandería"],
-    "fa": ["آشپزخانه", "اتاق نشیمن", "اتاق خواب", "حمام", "دفتر", "گاراژ", "راهرو", "زیرزمین", "اتاق غذاخوری", "باغ", "تراس", "اتاق لباسشویی"],
-    "ne": ["भान्सा", "बैठक कोठा", "सुत्ने कोठा", "बाथरूम", "कार्यालय", "ग्यारेज", "बार", "भुइँतला", "भोजन कोठा", "बगैंचा", "चर्पी", "धुन पखाल्ने कोठा"],
-    "ka": ["სამზარეულო", "მისაღები ოთახი", "საძინებელი", "აბაზანა", "ოფისი", "ავტოფარეხი", "კორიდორი", "სარდაფი", "სასადილო ოთახი", "ფანჯარა", "ტერასა", "საპარსი"],
-    "bn": ["রান্নাঘর", "বসার ঘর", "শোনার ঘর", "বাথরুম", "অফিস", "গ্যারেজ", "বারান্দা", "বেসমেন্ট", "খাবার ঘর", "বাগান", "টেরাস", "ধোপার ঘর"],
-    "gu": ["રસોડું", "બેઠક", "સુવાનો ઓરડો", "બાથરૂમ", "ઓફિસ", "ગેરેજ", "બાર", "બેઝમેન્ટ", "જમવાનું ઓરડો", "બગીચો", "ટેરેસ", "ધોવાનો ઓરડો"],
-    "hi": ["रसोई", "बैठक", "बेडरूम", "बाथरूम", "दफ़्तर", "गैराज", "गली", "बेसमेंट", "भोजन कक्ष", "बगीचा", "बरामदा", "धोने का कमरा"],
-    "kn": ["ಅಡಿಗೆ ಮನೆ", "ಹಾಲ್", "ನಿದ್ರಾಕೋಶ", "ಬಾತ್ರೂಮ್", "ಕಚೇರಿ", "ಗಾರೇಜ್", "ಕಾರಿಡಾರ್", "ಬೇಸ್ಮೆಂಟ್", "ಊಟದ ಕೋಶ", "ತೋಟ", "ಟೆರೇಸ್", "ಒಗ್ಗುವ ಕೋಶ"],
-    "ml": ["അടുക്കളം", "കഴിക്കുന്ന മുറി", "കിടക്കയ്ക്കുള്ള മുറി", "കുളിമുറി", "ഓഫീസ്", "ഗാരേജ്", "കോറിഡോർ", "ബേസ്മെന്റ്", "ഭക്ഷണമുറി", "പൂന്തോട്ടം", "ടെറസ്", "വസ്ത്രം കഴിയുന്ന മുറി"],
-    "mr": ["स्वयंपाकघर", "बसण्याची खोली", "जोपायची खोली", "बाथरूम", "ऑफिस", "गॅरेज", "कॉरिडॉर", "बेसमेंट", "जेवणाची खोली", "बाग", "टेरेस", "धुण्याची खोली"],
-    "pa": ["ਰਸੋਈ", "ਬੈਠਕ", "ਸੌਣ ਵਾਲਾ ਕਮਰਾ", "ਬਾਥਰੂਮ", "ਦਫਤਰ", "ਗੈਰੇਜ", "ਗਲੀ", "ਬੇਸਮੈਂਟ", "ਖਾਣ ਵਾਲਾ ਕਮਰਾ", "ਬਾਗ", "ਟੈਰੇਸ", "ਧੋਣ ਵਾਲਾ ਕਮਰਾ"],
-    "ta": ["சமையலறை", "பெற்று அறை", "கடுக்கை அறை", "குளியலறை", "பணி இடம்", "வாகன நிறுத்தம்", "நடைபாதை", "அடித்தளம்", "உணவு அறை", "தோட்டம்", "முற்றம்", "துவைப்பு அறை"],
-    "te": ["వంటగది", "సభా గది", "నిద్ర గది", "స్నానగది", "కార్యాలయం", "గ్యారేజ్", "కారిడార్", "బేస్మెంట్", "భోజన గది", "తోట", "టెరస్", "ఉతికే గది"],
-    "ur": ["باتھ روم", "بیٹھک", "سونے کا کمرہ", "باتھ روم", "دفتر", "گیراج", "گلی", "تہہ خانہ", "کھانے کا کمرہ", "باغ", "چبوترا", "دھونے کا کمرہ"],
-    "mn": ["гал тогоо", "зочны өрөө", "унтлагын өрөө", "усанд орох өрөө", "оффис", "гараж", "коридор", "суурь", "хоолны өрөө", "цэцэрлэг", "терасс", "угаалгын өрөө"],
-    "kw": ["kek", "rom godhesi", "kewor", "rom ymolchi", "offis", "garaj", "koryor", "kelder", "rom dybri", "lowarth", "teras", "rom yowghi"],
-    "lb": ["Kichen", "Wunnzëmmer", "Schlofzëmmer", "Buedzëmmer", "Büro", "Garage", "Gank", "Keller", "Iesszëmmer", "Gaart", "Terrass", "Wäschkichen"],
-}
+_HERE = Path(__file__).resolve().parent
+_BASE_LOCALE = _HERE / "base_locale"
+
+
+def _area_names_for_lang(lang: str) -> list[str]:
+    """Read translated area names from ``base_locale/<lang>/area.entity``."""
+    path = _BASE_LOCALE / lang / "area.entity"
+    if not path.is_file():
+        return []
+    return [
+        ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()
+        if ln.strip()
+    ]
+
 
 # ---------------------------------------------------------------------------
 # Template rewriting
@@ -1725,16 +1673,18 @@ def convert(
         if target.exists():
             entities_written += 1
 
-    # Seed area.entity with common names if the language is covered and
-    # the file does not already exist (e.g. from a materialised hassil list).
+    # Seed area.entity with common names if the language is covered by
+    # base_locale and the file does not already exist.
     area_entity = out / "area.entity"
-    if not (resume and area_entity.exists()) and lang in COMMON_AREA_NAMES:
-        aw = _StreamWriter(area_entity)
-        try:
-            for name in COMMON_AREA_NAMES[lang]:
-                aw.write(name)
-        finally:
-            aw.close()
+    if not (resume and area_entity.exists()):
+        area_names = _area_names_for_lang(lang)
+        if area_names:
+            aw = _StreamWriter(area_entity)
+            try:
+                for name in area_names:
+                    aw.write(name)
+            finally:
+                aw.close()
 
     if owns_report:
         report.close()
