@@ -12,7 +12,6 @@ from ovos_spec_tools.datasets import (
     SUPPORTED_DATASETS,
     expand_hf_template,
     export_to_locale,
-    inline_keywords,
     load_dataset_templates,
     _normalize_rows,
     _resolve_config,
@@ -189,55 +188,6 @@ class TestExportToLocale:
             intent_path = dst / "locale" / "en" / f"{name}.intent"
             assert intent_path.exists()
             assert rows[0]["template"] in intent_path.read_text()
-
-
-# ---------------------------------------------------------------------------
-# inline_keywords
-# ---------------------------------------------------------------------------
-
-
-class TestInlineKeywords:
-    def test_basic_inlining(self):
-        tpl = "<turn_on> [the] {name}"
-        exps = [{"keyword": "turn_on", "values": ["turn on", "switch on"]}]
-        assert inline_keywords(tpl, exps) == "(turn on|switch on) [the] {name}"
-
-    def test_nested_refs(self):
-        tpl = "<broadcast> <everywhere>"
-        exps = [
-            {"keyword": "broadcast", "values": ["<a>ذع", "بلغ"]},
-            {"keyword": "a", "values": ["آ", "أ"]},
-            {"keyword": "everywhere", "values": ["كل مكان"]},
-        ]
-        result = inline_keywords(tpl, exps)
-        assert "(آ|أ)ذع" in result or "(أ|آ)ذع" in result
-        assert "بلغ" in result
-        assert "كل مكان" in result
-
-    def test_unresolvable_keyword(self):
-        tpl = "<nope> lights"
-        result = inline_keywords(tpl)
-        assert result == "<nope> lights"  # no vocab → no change
-
-    def test_flat_vocab(self):
-        tpl = "<greet> world"
-        result = inline_keywords(tpl, flat_vocab={"greet": ["hi", "hello"]})
-        assert result == "(hi|hello) world"
-
-    def test_max_values_cap(self):
-        tpl = "<x>"
-        exps = [{"keyword": "x", "values": [str(i) for i in range(20)]}]
-        result = inline_keywords(tpl, exps, max_values=5)
-        assert "|".join(str(i) for i in range(5)) in result
-        assert "10" not in result
-
-    def test_no_keyword_refs(self):
-        tpl = "hello world"
-        assert inline_keywords(tpl) == "hello world"
-
-    def test_empty_expansions(self):
-        tpl = "<x>"
-        assert inline_keywords(tpl, []) == "<x>"
 
 
 # ---------------------------------------------------------------------------

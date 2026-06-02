@@ -186,12 +186,6 @@ Expand a template into concrete utterances. `expansions` is a list of
 `{"keyword", "values"}` dicts (as found in the `expansions` column of
 hassil-intents). Uses `ovos_spec_tools.expansion.expand` under the hood.
 
-### `inline_keywords(template, expansions=None, *, flat_vocab=None, max_values=10) -> str`
-
-Inline ``<keyword>`` references as ``(v1|v2|…)`` alternation groups for engines
-that don't support ``.voc`` lookups (e.g. Padatious). Handles nested references
-recursively; unresolvable keywords have their brackets stripped.
-
 ### `export_to_locale(dataset_id, lang, output_dir, *, split="train", streaming=True) -> int`
 
 Export templates from a HF dataset into an OVOS-INTENT-2 locale directory at

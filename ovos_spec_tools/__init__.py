@@ -114,14 +114,12 @@ try:
         SUPPORTED_DATASETS,
         expand_hf_template,
         export_to_locale,
-        inline_keywords,
         load_dataset_templates,
     )
 except ImportError:
     SUPPORTED_DATASETS = {}
     expand_hf_template = None  # type: ignore[assignment]
     export_to_locale = None  # type: ignore[assignment]
-    inline_keywords = None  # type: ignore[assignment]
     load_dataset_templates = None  # type: ignore[assignment]
 
 __all__ = [
@@ -173,7 +171,6 @@ __all__ = [
     "NamespaceTranslator",
     "load_dataset_templates",
     "expand_hf_template",
-    "inline_keywords",
     "export_to_locale",
     "SUPPORTED_DATASETS",
     "__version__",
