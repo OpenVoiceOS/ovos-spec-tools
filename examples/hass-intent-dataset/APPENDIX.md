@@ -3,7 +3,7 @@
 This appendix formalises the mapping between the [hassil] intent grammar
 (used by Home Assistant's [OHF-Voice/intents] corpus) and the
 OVOS-INTENT-1 / OVOS-INTENT-2 resource model. It documents the rules
-implemented by `examples/convert_hassil_intents.py` and the trade-offs
+implemented by `examples/hass-intent-dataset/convert_hassil_intents.py` and the trade-offs
 the script makes when the two formats disagree.
 
 This is **not** a normative OVOS specification. It is a reference for
@@ -231,33 +231,32 @@ the canonical parent.
 
 ## 6. Sample validation — OVOS-INTENT-1 §3.6 / §5.5
 
-OVOS-INTENT-1 imposes three constraints hassil does not:
+OVOS-INTENT-1 imposes two constraints hassil does not:
 
   * **No adjacent slots** — `{a} {b}` is forbidden; a literal word must
     separate any two slots. Hassil allows it.
   * **No repeated slot names per sample** — `{a} and {a}` is forbidden.
     Hassil allows it.
-  * **Uniform slot signature** — every sample in one `.intent` (and
-    every phrase in one `.dialog`) must declare the same `{slot}` set.
-    Hassil allows mixed signatures across data blocks.
 
-The converter materialises the slot-only structure of each template
-(literal text replaced with whitespace, slot markers preserved) and
-runs the Cartesian enumeration against that. For each rejected
-enumeration path the converter falls back to **path-level salvage**:
+The third historical constraint — **uniform slot signature** (§5.5) —
+was relaxed in OVOS-INTENT-1 v3. `.intent` files now allow templates
+with differing slot sets under union semantics. Every valid path is
+kept regardless of its signature.
+
+When a template has some enumerated paths that violate §3.6, the
+converter falls back to **path-level salvage**:
 
   1. Enumerate the full template (literal text included).
   2. Drop paths that violate §3.6 (adjacency or repeated slots).
-  3. Group the survivors by slot signature.
-  4. Emit only the group with the maximal signature (matches the
-     compact-form sig used by sibling samples).
+  3. Keep every surviving path regardless of slot signature (v3
+     union semantics).
 
 If every path is invalid the sample is logged as `all_paths_invalid`
 and dropped.
 
-Dialog phrase sets recovered from `{% if … %}` branches handle §5.5
-differently — see §8.2 — because dropping a branch means losing one
-conditional response, which is worse than emitting an extra file.
+Dialog phrase sets recovered from `{% if … %}` branches are exempt from
+the union-sig rule — see §8.2 — because dropping a branch means losing
+one conditional response, which is worse than emitting an extra file.
 
 ## 7. Safety caps
 
@@ -268,7 +267,7 @@ exponential string explosion. The converter guards every stage:
 |-----|-------|---------|
 | `MAX_PERM_ELEMS` | 5 | permutations of >5 elements collapse to literal concatenation |
 | `MAX_SAMPLE_BYTES` | 4 KiB | drop any rewritten template larger than this |
-| `MAX_SAMPLE_PATHS` | 2048 | drop samples whose Cartesian expansion exceeds this |
+| `MAX_SAMPLE_PATHS` | 20000 | drop samples whose Cartesian expansion exceeds this |
 | `MAX_ENTITY_VALUES` | 2000 | cap on `range:` list materialisation |
 | `MAX_RULE_BYTES` | 16 KiB | short-circuit fixed-point rule inlining if a body blows up |
 | `PROMOTE_RULE_THRESHOLD` | 2 | any rule with ≥1 alt/opt becomes a `.voc` file |
@@ -328,7 +327,7 @@ template-to-template converter.
 ## 9. Audit log
 
 Every hard failure is recorded in
-`examples/convert_hassil_intents.skipped.tsv` with columns:
+`examples/hass-intent-dataset/convert_hassil_intents.skipped.tsv` with columns:
 
     lang     language code (ISO 639-1 / BCP-47)
     kind     "sample" | "response" | "entity"
@@ -353,9 +352,11 @@ The conversion is **lossy** and **one-way**:
   * Path-salvage emits literal enumerations in place of the original
     compact template — the `{slot}` placeholders survive but the
     optional grouping does not.
-  * §5.5 enforcement picks the maximal-signature group for *samples*,
-    dropping sub-signature branches; for *dialogs* sub-signature
-    branches land in `_branch_<n>` companion files instead.
+  * §5.5 v3 union semantics means samples with differing slot signatures
+    are kept as separate template lines — they are not grouped or
+    salvaged into `_branch_<n>` files. For *dialogs*, sub-signature
+    branches from `{% if %}` decomposition still land in
+    `_branch_<n>` files (see §8.2).
   * The canonical-name table folds language-local rule names to
     English topic names — the reverse direction would need the same
     table read backwards (one canonical name → multiple local names).
