@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.8.0a2) (2026-06-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.8.0a1...0.8.0a2)
+
+**Merged pull requests:**
+
+- docs: standardize NGI0 Commons Fund attribution [\#24](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/24) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.8.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.8.0a1) (2026-06-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.7.0a1...0.8.0a1)
