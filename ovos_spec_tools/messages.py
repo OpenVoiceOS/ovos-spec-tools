@@ -17,8 +17,10 @@ would deliver legacy-shaped data on the new topic.
 Topics with placeholders (``ovos.pipeline.<pipeline_id>.intents.list``,
 ``<skill_id>:<intent_name>``) are not enum members.
 """
+import json as _json
+import time
 from enum import Enum
-from typing import Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 
 class SpecMessage(str, Enum):
@@ -108,3 +110,69 @@ def migration_counterpart(topic: str) -> Optional[str]:
     if topic in MIGRATION_MAP:
         return MIGRATION_MAP[topic].value
     return SPEC_TO_LEGACY.get(topic)
+
+
+class NamespaceTranslator:
+    """Shared legacy<->``ovos.*`` bus-namespace migration logic.
+
+    Used by both ``ovos_bus_client.MessageBusClient`` and
+    ``ovos_utils.fakebus.FakeBus`` so the real bus and the test/satellite double
+    behave identically. Pure logic: the two flags are passed in (the caller reads
+    env/config), keeping ``ovos-spec-tools`` dependency-free.
+
+    Args:
+        modernize: emitting a legacy topic also emits the ``ovos.*`` spec topic.
+        emit_legacy: emitting an ``ovos.*`` spec topic also emits the legacy topic.
+        window: seconds within which a counterpart re-delivery is a "mirror".
+    """
+
+    def __init__(self, modernize: bool = True, emit_legacy: bool = True,
+                 window: float = 1.0):
+        self.modernize = modernize
+        self.emit_legacy = emit_legacy
+        self.window = window
+
+    def counterpart_topics(self, msg_type: str) -> List[str]:
+        """Topic(s) a producer should ALSO emit for ``msg_type`` (0 or 1)."""
+        if self.modernize and msg_type in MIGRATION_MAP:
+            return [MIGRATION_MAP[msg_type].value]
+        if self.emit_legacy and msg_type in SPEC_TO_LEGACY:
+            return [SPEC_TO_LEGACY[msg_type]]
+        return []
+
+    def is_migrated(self, topic: str) -> bool:
+        """Whether ``topic`` participates in the migration (needs dedup)."""
+        return topic in MIGRATION_MAP or topic in SPEC_TO_LEGACY
+
+    def new_mirror_guard(self,
+                         clock: Optional[Callable[[], float]] = None
+                         ) -> Callable[[object], bool]:
+        """Return a per-handler ``is_mirror(message) -> bool`` with private state.
+
+        Returns True when ``message`` is the legacy/``ovos.*`` mirror of one just
+        handled — same payload+context re-delivered via the COUNTERPART topic
+        within the window — so the handler runs once. Two genuine events on the
+        SAME topic are never suppressed. ``clock`` defaults to
+        ``time.monotonic`` (resolved per call, so it stays monkeypatchable).
+        """
+        seen: Dict[str, tuple] = {}
+        window = self.window
+
+        def is_mirror(message) -> bool:
+            try:
+                mtype = message.msg_type
+                fingerprint = _json.dumps([message.data, message.context],
+                                          sort_keys=True, default=str)
+            except Exception:
+                return False
+            now = (clock or time.monotonic)()
+            for key in [k for k, (_, ts) in seen.items() if now - ts >= window]:
+                seen.pop(key, None)
+            prev = seen.get(fingerprint)
+            if prev is not None and prev[0] != mtype \
+                    and migration_counterpart(prev[0]) == mtype:
+                return True
+            seen[fingerprint] = (mtype, now)
+            return False
+
+        return is_mirror

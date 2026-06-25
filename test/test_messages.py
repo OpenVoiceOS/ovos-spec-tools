@@ -4,9 +4,67 @@ import unittest
 from ovos_spec_tools import (
     MIGRATION_MAP,
     SPEC_TO_LEGACY,
+    NamespaceTranslator,
     SpecMessage,
     migration_counterpart,
 )
+
+
+class _Msg:
+    def __init__(self, msg_type, data=None, context=None):
+        self.msg_type = msg_type
+        self.data = data or {}
+        self.context = context or {}
+
+
+class TestNamespaceTranslator(unittest.TestCase):
+    def test_counterpart_topics_directions(self):
+        t = NamespaceTranslator(modernize=True, emit_legacy=True)
+        self.assertEqual(t.counterpart_topics("speak"), ["ovos.utterance.speak"])
+        self.assertEqual(t.counterpart_topics("ovos.utterance.handle"),
+                         ["recognizer_loop:utterance"])
+        self.assertEqual(t.counterpart_topics("some.topic"), [])
+
+    def test_flags_gate_each_direction(self):
+        only_mod = NamespaceTranslator(modernize=True, emit_legacy=False)
+        self.assertEqual(only_mod.counterpart_topics("speak"), ["ovos.utterance.speak"])
+        self.assertEqual(only_mod.counterpart_topics("ovos.utterance.speak"), [])
+        only_leg = NamespaceTranslator(modernize=False, emit_legacy=True)
+        self.assertEqual(only_leg.counterpart_topics("speak"), [])
+        self.assertEqual(only_leg.counterpart_topics("ovos.utterance.speak"), ["speak"])
+
+    def test_is_migrated(self):
+        t = NamespaceTranslator()
+        self.assertTrue(t.is_migrated("speak"))
+        self.assertTrue(t.is_migrated("ovos.utterance.speak"))
+        self.assertFalse(t.is_migrated("random.topic"))
+
+    def test_mirror_guard_drops_counterpart_pair(self):
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"utterance": "hi"}
+        self.assertFalse(guard(_Msg("speak", data)))
+        self.assertTrue(guard(_Msg("ovos.utterance.speak", data)))  # mirror
+
+    def test_mirror_guard_keeps_same_topic_repeats(self):
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"utterance": "ok"}
+        self.assertFalse(guard(_Msg("speak", data)))
+        self.assertFalse(guard(_Msg("speak", data)))  # genuine repeat, same topic
+
+    def test_mirror_guard_distinct_context_not_collapsed(self):
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"utterance": "hi"}
+        self.assertFalse(guard(_Msg("speak", data, {"session": {"session_id": "A"}})))
+        self.assertFalse(guard(_Msg("ovos.utterance.speak", data,
+                                    {"session": {"session_id": "B"}})))
+
+    def test_mirror_guard_window_expiry(self):
+        clk = {"t": 0.0}
+        guard = NamespaceTranslator(window=1.0).new_mirror_guard(clock=lambda: clk["t"])
+        data = {"utterance": "hi"}
+        self.assertFalse(guard(_Msg("speak", data)))
+        clk["t"] = 2.0
+        self.assertFalse(guard(_Msg("ovos.utterance.speak", data)))  # window passed
 
 
 class TestSpecMessage(unittest.TestCase):
