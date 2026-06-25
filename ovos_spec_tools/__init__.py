@@ -41,6 +41,12 @@ from ovos_spec_tools.language import (
     standardize_lang,
 )
 from ovos_spec_tools.lint import Finding, lint_locale
+from ovos_spec_tools.messages import (
+    MIGRATION_MAP,
+    SPEC_TO_LEGACY,
+    SpecMessage,
+    migration_counterpart,
+)
 from ovos_spec_tools.prompt import PromptRenderer, render_prompt
 from ovos_spec_tools.resources import (
     LocaleResources,
@@ -84,5 +90,9 @@ __all__ = [
     "closest_lang",
     "lint_locale",
     "Finding",
+    "SpecMessage",
+    "MIGRATION_MAP",
+    "SPEC_TO_LEGACY",
+    "migration_counterpart",
     "__version__",
 ]
