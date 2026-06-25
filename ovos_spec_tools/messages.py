@@ -145,14 +145,15 @@ class NamespaceTranslator:
         return topic in MIGRATION_MAP or topic in SPEC_TO_LEGACY
 
     def new_mirror_guard(self,
-                         clock: Callable[[], float] = time.monotonic
+                         clock: Optional[Callable[[], float]] = None
                          ) -> Callable[[object], bool]:
         """Return a per-handler ``is_mirror(message) -> bool`` with private state.
 
         Returns True when ``message`` is the legacy/``ovos.*`` mirror of one just
         handled — same payload+context re-delivered via the COUNTERPART topic
         within the window — so the handler runs once. Two genuine events on the
-        SAME topic are never suppressed.
+        SAME topic are never suppressed. ``clock`` defaults to
+        ``time.monotonic`` (resolved per call, so it stays monkeypatchable).
         """
         seen: Dict[str, tuple] = {}
         window = self.window
@@ -164,7 +165,7 @@ class NamespaceTranslator:
                                           sort_keys=True, default=str)
             except Exception:
                 return False
-            now = clock()
+            now = (clock or time.monotonic)()
             for key in [k for k, (_, ts) in seen.items() if now - ts >= window]:
                 seen.pop(key, None)
             prev = seen.get(fingerprint)
