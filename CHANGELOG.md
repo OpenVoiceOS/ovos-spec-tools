@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.10.0a1) (2026-06-25)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.9.0a1...0.10.0a1)
+
+**Merged pull requests:**
+
+- feat: add NamespaceTranslator \(shared bus-namespace migration logic\) [\#28](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/28) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.9.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.9.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.8.0a2...0.9.0a1)
