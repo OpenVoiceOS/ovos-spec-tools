@@ -44,6 +44,7 @@ from ovos_spec_tools.lint import Finding, lint_locale
 from ovos_spec_tools.messages import (
     MIGRATION_MAP,
     SPEC_TO_LEGACY,
+    NamespaceTranslator,
     SpecMessage,
     migration_counterpart,
 )
@@ -94,5 +95,6 @@ __all__ = [
     "MIGRATION_MAP",
     "SPEC_TO_LEGACY",
     "migration_counterpart",
+    "NamespaceTranslator",
     "__version__",
 ]
