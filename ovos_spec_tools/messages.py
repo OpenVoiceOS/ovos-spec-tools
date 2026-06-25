@@ -39,7 +39,7 @@ class SpecMessage(str, Enum):
         # "SpecMessage.SPEAK"
         return self.value
 
-    # --- PIPELINE-1 (merged) ---
+    # --- PIPELINE-1 ---
     UTTERANCE = "ovos.utterance.handle"
     SPEAK = "ovos.utterance.speak"
     UTTERANCE_HANDLED = "ovos.utterance.handled"
@@ -50,7 +50,7 @@ class SpecMessage(str, Enum):
     INTENT_HANDLER_COMPLETE = "ovos.intent.handler.complete"
     INTENT_HANDLER_ERROR = "ovos.intent.handler.error"
 
-    # --- INTENT-4 (merged) ---
+    # --- INTENT-4 ---
     INTENT_REGISTER_KEYWORD = "ovos.intent.register.keyword"
     INTENT_REGISTER_TEMPLATE = "ovos.intent.register.template"
     INTENT_DEREGISTER = "ovos.intent.deregister"
@@ -64,17 +64,15 @@ class SpecMessage(str, Enum):
     INTENT_DESCRIBE = "ovos.intent.describe"
     INTENT_DESCRIBE_RESPONSE = "ovos.intent.describe.response"
 
-    # --- STOP-1 (merged) ---
+    # --- STOP-1 ---
     STOP_PING = "ovos.stop.ping"
     STOP_PONG = "ovos.stop.pong"
     STOP = "ovos.stop"
 
-    # --- AUDIO-1 (provisional, PR #38) ---
+    # --- AUDIO-1 ---
     AUDIO_OUTPUT_STARTED = "ovos.audio.output.started"
     AUDIO_OUTPUT_ENDED = "ovos.audio.output.ended"
     MIC_LISTEN = "ovos.mic.listen"
-
-    # --- AUDIO-IN-1 listening signals (provisional, PR #69) ---
     LISTENER_RECORD_STARTED = "ovos.listener.record.started"
     LISTENER_RECORD_ENDED = "ovos.listener.record.ended"
     LISTENER_SLEEP = "ovos.listener.sleep"
