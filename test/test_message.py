@@ -137,6 +137,45 @@ class TestSerialization:
         assert parsed["data"] == {}
         assert parsed["context"] == {}
 
+    def test_serialize_rejects_empty_type(self):
+        """§2.1/§7 producer MUST: ``serialize`` is the conformance gate and
+        MUST refuse to emit an empty ``type``."""
+        with pytest.raises(MalformedMessage):
+            Message("").serialize()
+
+    def test_serialize_after_forward_from_empty_scaffold_ok(self):
+        """The construct-then-forward scaffold becomes serializable once it
+        has a real topic."""
+        m = Message("").forward("ovos.real", {"k": "v"})
+        parsed = json.loads(m.serialize())
+        assert parsed["type"] == "ovos.real"
+
+    def test_deserialize_rejects_wrong_type_data(self):
+        """§2.2/§6: a present-but-non-object ``data`` MUST be rejected, not
+        silently coerced to ``{}``."""
+        for bad in ([], 0, False, "x"):
+            with pytest.raises(MalformedMessage):
+                Message.deserialize({"type": "ovos.test", "data": bad})
+
+    def test_deserialize_rejects_wrong_type_context(self):
+        """§2.3/§6: a present-but-non-object ``context`` MUST be rejected."""
+        for bad in ([], 0, False, "x"):
+            with pytest.raises(MalformedMessage):
+                Message.deserialize({"type": "ovos.test", "context": bad})
+
+    def test_deserialize_absent_or_null_data_defaults_to_empty(self):
+        """§2.2/§2.3: an absent (or explicit null) ``data``/``context`` is
+        equivalent to ``{}`` — that is still allowed."""
+        m = Message.deserialize({"type": "ovos.test"})
+        assert m.data == {} and m.context == {}
+        m2 = Message.deserialize({"type": "ovos.test", "data": None,
+                                  "context": None})
+        assert m2.data == {} and m2.context == {}
+
+    def test_deserialize_preserves_empty_dict_data(self):
+        m = Message.deserialize({"type": "ovos.test", "data": {}})
+        assert m.data == {}
+
 
 # --- §5.1 forward -----------------------------------------------------------
 

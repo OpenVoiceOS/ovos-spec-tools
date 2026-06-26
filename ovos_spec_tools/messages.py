@@ -15,11 +15,16 @@ is tied to its owning spec section in the per-member comments below:
   introspection topics (§§5–8, §10);
 - **OVOS-STOP-1** — §4.2 ping/pong and §5 global-stop broadcast
   (``ovos.stop.*``);
-- **OVOS-AUDIO-IN-1** — listener / mic / audio-output signals
-  (``ovos.mic.listen``, ``ovos.listener.*``, ``ovos.audio.output.*``).
-  These topic *names* are settled (memory: listening signals → AUDIO-IN-1
-  ``ovos.listener.*``); the owning spec prose is still landing, so they are
-  flagged **provisional** at their definitions.
+- **OVOS-AUDIO-IN-1** — listener lifecycle signals (``ovos.listener.*``).
+  AUDIO-IN-1 §6.1–§6.4 is **merged**, so ``ovos.listener.record.started`` /
+  ``.record.ended`` / ``ovos.listener.sleep`` / ``ovos.listener.awoken`` are
+  **mandated** (not provisional);
+- **OVOS-AUDIO-1** *(open PR, unmerged)* — the audio **output** service's
+  playback-lifecycle and mic-reopen signals (``ovos.audio.output.started`` /
+  ``.output.ended`` §5.1/§5.2, ``ovos.mic.listen`` §4.4). The owning spec
+  (audio-out, PR #38) is **not yet merged**, so these three are genuinely
+  **PROVISIONAL** — their topic strings are stable but the normative prose
+  could still change before merge.
 
 Why an enum
 -----------
@@ -29,23 +34,45 @@ Referencing ``SpecMessage.SPEAK`` instead of the raw
 visibly legacy or implementation-specific. The enum is the *vocabulary* half
 of the migration; :data:`MIGRATION_MAP` is the *rename* half.
 
-The transparent bridge (``MIGRATION_MAP`` / :class:`NamespaceTranslator`)
-------------------------------------------------------------------------
+The legacy↔``ovos.*`` bridge (``MIGRATION_MAP`` / :class:`NamespaceTranslator`)
+-------------------------------------------------------------------------------
 ``MIGRATION_MAP`` maps each legacy topic to the ``SpecMessage`` that replaces
-it. The bridge is **payload-compatible and transparent**: a producer emits
-only the spec topic, and the bus dual-emit (``ovos-bus-client``'s
-``MessageBusClient`` and ``ovos_utils.fakebus.FakeBus``, both driven by
-:class:`NamespaceTranslator`) *also* delivers the **same payload** under the
-counterpart topic, so consumers still subscribed to the legacy name during
-the migration window keep working without code changes. The receive side
-deduplicates the mirror (see :meth:`NamespaceTranslator.new_mirror_guard`) so
-a handler subscribed to both names runs once.
+it. The bus dual-emit (``ovos-bus-client``'s ``MessageBusClient`` and
+``ovos_utils.fakebus.FakeBus``, both driven by :class:`NamespaceTranslator`)
+mirrors an emission onto its counterpart topic so a consumer still subscribed
+to the legacy name during the migration window keeps receiving the event. The
+receive side deduplicates the mirror (see
+:meth:`NamespaceTranslator.new_mirror_guard`) so a handler subscribed to both
+names runs once.
 
-Because the bridge mirrors the payload **verbatim**, only renames that need
-no payload transformation can live in the map. The two deliberate exclusions
-are documented at :data:`MIGRATION_MAP`: the OVOS-INTENT-4 registration
-*consolidation* (an N→1 restructure the bus cannot synthesize) and the
-per-skill placeholder ``ovos.stop.*`` ping topics (not static strings).
+Payload translation, not verbatim mirroring. Some renames are *payload
+compatible* (the legacy and spec topics carry the same ``data`` shape) and the
+mirror forwards the payload unchanged. Others are *shape-changing* renames
+(the handler trio, the INTENT-4 management topics): for those, forwarding the
+producer's payload verbatim would hand a legacy-only consumer spec-shaped
+``data`` it cannot read. :data:`MIGRATION_PAYLOAD_TRANSFORMS` therefore pairs
+each shape-changing topic with two pure functions and
+:meth:`NamespaceTranslator.translate_payload` applies the right one per
+direction, so the mirrored payload is in the **recipient's** shape. Several
+transforms are **best-effort / lossy** (a field that does not exist in the
+other shape is synthesized or dropped); each lossy case is documented at
+:data:`MIGRATION_PAYLOAD_TRANSFORMS`. There is no longer a blanket
+"legacy consumers keep working without code changes" guarantee: it holds for
+payload-compatible renames, and holds *best-effort* (with documented loss) for
+the shape-changing ones.
+
+Two renames stay out of the map entirely because no per-topic payload
+transform can bridge them: the OVOS-INTENT-4 *registration* consolidation (an
+N→1 restructure the stateless bus cannot synthesize) and the per-skill
+placeholder ``ovos.stop.*`` ping topics (not static strings). Both are
+documented at :data:`MIGRATION_MAP`.
+
+Note on dual-emit and MSG-1 §5.4. The dual-emit/mirror-window behaviour is a
+non-normative **implementation policy** of this migration tooling, not a
+spec-mandated mechanism. No OVOS specification mandates dual-emit, and
+OVOS-MSG-1 §5.4 explicitly disavows any host-side correlation/bookkeeping of
+the kind a mirror window resembles; the window here is a pragmatic dedup
+heuristic for the migration period, scoped to :class:`NamespaceTranslator`.
 
 Out of enum / map scope (OVOS-MSG-1 §2.1.1 runtime-assembled topics)
 --------------------------------------------------------------------
@@ -58,7 +85,7 @@ placeholders (STOP-1).
 import json as _json
 import time
 from enum import Enum
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
 class SpecMessage(str, Enum):
@@ -138,45 +165,69 @@ class SpecMessage(str, Enum):
     #: §5.3 — universal stop broadcast; ``ovos.stop.*`` namespace is reserved by STOP-1.
     STOP = "ovos.stop"
 
-    # --- OVOS-AUDIO-IN-1 listener / mic / audio-output signals (provisional) ---
-    # Topic names settled; owning AUDIO-IN-1 prose still landing (see module docstring).
+    # --- OVOS-AUDIO-1 audio-OUTPUT signals (PROVISIONAL: owning spec unmerged) ---
+    # Defined by OVOS-AUDIO-1 (audio-out.md, open PR #38), NOT by AUDIO-IN-1.
+    # The spec is not yet merged, so these three are genuinely provisional —
+    # the topic strings are stable but the normative prose may still change.
+    #: AUDIO-1 §5.1 — playback session started; audio-output → broadcast. PROVISIONAL.
     AUDIO_OUTPUT_STARTED = "ovos.audio.output.started"
+    #: AUDIO-1 §5.2 — playback session ended; audio-output → broadcast. PROVISIONAL.
     AUDIO_OUTPUT_ENDED = "ovos.audio.output.ended"
+    #: AUDIO-1 §4.4 — re-open the mic after a ``listen: true`` item; audio-output →
+    #: broadcast. PROVISIONAL.
     MIC_LISTEN = "ovos.mic.listen"
+
+    # --- OVOS-AUDIO-IN-1 listener lifecycle signals (§6, MERGED → mandated) ---
+    #: §6.1 — voice-command capture began; audio-input → broadcast.
     LISTENER_RECORD_STARTED = "ovos.listener.record.started"
+    #: §6.2 — voice-command capture ended; audio-input → broadcast.
     LISTENER_RECORD_ENDED = "ovos.listener.record.ended"
+    #: §6.3 — controller → audio-input: enter sleep mode and suspend capture.
     LISTENER_SLEEP = "ovos.listener.sleep"
+    #: §6.4 — left sleep mode (sleep→awake transition); audio-input → broadcast.
     LISTENER_AWOKEN = "ovos.listener.awoken"
 
 
 #: Legacy (Mycroft-era) topic -> the :class:`SpecMessage` that supersedes it.
 #: This is the single source of truth for the legacy↔``ovos.*`` renames that
-#: the bus bridges transparently. ``NamespaceTranslator`` reads it (and its
-#: reverse, :data:`SPEC_TO_LEGACY`) so a producer emits only the spec topic and
-#: the bus dual-emits the legacy counterpart carrying the **same payload** —
-#: consumers still on a legacy topic during the migration window keep receiving
-#: data. Every entry here is a rename the bus can bridge **without transforming
-#: the payload**; the two deliberate exclusions are documented at the bottom.
+#: the bus bridges. ``NamespaceTranslator`` reads it (and its reverse,
+#: :data:`SPEC_TO_LEGACY`) to pick the counterpart topic; it then translates the
+#: payload into the recipient's shape via :data:`MIGRATION_PAYLOAD_TRANSFORMS`
+#: (identity for payload-compatible renames), so a consumer still on the legacy
+#: topic during the migration window receives ``data`` it can read.
 #:
-#: For the renames marked "payload restructured" below (the handler trio and the
-#: INTENT-4 management topics), the *bridge itself* still does not transform
-#: anything: once the **producer** has adopted the spec payload shape
-#: ({skill_id, intent_name}), the mirror carries that already-modern payload on
-#: the legacy topic too. The restructure is a producer-side adoption, the bridge
-#: is the topic rename — they compose, but the map only owns the rename.
+#: Two kinds of entry live here:
+#:
+#: * **Payload-compatible renames** — legacy and spec topics carry the same
+#:   ``data`` shape; the mirror forwards the payload unchanged (identity
+#:   transform). Most entries are of this kind.
+#: * **Shape-changing renames** — the handler trio
+#:   (``mycroft.skill.handler.*``) and the INTENT-4 management topics
+#:   (``detach_intent``, ``enable_intent``/``disable_intent``) change the
+#:   payload shape across the rename. For these the bridge does NOT forward the
+#:   payload verbatim: :data:`MIGRATION_PAYLOAD_TRANSFORMS` carries a
+#:   best-effort, sometimes lossy transform pair (documented there) that
+#:   reshapes the payload per direction.
+#:
+#: The two deliberate exclusions (registration consolidation, per-skill stop
+#: ping placeholders) are documented at the bottom — no per-topic payload
+#: transform can bridge them.
 MIGRATION_MAP: Dict[str, SpecMessage] = {
-    # --- AUDIO-IN-1 / PIPELINE-1 §9 (payload-compatible 1:1 renames) ---
+    # --- PIPELINE-1 §9 utterance layer (payload-compatible 1:1 renames) ---
     "recognizer_loop:utterance": SpecMessage.UTTERANCE,        # PIPELINE-1 §9.1
     "speak": SpecMessage.SPEAK,                                # PIPELINE-1 §9.6
-    "recognizer_loop:audio_output_start": SpecMessage.AUDIO_OUTPUT_STARTED,  # AUDIO-IN-1 (provisional)
-    "recognizer_loop:audio_output_end": SpecMessage.AUDIO_OUTPUT_ENDED,      # AUDIO-IN-1 (provisional)
-    "mycroft.mic.listen": SpecMessage.MIC_LISTEN,             # AUDIO-IN-1 (provisional)
-    "recognizer_loop:record_begin": SpecMessage.LISTENER_RECORD_STARTED,  # AUDIO-IN-1 (provisional)
-    "recognizer_loop:record_end": SpecMessage.LISTENER_RECORD_ENDED,      # AUDIO-IN-1 (provisional)
-    "recognizer_loop:sleep": SpecMessage.LISTENER_SLEEP,     # AUDIO-IN-1 (provisional)
-    "mycroft.awoken": SpecMessage.LISTENER_AWOKEN,           # AUDIO-IN-1 (provisional)
-    # --- PIPELINE-1 §8 handler-lifecycle trio (rename; payload adopted by the
-    #     producer to {skill_id, intent_name} — bridge mirrors verbatim) ---
+    # --- AUDIO-1 §5.1/§5.2/§4.4 audio-output signals (open PR #38, provisional;
+    #     payload-compatible 1:1 renames) ---
+    "recognizer_loop:audio_output_start": SpecMessage.AUDIO_OUTPUT_STARTED,  # AUDIO-1 §5.1 (provisional)
+    "recognizer_loop:audio_output_end": SpecMessage.AUDIO_OUTPUT_ENDED,      # AUDIO-1 §5.2 (provisional)
+    "mycroft.mic.listen": SpecMessage.MIC_LISTEN,             # AUDIO-1 §4.4 (provisional)
+    # --- AUDIO-IN-1 §6 listener lifecycle (merged; payload-compatible renames) ---
+    "recognizer_loop:record_begin": SpecMessage.LISTENER_RECORD_STARTED,  # AUDIO-IN-1 §6.1
+    "recognizer_loop:record_end": SpecMessage.LISTENER_RECORD_ENDED,      # AUDIO-IN-1 §6.2
+    "recognizer_loop:sleep": SpecMessage.LISTENER_SLEEP,     # AUDIO-IN-1 §6.3
+    "mycroft.awoken": SpecMessage.LISTENER_AWOKEN,           # AUDIO-IN-1 §6.4
+    # --- PIPELINE-1 §8 handler-lifecycle trio (SHAPE-CHANGING rename; payload
+    #     reshaped per direction by MIGRATION_PAYLOAD_TRANSFORMS, best-effort) ---
     "mycroft.skill.handler.start": SpecMessage.INTENT_HANDLER_START,        # §8.1
     "mycroft.skill.handler.complete": SpecMessage.INTENT_HANDLER_COMPLETE,  # §8.1
     "mycroft.skill.handler.error": SpecMessage.INTENT_HANDLER_ERROR,        # §8.1
@@ -185,12 +236,14 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     "mycroft.stop": SpecMessage.STOP,           # STOP-1 §5.3 universal stop broadcast
     # --- PIPELINE-1 §9.3 intent outcome (1:1 rename) ---
     "complete_intent_failure": SpecMessage.INTENT_UNMATCHED,
-    # --- INTENT-4 §8 intent management (renames; producer adopts the
-    #     {skill_id, intent_name} payload — bridge mirrors verbatim) ---
-    "detach_intent": SpecMessage.INTENT_DEREGISTER,            # §8.2
-    "detach_skill": SpecMessage.SKILL_DEREGISTER,              # §8.4
-    "mycroft.skill.enable_intent": SpecMessage.INTENT_ENABLE,  # §8.5
-    "mycroft.skill.disable_intent": SpecMessage.INTENT_DISABLE,  # §8.5
+    # --- INTENT-4 §8 intent management ---
+    # detach_intent / enable_intent / disable_intent are SHAPE-CHANGING renames
+    # (legacy munged/partial payload vs spec {skill_id, intent_name, lang}) —
+    # reshaped per direction by MIGRATION_PAYLOAD_TRANSFORMS (best-effort).
+    "detach_intent": SpecMessage.INTENT_DEREGISTER,            # §8.2 (shape-changing)
+    "detach_skill": SpecMessage.SKILL_DEREGISTER,              # §8.4 (payload-compatible: {skill_id})
+    "mycroft.skill.enable_intent": SpecMessage.INTENT_ENABLE,  # §8.5 (shape-changing)
+    "mycroft.skill.disable_intent": SpecMessage.INTENT_DISABLE,  # §8.5 (shape-changing)
     #
     # ---- DELIBERATE EXCLUSION 1: INTENT-4 §5–§7 *registration* ----
     # ovos.intent.register.keyword / .register.template / ovos.entity.register
@@ -218,6 +271,162 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
 SPEC_TO_LEGACY: Dict[str, str] = {v.value: k for k, v in MIGRATION_MAP.items()}
 
 
+# ---------------------------------------------------------------------------
+# Per-topic payload translation
+# ---------------------------------------------------------------------------
+# A migrating topic that is a *payload-compatible* rename carries the same
+# ``data`` shape on both names, so the mirror forwards the payload unchanged.
+# A *shape-changing* rename does not: the legacy and spec topics describe the
+# same event with different fields, so forwarding the producer's payload
+# verbatim would hand the recipient ``data`` in the wrong shape. For those, the
+# bridge reshapes the payload with a pair of pure functions.
+
+#: One ``(legacy_to_spec, spec_to_legacy)`` transform pair. Each function takes
+#: a payload ``dict`` and returns a NEW payload ``dict`` in the other shape; it
+#: must never mutate its input. The pair is keyed by the **legacy** topic in
+#: :data:`MIGRATION_PAYLOAD_TRANSFORMS`.
+PayloadTransform = Callable[[Dict[str, Any]], Dict[str, Any]]
+
+
+def _identity(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Payload-compatible default: copy the payload through unchanged."""
+    return dict(data)
+
+
+# --- handler trio: mycroft.skill.handler.{start,complete,error} ↔
+#     ovos.intent.handler.{start,complete,error} (PIPELINE-1 §8) ---
+#
+# Legacy shape (Mycroft-era producers):
+#   start/complete: {"handler": "<fn name>"}        (+ "duration" on complete)
+#   error:          {"handler": "<fn name>", "traceback": "<str>"}
+#   (skill_id rode in Message.context, not data — see ovos_workshop/skills/ovos.py)
+# Spec shape (PIPELINE-1 §8): {"skill_id", "intent_name"}  (+ "exception" on error)
+#
+# LOSSY mapping (documented):
+#  - legacy ``handler`` (a handler **function** name) is mapped to/from spec
+#    ``intent_name`` BEST-EFFORT only: they are related but not identical
+#    (a handler fn name is not guaranteed to equal the intent name).
+#  - legacy→spec cannot recover ``skill_id`` from ``data`` (it lived in
+#    ``context``); it is omitted. The bus SHOULD lift it from ``context`` when
+#    wiring — out of scope for this pure-data transform.
+#  - ``complete``'s legacy ``duration`` has no spec field → DROPPED on
+#    legacy→spec; spec→legacy cannot synthesize it → OMITTED.
+#  - ``error``: legacy ``traceback`` ↔ spec ``exception`` are mapped to each
+#    other (both human-readable failure text).
+
+def _handler_legacy_to_spec(data: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    if "skill_id" in data:  # rarely present in data, but honour it if so
+        out["skill_id"] = data["skill_id"]
+    if "handler" in data:
+        out["intent_name"] = data["handler"]  # best-effort
+    # error: legacy ``traceback`` -> spec ``exception``
+    if "traceback" in data:
+        out["exception"] = data["traceback"]
+    elif "exception" in data:
+        out["exception"] = data["exception"]
+    # ``duration`` (complete) has no spec field -> dropped.
+    return out
+
+
+def _handler_spec_to_legacy(data: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    if "intent_name" in data:
+        out["handler"] = data["intent_name"]  # best-effort
+    if "skill_id" in data:
+        out["skill_id"] = data["skill_id"]  # harmless extra on legacy topic
+    # error: spec ``exception`` -> legacy ``traceback``
+    if "exception" in data:
+        out["traceback"] = data["exception"]
+    # spec has no ``duration`` to restore -> omitted.
+    return out
+
+
+# --- detach_intent ↔ ovos.intent.deregister (INTENT-4 §8.2) ---
+# Legacy: {"intent_name": "<skill_id>:<name>"} (the munged form — see
+#   ovos_workshop/intents.py::detach_intent).
+# Spec:   {"skill_id", "intent_name", "lang"?}  (§8.2; lang optional).
+# CLEANLY BIDIRECTIONAL on skill_id/intent_name:
+#   spec->legacy joins "<skill_id>:<intent_name>"; legacy->spec splits on the
+#   FIRST ":" (MSG-1 §2.1.1: skill_id must not contain ":").
+# LOSSY: legacy carries no ``lang`` -> legacy->spec omits it (spec §8.2 allows
+#   an omitted lang = "all languages"); spec->legacy drops ``lang``.
+
+def _detach_legacy_to_spec(data: Dict[str, Any]) -> Dict[str, Any]:
+    munged = data.get("intent_name", "")
+    if ":" in munged:
+        skill_id, intent_name = munged.split(":", 1)
+        return {"skill_id": skill_id, "intent_name": intent_name}
+    # No separator -> cannot split; best-effort pass the whole as intent_name.
+    return {"intent_name": munged} if munged else {}
+
+
+def _detach_spec_to_legacy(data: Dict[str, Any]) -> Dict[str, Any]:
+    skill_id = data.get("skill_id", "")
+    intent_name = data.get("intent_name", "")
+    if skill_id:
+        return {"intent_name": f"{skill_id}:{intent_name}"}
+    # No skill_id to join -> emit the bare intent_name (best-effort).
+    return {"intent_name": intent_name}
+
+
+# --- mycroft.skill.{enable,disable}_intent ↔ ovos.intent.{enable,disable}
+#     (INTENT-4 §8.5) ---
+# Legacy: {"intent_name": "<name>"}            (no skill_id, no lang)
+# Spec:   {"skill_id", "intent_name", "lang"?}  (§8.5)
+# LOSSY: legacy->spec CANNOT recover ``skill_id`` (absent in the legacy
+#   payload) -> it is OMITTED, and ``lang`` likewise (spec treats an omitted
+#   lang as "all languages", §8.5). This is the documented limitation: a
+#   legacy-sourced enable/disable bridged to the spec topic targets the intent
+#   name without a skill scope; a consumer that needs skill scoping must obtain
+#   it elsewhere (e.g. Message.context["skill_id"]). spec->legacy drops
+#   skill_id/lang, keeping only intent_name.
+
+def _toggle_legacy_to_spec(data: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    if "intent_name" in data:
+        out["intent_name"] = data["intent_name"]
+    # skill_id / lang not recoverable from the legacy payload -> omitted.
+    return out
+
+
+def _toggle_spec_to_legacy(data: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    if "intent_name" in data:
+        out["intent_name"] = data["intent_name"]
+    # spec skill_id / lang have no legacy field -> dropped.
+    return out
+
+
+#: **legacy topic** -> ``(legacy_to_spec, spec_to_legacy)`` payload transforms.
+#:
+#: Only the SHAPE-CHANGING renames need an entry; every other migrating topic
+#: is payload-compatible and uses the IDENTITY transform implicitly (see
+#: :meth:`NamespaceTranslator.translate_payload`). Keyed by the legacy topic so
+#: both :data:`MIGRATION_MAP` (legacy->spec) and :data:`SPEC_TO_LEGACY`
+#: (spec->legacy) resolve to the same pair.
+#:
+#: Lossy cases (each documented at the transform above):
+#:
+#: * **handler trio** — ``handler`` ↔ ``intent_name`` is best-effort (a handler
+#:   function name is not guaranteed to equal the intent name); ``skill_id`` is
+#:   not recoverable from legacy ``data``; ``duration`` (complete) is dropped;
+#:   ``traceback`` ↔ ``exception`` are mapped.
+#: * **detach_intent** — cleanly bidirectional on ``skill_id``/``intent_name``;
+#:   ``lang`` is not present in the legacy payload.
+#: * **enable/disable** — legacy carries neither ``skill_id`` nor ``lang``, so
+#:   legacy->spec omits both (a legacy-sourced toggle has no skill scope in
+#:   ``data``).
+MIGRATION_PAYLOAD_TRANSFORMS: Dict[str, Tuple[PayloadTransform, PayloadTransform]] = {
+    "mycroft.skill.handler.start": (_handler_legacy_to_spec, _handler_spec_to_legacy),
+    "mycroft.skill.handler.complete": (_handler_legacy_to_spec, _handler_spec_to_legacy),
+    "mycroft.skill.handler.error": (_handler_legacy_to_spec, _handler_spec_to_legacy),
+    "detach_intent": (_detach_legacy_to_spec, _detach_spec_to_legacy),
+    "mycroft.skill.enable_intent": (_toggle_legacy_to_spec, _toggle_spec_to_legacy),
+    "mycroft.skill.disable_intent": (_toggle_legacy_to_spec, _toggle_spec_to_legacy),
+}
+
+
 def migration_counterpart(topic: str) -> Optional[str]:
     """Return the other-namespace counterpart of a migrating topic, else ``None``.
 
@@ -243,20 +452,31 @@ def migration_counterpart(topic: str) -> Optional[str]:
 class NamespaceTranslator:
     """Shared legacy↔``ovos.*`` bus-namespace migration logic (OVOS bus bridge).
 
-    This is the **reference implementation of the transparent dual-emit bridge**
-    that ``ovos-bus-client``'s ``MessageBusClient`` and ``ovos_utils``'
-    ``FakeBus`` both delegate to, so the real websocket bus and the
-    test/satellite double behave identically. It carries no I/O and no config:
-    the two direction flags are passed in (the caller reads env/config),
-    keeping ``ovos-spec-tools`` dependency-free.
+    This is the shared **migration tooling** that ``ovos-bus-client``'s
+    ``MessageBusClient`` and ``ovos_utils``' ``FakeBus`` both delegate to, so
+    the real websocket bus and the test/satellite double behave identically. It
+    carries no I/O and no config: the two direction flags are passed in (the
+    caller reads env/config), keeping ``ovos-spec-tools`` dependency-free.
+
+    .. note::
+
+       **Non-normative implementation policy.** The dual-emit + mirror-window
+       dedup behaviour described below is a pragmatic migration *policy* of
+       this tooling, **not** a spec-mandated mechanism. No OVOS specification
+       mandates dual-emit, and OVOS-MSG-1 §5.4 explicitly disavows any
+       host-side correlation/bookkeeping of the kind a mirror window resembles.
+       The window is a best-effort dedup heuristic scoped to the migration
+       period and to this class; it is not part of any conformance surface.
 
     The bridge has two halves, matching the two halves of a dual-emit bus:
 
     - **send side** — :meth:`counterpart_topics` tells the bus which extra
       topic to mirror an emission onto, so a producer that emits only the spec
-      topic still reaches legacy subscribers (and vice-versa). The payload is
-      copied verbatim (only renames that need no payload transformation are in
-      :data:`MIGRATION_MAP`).
+      topic still reaches legacy subscribers (and vice-versa); the bus calls
+      :meth:`translate_payload` to reshape the mirrored payload into the
+      recipient's shape (identity for payload-compatible renames, a best-effort
+      transform for shape-changing ones — see
+      :data:`MIGRATION_PAYLOAD_TRANSFORMS`).
     - **receive side** — :meth:`new_mirror_guard` lets a handler subscribed to
       *both* names run exactly once, by recognising the mirror re-delivery and
       dropping it. :meth:`is_migrated` is the cheap pre-check ("does this topic
@@ -283,7 +503,9 @@ class NamespaceTranslator:
         """Extra topic(s) the bus should ALSO emit ``msg_type`` on (0 or 1).
 
         The result is the **send-side** half of the dual-emit: the bus emits the
-        original Message, then re-emits the same payload on each returned topic.
+        original Message, then re-emits — on each returned topic — the payload
+        produced by :meth:`translate_payload` (reshaped into the counterpart
+        topic's shape, identity for payload-compatible renames).
 
         Args:
             msg_type: the topic the producer asked to emit.
@@ -300,6 +522,59 @@ class NamespaceTranslator:
         if self.emit_legacy and msg_type in SPEC_TO_LEGACY:
             return [SPEC_TO_LEGACY[msg_type]]
         return []
+
+    def translate_payload(self, from_topic: str, to_topic: str,
+                          data: Dict[str, Any]) -> Dict[str, Any]:
+        """Reshape ``data`` from ``from_topic``'s shape into ``to_topic``'s shape.
+
+        This is the **payload half** of the bridge, the companion to
+        :meth:`counterpart_topics`: when the bus mirrors an emission onto the
+        counterpart topic, it calls this to translate the payload so a consumer
+        on the counterpart topic receives ``data`` in *its* shape rather than
+        the producer's.
+
+        Direction is inferred from ``from_topic``:
+
+        - ``from_topic`` is a **legacy** topic (in :data:`MIGRATION_MAP`) →
+          apply the ``legacy_to_spec`` transform;
+        - ``from_topic`` is a **spec** topic (in :data:`SPEC_TO_LEGACY`) →
+          apply the ``spec_to_legacy`` transform.
+
+        If the migrating topic has no entry in
+        :data:`MIGRATION_PAYLOAD_TRANSFORMS` (a payload-compatible rename) the
+        transform is the **identity** — a shallow copy of ``data`` unchanged.
+        The same identity copy is returned when ``from_topic``/``to_topic`` are
+        not a migrating pair at all, so the method is always safe to call.
+
+        The transforms are pure: ``data`` is never mutated, and a NEW dict is
+        always returned. Some transforms are **best-effort / lossy** — see
+        :data:`MIGRATION_PAYLOAD_TRANSFORMS` for the per-topic loss notes.
+
+        Args:
+            from_topic: the topic the Message was emitted on (legacy or spec).
+            to_topic: the counterpart topic the mirror is being emitted on. Used
+                only to confirm direction; the transform is keyed off the legacy
+                topic of the pair.
+            data: the source Message's payload.
+
+        Returns:
+            A new payload ``dict`` in ``to_topic``'s shape.
+        """
+        data = data or {}
+        # Resolve the legacy topic of this migrating pair (the transform key),
+        # and which direction we are translating.
+        if from_topic in MIGRATION_MAP:
+            legacy_topic, direction = from_topic, 0  # legacy -> spec
+        elif from_topic in SPEC_TO_LEGACY:
+            legacy_topic, direction = SPEC_TO_LEGACY[from_topic], 1  # spec -> legacy
+        else:
+            # Not a migrating topic — nothing to translate, return a copy.
+            return dict(data)
+        transform = MIGRATION_PAYLOAD_TRANSFORMS.get(legacy_topic)
+        if transform is None:
+            # Payload-compatible rename: identity.
+            return dict(data)
+        return transform[direction](data)
 
     def is_migrated(self, topic: str) -> bool:
         """Whether ``topic`` participates in the migration (so needs dedup).
@@ -318,6 +593,12 @@ class NamespaceTranslator:
                          clock: Optional[Callable[[], float]] = None
                          ) -> Callable[[object], bool]:
         """Build a stateful ``is_mirror(message) -> bool`` for receive-side dedup.
+
+        **Non-normative implementation policy** (migration tooling): the
+        mirror-window dedup below is a pragmatic heuristic for the migration
+        period, not a spec-mandated behaviour. OVOS-MSG-1 §5.4 disavows
+        host-side correlation; this window is deliberately narrow and scoped to
+        :class:`NamespaceTranslator` so it cannot be mistaken for one.
 
         Each call returns a **fresh closure with its own private ``seen`` state**,
         so one guard is created per handler (or per subscription) and guards do
