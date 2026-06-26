@@ -236,11 +236,21 @@ def inline_keywords(
 ) -> str:
     """Inline ``<keyword>`` references as ``(v1|v2|…)`` alternation groups.
 
-    Engines like Padatious don't look up ``.voc`` files at runtime — they
-    need keywords baked into the template body as standard ``(a|b|c)``
-    alternations.  This utility replaces every ``<keyword>`` reference
-    with its values in alternation syntax, handling nested references
-    recursively.
+    Partial application of OVOS-INTENT-1 §4.1 step 1 (resolve ``<name>``
+    references) that stops **before** the rest of expansion: §3.7 / §4.1 define
+    a ``<name>`` reference as equivalent to the alternative group of the
+    vocabulary's members written in its place, and this returns exactly that
+    rewritten *template* rather than the fully enumerated sample set. It exists
+    because engines like Padatious do not look up ``.voc`` files at runtime —
+    they need keywords baked into the template body as standard ``(a|b|c)``
+    alternations, then expand the result themselves.
+
+    Unlike :func:`expand`, this is intentionally lenient and **not** a
+    conformant expander: it does no §3.6 validation, leaves an unknown keyword's
+    angle brackets stripped as literal text rather than raising
+    :class:`MalformedTemplate` for an undefined reference, and applies the
+    non-spec ``max_values`` cap below to bound the §4.3 sample-set blow-up.
+    Feed its output to :func:`expand` for the validated sample set.
 
     Parameters
     ----------
@@ -250,7 +260,11 @@ def inline_keywords(
         Flat ``{keyword: [values]}`` mapping.  If ``None`` or empty the
         template is returned unchanged.
     max_values
-        Cap the number of values per keyword inlined.  Default 10.
+        Cap the number of values per keyword inlined.  Default 10. This is an
+        engineering limit, **not** a spec rule: OVOS-INTENT-1 §4.3 warns that a
+        sample set grows as the product of branch counts, and §4.3 permits an
+        expander to bound it; capping members here keeps a downstream engine's
+        expansion finite without that engine having to re-implement the limit.
 
     Returns
     -------

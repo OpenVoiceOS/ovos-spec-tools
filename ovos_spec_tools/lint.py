@@ -2,7 +2,33 @@
 
 Validates the **syntax** (OVOS-INTENT-1) and the **naming and layout**
 (OVOS-INTENT-2) of every resource file under a locale directory, and reports
-every problem found rather than stopping at the first.
+every problem found rather than stopping at the first. Each finding is phrased
+to point at the exact spec clause it enforces, so a failing lint tells the
+author which MUST they violated.
+
+Clause map (which spec rule each rule enforces):
+
+- *empty file* → OVOS-INTENT-2 §5 step 5 — "Reject an empty file … every file
+  MUST contribute at least one template" (and for ``.prompt``, content).
+- *duplicate (role, base name)* → OVOS-INTENT-2 §2 — "Two files with the same
+  extension MUST NOT share a base name anywhere within one language directory
+  tree".
+- *base-name / ``.entity`` charset* → OVOS-INTENT-2 §2 + OVOS-INTENT-1 §3.4 —
+  base names are lowercase letters/digits/underscores; an ``.entity`` name also
+  obeys the slot-name rule (not beginning with a digit).
+- *not-a-BCP-47 directory* → OVOS-INTENT-2 §2 — "Language directories are named
+  with BCP-47 language tags".
+- *legacy extension / unknown role* → OVOS-INTENT-2 §1 + §5 — only the six
+  defined roles exist; a loader "MUST NOT introduce additional resource file
+  roles". Legacy Mycroft types are flagged, not parsed.
+- *named slot in a slot-free role* → OVOS-INTENT-2 §4.3 — ``.entity`` / ``.voc``
+  / ``.blacklist`` are slot-free.
+- *template syntax* → OVOS-INTENT-1 §3.6 (delegated to
+  :func:`~ovos_spec_tools.expansion.expand`).
+- *slot-set consistency* → OVOS-INTENT-1 §5.5 (see :func:`_lint_file` for the
+  ``.intent`` union-slot relaxation reconciling §5.5 with OVOS-INTENT-3 §5.3).
+- *blacklist with no matching ``.intent``* → OVOS-INTENT-2 §4.3 — a
+  ``.blacklist`` "is paired by base name with exactly one ``.intent``".
 
 Exposed as the ``ovos-spec-lint`` command::
 
@@ -44,7 +70,13 @@ ROLE_EXTENSIONS = SLOT_BEARING_ROLES + SLOT_FREE_ROLES + (PROMPT_ROLE,)
 # File types OVOS-INTENT-2 deliberately does not define — flagged, not parsed.
 LEGACY_EXTENSIONS = (".rx", ".value", ".list", ".word", ".template", ".qml")
 
-# The OVOS spec version that introduced each feature.
+# The OVOS spec version that introduced each feature. This ladder is a *tooling*
+# concept, not a clause in any single spec: it lets a skill target an older
+# deployment by flagging roles/tokens that a runtime predating their
+# introduction will silently ignore (a forward-compatibility lint, not a
+# conformance check). Mapping: V1 = the formalized OVOS-INTENT-1/2 (adds the
+# `.blacklist` role over the legacy V0 set), V2 = the `<name>` inline vocabulary
+# reference (OVOS-INTENT-1 §3.7), V3 = the `.prompt` role (OVOS-INTENT-2 §4.4).
 DEFAULT_SPEC_VERSION = 3
 _BLACKLIST_SINCE = 1        # the `.blacklist` role
 _VOCABULARY_REFERENCE_SINCE = 2  # the `<name>` inline vocabulary reference
@@ -63,7 +95,19 @@ WARNING = "warning"
 
 @dataclass
 class Finding:
-    """One problem found by the linter."""
+    """One problem found by the linter.
+
+    Severity is :data:`ERROR` for a spec **MUST** violation (a malformed
+    template, a duplicate ``(role, base name)``, an empty file, a slot in a
+    slot-free role) and :data:`WARNING` for a **SHOULD**/advisory issue (a
+    legacy file type, a non-BCP-47 directory name, an unpaired ``.blacklist``).
+    Only errors fail a non-``--strict`` run.
+
+    Attributes:
+        severity: :data:`ERROR` or :data:`WARNING`.
+        path: the offending file or directory, as a string.
+        message: a human-readable description, citing the spec clause violated.
+    """
 
     severity: str  # ERROR or WARNING
     path: str
@@ -76,12 +120,21 @@ class Finding:
 def lint_locale(path, spec_version: int = DEFAULT_SPEC_VERSION) -> List[Finding]:
     """Lint a locale directory, or a single language directory.
 
-    Returns every :class:`Finding`, in file order. A path whose name is a
-    BCP-47 tag is treated as a single language tree; otherwise it is treated as
-    a ``locale/`` directory and each language subdirectory is checked.
+    The argument is dispatched by its name: a directory whose name matches the
+    BCP-47 shape (OVOS-INTENT-2 §2) is treated as a single ``<lang>/`` tree;
+    anything else is treated as the ``locale/`` root and each immediate
+    subdirectory is linted as a language tree. This lets the linter accept
+    either ``locale`` or ``locale/en-US`` as its target.
 
-    ``spec_version`` is the target OVOS spec version: a resource using a
-    feature newer than it is flagged (see the module docstring).
+    Args:
+        path: a ``locale/`` directory or a single ``<lang>/`` directory.
+        spec_version: the target OVOS spec version; a resource using a feature
+            newer than it is flagged (see the module docstring's version ladder).
+
+    Returns:
+        Every :class:`Finding`, in file order — never short-circuiting, so one
+        run surfaces all problems. A non-directory ``path`` yields a single
+        :data:`ERROR` finding.
     """
     root = Path(path)
     if not root.is_dir():
@@ -93,13 +146,16 @@ def lint_locale(path, spec_version: int = DEFAULT_SPEC_VERSION) -> List[Finding]
     findings: List[Finding] = []
     for child in sorted(root.iterdir()):
         if child.is_file() and child.suffix in ROLE_EXTENSIONS:
+            # §2: resources live under locale/<lang>/, never loose at the root.
             findings.append(Finding(
                 WARNING, str(child),
-                "resource file is not inside a language directory"))
+                "resource file is not inside a language directory "
+                "(OVOS-INTENT-2 §2)"))
     language_dirs = [c for c in sorted(root.iterdir()) if c.is_dir()]
     if not language_dirs:
         findings.append(Finding(
-            WARNING, str(root), "no language directories found"))
+            WARNING, str(root),
+            "no language directories found (OVOS-INTENT-2 §2)"))
     for language_dir in language_dirs:
         findings.extend(_lint_language_tree(language_dir, spec_version))
     return findings
@@ -109,10 +165,11 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
     """Lint one ``<lang>/`` directory and all its subdirectories."""
     findings: List[Finding] = []
     if not _LANG_TAG_RE.fullmatch(language_dir.name):
+        # §2: "Language directories are named with BCP-47 language tags."
         findings.append(Finding(
             WARNING, str(language_dir),
             f"directory name {language_dir.name!r} is not a BCP-47 "
-            f"language tag"))
+            f"language tag (OVOS-INTENT-2 §2)"))
 
     role_files: List[Path] = []
     for path in sorted(language_dir.rglob("*")):
@@ -121,15 +178,19 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
         if path.suffix in ROLE_EXTENSIONS:
             role_files.append(path)
         elif path.suffix in LEGACY_EXTENSIONS:
+            # §1 defines exactly six roles; §5 forbids a loader inventing more.
+            # Legacy Mycroft types are flagged (not parsed) so an author knows
+            # the file will be silently ignored by a conformant loader.
             findings.append(Finding(
                 WARNING, str(path),
                 f"{path.suffix} is a legacy file type, not an "
-                f"OVOS-INTENT-2 resource role"))
+                f"OVOS-INTENT-2 resource role (OVOS-INTENT-2 §1)"))
 
     if not role_files:
         findings.append(Finding(
             WARNING, str(language_dir),
-            "language directory contains no resource files"))
+            "language directory contains no resource files "
+            "(OVOS-INTENT-2 §2)"))
 
     # Duplicate (role, base name) within one language tree (OVOS-INTENT-2 §2).
     first_seen: Dict[tuple, Path] = {}
@@ -139,7 +200,8 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
             findings.append(Finding(
                 ERROR, str(path),
                 f"duplicate {path.suffix} resource {path.stem!r} — also at "
-                f"{first_seen[key]}"))
+                f"{first_seen[key]} (OVOS-INTENT-2 §2: a (role, base name) "
+                f"must be unique per language tree)"))
         else:
             first_seen[key] = path
 
@@ -154,10 +216,12 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
                 f"the {path.suffix} role requires spec version {since}; a "
                 f"version-{spec_version} runtime ignores it"))
         if path.suffix == ".blacklist" and path.stem not in intent_names:
+            # §4.3: a .blacklist "is paired by base name with exactly one
+            # .intent" whose match it suppresses; an unpaired one is inert.
             findings.append(Finding(
                 WARNING, str(path),
                 f"blacklist {path.stem!r} has no matching "
-                f"{path.stem}.intent to suppress"))
+                f"{path.stem}.intent to suppress (OVOS-INTENT-2 §4.3)"))
 
     # Vocabularies, for resolving <name> references during expansion.
     vocabularies: Dict[str, List[str]] = {}
@@ -176,7 +240,23 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
 def _lint_file(path: Path,
                vocabularies: Dict[str, Sequence[str]],
                spec_version: int) -> List[Finding]:
-    """Lint one resource file: naming, then the syntax of every template."""
+    """Lint one resource file: naming, then the syntax of every template.
+
+    Order mirrors the loader steps of OVOS-INTENT-2 §5: naming (§2), then the
+    common reader (§3), then the per-format rule (§4) — for templated roles via
+    a conformant expander (OVOS-INTENT-1), for ``.prompt`` as a whole-file
+    non-empty check (§4.4).
+
+    Args:
+        path: the resource file to lint.
+        vocabularies: every ``.voc`` in this language tree, so a ``<name>``
+            reference (OVOS-INTENT-1 §3.7) resolves during expansion instead of
+            being mis-reported as undefined.
+        spec_version: the target spec version, for the feature gates.
+
+    Returns:
+        Every :class:`Finding` for this file.
+    """
     findings: List[Finding] = []
     extension = path.suffix
     base_name = path.stem
@@ -186,15 +266,21 @@ def _lint_file(path: Path,
         findings.append(Finding(
             ERROR, str(path),
             f"base name {base_name!r} must be lowercase ASCII letters, "
-            f"digits and underscores only"))
+            f"digits and underscores only (OVOS-INTENT-2 §2)"))
     if extension == ".entity" and not _SLOT_NAME_RE.fullmatch(base_name):
+        # §2: where a base name names a slot (an .entity names its {slot}), it
+        # additionally obeys the slot-name rule of OVOS-INTENT-1 §3.4.
         findings.append(Finding(
             ERROR, str(path),
             f".entity base name {base_name!r} names a slot and must not "
-            f"begin with a digit"))
+            f"begin with a digit (OVOS-INTENT-2 §2 / OVOS-INTENT-1 §3.4)"))
     if path.name != path.name.lower():
+        # §2: base names and extensions are lowercase. Reported as a warning
+        # (not an error) because the casefold is recoverable on case-insensitive
+        # filesystems; on case-sensitive ones it will fail lookup.
         findings.append(Finding(
-            WARNING, str(path), "file name should be lowercase"))
+            WARNING, str(path),
+            "file name should be lowercase (OVOS-INTENT-2 §2)"))
 
     # --- `.prompt` — a whole-file document, not a template list (§4.4) ------
     if extension == PROMPT_ROLE:
@@ -242,15 +328,29 @@ def _lint_file(path: Path,
                 ERROR, str(path), f"{exc}  [in: {template!r}]"))
             continue
         if slot_free and any("{" in sample for sample in samples):
+            # §4.3: .entity/.voc/.blacklist are the slot-free format — no {name}.
             findings.append(Finding(
                 ERROR, str(path),
                 f"{extension} is slot-free but a template contains a named "
-                f"slot  [in: {template!r}]"))
+                f"slot (OVOS-INTENT-2 §4.3)  [in: {template!r}]"))
         if slot_bearing:
             slot_sets.append(frozenset(_SLOT_RE.findall(template)))
 
     # --- slot consistency (OVOS-INTENT-1 §5.5) ------------------------------
-    # .dialog requires identical slot sets; .intent allows union slot sets.
+    # §5.5 (and OVOS-INTENT-3 §5.1) require every template of one definition to
+    # declare the identical slot set, and a tool "MUST reject" one that does
+    # not. For a `.dialog` that is enforced as an ERROR: the caller fills the
+    # same slots whichever phrase is chosen (§4.2), so a divergent slot set is a
+    # genuine fault.
+    #
+    # For an `.intent` the rule is *relaxed to union slot sets* (WARNING, not
+    # ERROR) to reconcile §5.5 with the worked example in OVOS-INTENT-3 §5.3,
+    # which presents `(play|put on) {query}` and
+    # `(play|put on) {query} (on|using) {engine}` as ONE valid template intent
+    # despite their differing slot sets ({query} vs {query},{engine}). Treating
+    # the extra slots as optional captures is the documented intent there, so
+    # the linter warns rather than rejects. Changing this from a warning to an
+    # error would regress that valid pattern — hence it stays a WARNING.
     if len(set(slot_sets)) > 1:
         if extension == ".dialog":
             findings.append(Finding(
@@ -267,7 +367,17 @@ def _lint_file(path: Path,
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """Entry point for the ``ovos-spec-lint`` command."""
+    """Entry point for the ``ovos-spec-lint`` command.
+
+    Lints the target, prints every :class:`Finding`, then a count summary.
+
+    Args:
+        argv: command-line arguments (defaults to ``sys.argv[1:]``).
+
+    Returns:
+        ``0`` on success; ``1`` if any error was found, or — with ``--strict``
+        — if any warning was found (so a CI step can gate on locale health).
+    """
     parser = argparse.ArgumentParser(
         prog="ovos-spec-lint",
         description="Validate OVOS locale resource files against "

@@ -70,10 +70,23 @@ class MalformedResource(ValueError):
 def read_resource_file(path: Path) -> List[str]:
     """Apply the OVOS-INTENT-2 §3 common reader to one file.
 
-    The file is read as UTF-8, a leading byte-order mark is discarded, and both
-    ``LF`` and ``CRLF`` line endings are accepted. Each line is stripped; blank
-    lines and ``#``-comment lines are dropped. The surviving lines — each one
-    template — are returned in order.
+    The file is read as UTF-8 (§3: "the file is UTF-8 … a reader that encounters
+    [a BOM] MUST discard it"), a leading byte-order mark is discarded, and both
+    ``LF`` and ``CRLF`` line endings are accepted (§3: "a reader MUST accept
+    both"). Each line is stripped; blank lines and ``#``-comment lines are
+    dropped (§3: "a blank line is skipped … a line whose first character is
+    ``#`` is a comment"). There are no inline comments — a ``#`` mid-line is
+    literal — so only a line *beginning* with ``#`` is dropped. The surviving
+    lines — each one template (OVOS-INTENT-1) — are returned in order.
+
+    Args:
+        path: the resource file to read (a line-oriented role, not ``.prompt``;
+            see :func:`read_prompt_file` for the whole-file role).
+
+    Returns:
+        The template lines, in file order, with blanks and comments removed. An
+        all-blank/all-comment file yields ``[]`` — the caller treats that as the
+        §5 "empty file" fault.
     """
     text = path.read_text(encoding="utf-8-sig")  # utf-8-sig discards a BOM
     templates: List[str] = []
@@ -88,8 +101,12 @@ def read_resource_file(path: Path) -> List[str]:
 def iter_locale_dirs(root: Path,
                      native_langs: Optional[Sequence[str]] = None,
                      max_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE
-                     ):
+                     ) -> Iterator[Tuple[str, Path]]:
     """Iterate ``<root>/locale/<lang>/`` subdirs as ``(lang, path)`` pairs.
+
+    Implements the "discover languages" loader step (OVOS-INTENT-2 §5 step 1,
+    §2 layout): each immediate subdirectory of ``<root>/locale/`` is one
+    language tree, named with a BCP-47 tag.
 
     Each immediate subdirectory of ``<root>/locale/`` is treated as a locale
     tree; its name is normalized with :func:`standardize_lang` and yielded as
@@ -105,7 +122,16 @@ def iter_locale_dirs(root: Path,
     this and the disagreement goes away — locales are always discovered as
     full-tag directories, ``closest_lang`` reconciles at query time.
 
-    ``root`` without a ``locale/`` child yields nothing.
+    Args:
+        root: the skill root containing a ``locale/`` directory.
+        native_langs: if given, only locales whose closest native is within
+            ``max_distance`` are yielded (§2.2 nearness, applied as a filter).
+        max_distance: the §2.2 distance threshold for that filter.
+
+    Yields:
+        ``(standardized_lang, dir_path)`` for each accepted locale directory,
+        in sorted directory order. A non-tag or unparseable subdir name is
+        skipped. ``root`` without a ``locale/`` child yields nothing.
     """
     root = Path(root)
     locales_root = root / "locale"
@@ -181,9 +207,23 @@ def keyword_form(template_line: str,
     A ``.voc`` line like ``(hi|hello|hey)`` becomes one keyword whose entity
     value is ``"hi"`` and whose aliases are ``["hello", "hey"]`` — any
     consumer that distinguishes a canonical form from synonyms can use this
-    grouping directly (OVOS-INTENT-2 §4.3).
+    grouping directly (OVOS-INTENT-2 §4.3 slot-free roles).
 
-    An empty or whitespace-only line yields ``("", [])``.
+    The canonical/alias split is a tooling convention layered *on top of* the
+    spec's unordered sample set (OVOS-INTENT-1 §4): the spec defines no
+    "canonical" member, so "first after case-fold + sort" is chosen here purely
+    to be deterministic.
+
+    Args:
+        template_line: one slot-free template line (a ``.voc``/``.entity`` line).
+        vocabularies: vocabularies for any ``<name>`` reference in the line
+            (OVOS-INTENT-1 §3.7).
+
+    Returns:
+        ``(entity, aliases)`` — the canonical form and its synonyms. An empty or
+        whitespace-only line, or a line that fails to expand, yields
+        ``("", [])`` (a malformed line is dropped, not raised, so one bad line
+        does not poison a batch keyword load).
     """
     if not template_line.strip():
         return "", []
@@ -215,6 +255,20 @@ def normalize_for_match(text: str, *,
 
     Set either flag to ``False`` for languages where the distinction is
     semantic (e.g. French ``ou``/``où``).
+
+    This is a *match-time* normalization the resource consumers apply, distinct
+    from the upstream ASR normalization OVOS-INTENT-1 §2 presumes; it exists
+    because real utterances and authored ``.voc`` lines drift in accent and
+    punctuation. ``{``/``}`` are preserved so a slot marker survives a
+    pre-render pass.
+
+    Args:
+        text: the string to normalize.
+        strip_diacritics: fold combining marks via NFD decomposition.
+        strip_punct: drop ASCII punctuation except ``{`` and ``}``.
+
+    Returns:
+        The normalized, lowercased, whitespace-trimmed string.
     """
     import unicodedata
     text = text.strip().lower()
@@ -246,7 +300,22 @@ def utterance_contains(utterance: str, samples: Sequence[str],
     ``strip_diacritics`` and ``strip_punct`` flags are independent —
     forward each one as required by the target language.
 
-    An empty utterance or empty sample set returns ``False``.
+    The default whole-word (non-``exact``) mode implements the
+    OVOS-INTENT-2 §4.3 occurrence rule used for ``.voc``/``.blacklist`` testing:
+    a phrase "occurs" when its words appear "as a contiguous sequence of whole
+    words … not a raw substring" — which is why ``art`` does not match within
+    ``start``.
+
+    Args:
+        utterance: the (ASR-normalized) text to test.
+        samples: the phrase set to look for, e.g. an expanded ``.voc``.
+        exact: require equality after normalization rather than substring.
+        strip_diacritics: forwarded to :func:`normalize_for_match`.
+        strip_punct: forwarded to :func:`normalize_for_match`.
+
+    Returns:
+        ``True`` iff any sample matches. An empty utterance or empty sample set
+        returns ``False``.
     """
     if not utterance or not samples:
         return False
@@ -273,7 +342,18 @@ def strip_samples(utterance: str, samples: Sequence[str]) -> str:
     Samples are stripped longest first so that a composite match is
     consumed before any of its shorter constituents (``"give up"`` before
     ``"up"``). The match is whole-word and case-insensitive; the utterance
-    is otherwise returned with original casing and punctuation.
+    is otherwise returned with original casing and punctuation. The whole-word
+    anchoring is the same OVOS-INTENT-2 §4.3 "contiguous whole words" rule as
+    :func:`utterance_contains`.
+
+    Args:
+        utterance: the text to strip from.
+        samples: phrases to remove (e.g. an expanded ``.voc`` of filler words).
+
+    Returns:
+        ``utterance`` with every whole-word sample occurrence removed; double
+        spaces left behind are **not** collapsed (the caller normalizes if it
+        needs to).
     """
     import re
     for s in sorted({s for s in samples if s and s.strip()},
@@ -290,11 +370,26 @@ def read_prompt_file(path: Path) -> str:
     """Read a ``.prompt`` whole and verbatim (OVOS-INTENT-2 §3, §4.4).
 
     A ``.prompt`` is **not** line-oriented: it is read whole, with no line
-    stripping and no blank- or ``#``-comment-line filtering, because every
-    character is part of the prompt. The file is UTF-8 and a leading
-    byte-order mark is discarded.
+    stripping and no blank- or ``#``-comment-line filtering, because §4.4 states
+    "every character is part of the prompt" (``#`` lines are ordinary prompt
+    text, unlike in the line-oriented roles of §3). The file is UTF-8 and a
+    leading byte-order mark is discarded (§3's "a reader … MUST discard" a BOM).
+
+    Args:
+        path: the resolved ``.prompt`` file.
+
+    Returns:
+        The file's whole content as a single string, byte-for-byte except the
+        stripped BOM and Python's universal-newline decoding.
+
+    .. note::
+       **Known conformance gap (OVOS-INTENT-2 §4.4).** This reader does **not**
+       strip the author-only ``<!-- … -->`` HTML comments §4.4 requires be
+       removed before the prompt reaches a language model, nor does it report an
+       unterminated ``<!--`` (a §4.4 MUST). The whole file is returned as-is.
+       See :func:`ovos_spec_tools.prompt.render_prompt`.
     """
-    return path.read_text(encoding="utf-8-sig")  # utf-8-sig discards a BOM
+    return path.read_text(encoding="utf-8-sig")  # utf-8-sig discards a BOM (§3)
 
 
 class LocaleResources:

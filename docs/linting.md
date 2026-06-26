@@ -1,5 +1,13 @@
 # 6. Linting
 
+> **Spec coverage.** This chapter is the reference for the locale linter
+> (`lint.py`). Every finding enforces a specific clause — template syntax from
+> **OVOS-INTENT-1 §3.6**, naming/layout/empty-file/uniqueness from
+> **OVOS-INTENT-2 §2/§4.3/§5**, slot-set consistency from **OVOS-INTENT-1 §5.5**
+> (relaxed to *union slot sets* for `.intent`, reconciling §5.5 with the
+> multi-slot template-intent example of **OVOS-INTENT-3 §5.3**). Each message
+> names the clause it failed, so a red lint points straight at the violated MUST.
+
 `ovos-spec-lint` checks a skill's locale folder against both specs at once —
 the **syntax** of every template (OVOS-INTENT-1) and the **naming and layout**
 of every file (OVOS-INTENT-2) — and reports *every* problem rather than
@@ -34,9 +42,10 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 - an empty file (no templates after comments and blank lines);
 - a file that is not valid UTF-8;
 - a named slot inside a slot-free role (`.entity` / `.voc` / `.blacklist`);
-- templates within one `.intent` or `.dialog` declaring **different slot
-  sets** — every template of one definition must use the same `{slots}`
-  (OVOS-INTENT-1 §5.5);
+- templates within one **`.dialog`** declaring **different slot sets** — every
+  phrase of one dialog must use the same `{slots}` so the caller fills the same
+  values whichever is chosen (OVOS-INTENT-1 §5.5). For **`.intent`** this is
+  only a *warning*, not an error: union slot sets are valid there (see below);
 - a base name outside the allowed charset (lowercase letters, digits,
   underscores);
 - an `.entity` whose base name — which names a slot — begins with a digit;
@@ -55,6 +64,23 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 
 A `.prompt` is checked too, but not as a template — it is plain text, so only
 its naming and non-emptiness are checked, never template syntax.
+
+### Union slot sets for `.intent`
+
+OVOS-INTENT-1 §5.5 says every template of one definition must declare the
+identical slot set. The linter enforces that strictly for `.dialog` (an
+**error**) but relaxes it for `.intent` to a **warning**, because
+OVOS-INTENT-3 §5.3 presents a single template intent whose phrasings declare
+*different* slots:
+
+```
+(play|put on) {query}
+(play|put on) {query} (on|using) {engine}
+```
+
+Here `{engine}` is an optional capture — present in some phrasings, absent in
+others. Treating the extra slots as optional makes this one valid intent, so
+the linter warns ("verify this is intentional") rather than rejecting it.
 
 ## Targeting an older spec version
 
