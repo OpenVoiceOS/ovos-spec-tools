@@ -1,5 +1,10 @@
 # 2. Sentence templates
 
+> **Spec coverage.** This chapter is the reference for **OVOS-INTENT-1 — the
+> Sentence Template Grammar** (`expansion.py`). `expand()` is the *Expander*
+> conformance role of OVOS-INTENT-1 §7: it implements the token set of §3, the
+> enumeration algorithm of §4.1, and the malformed-form rejection of §3.6.
+
 A **sentence template** is a compact string that stands for a set of
 sentences. It is the grammar of OVOS-INTENT-1, and it is the foundation of this
 package: resource files are lists of templates, and the dialog renderer
@@ -77,8 +82,8 @@ itself never does.
 
 ### Vocabulary references — `<name>`
 
-`<name>` pulls in a named **vocabulary** — a reusable set of phrasings — and
-expands it in place. Pass the vocabularies as a dict:
+`<name>` (OVOS-INTENT-1 §3.7) pulls in a named **vocabulary** — a reusable set
+of phrasings — and expands it in place. Pass the vocabularies as a dict:
 
 ```python
 expand("<greeting> [there]", {"greeting": ["hello", "hi", "hey"]})
@@ -87,7 +92,37 @@ expand("<greeting> [there]", {"greeting": ["hello", "hi", "hey"]})
 
 This is how you avoid repeating the same `(hello|hi|hey)` group across many
 templates: define it once as a vocabulary, reference it as `<greeting>`. A
-vocabulary may itself contain `<name>` references; they resolve recursively.
+vocabulary may itself contain `<name>` references; they resolve recursively
+(§4.1 step 1). A reference must resolve to a **slot-free** set — a vocabulary
+may not introduce a `{slot}` — and a single-member vocabulary substitutes its
+bare member rather than a one-branch group.
+
+## How expansion works — the §4.1 algorithm
+
+`expand()` follows OVOS-INTENT-1 §4.1 exactly, in order:
+
+1. **Resolve `<name>` references** to alternative groups (recursively).
+2. **Rewrite `[x]` as `(x|)`** — an optional is sugar for an empty branch.
+3. **Cartesian product** of the innermost `(...)` groups, repeated until no
+   parenthesis remains.
+4. **Normalize whitespace** — collapse runs of spaces, strip the ends (this is
+   what removes the double space an empty branch leaves behind).
+5. **De-duplicate**, preserving first-seen order.
+
+Worked through on `(turn|switch) [the] (light|fan)` — three 2-branch groups
+once `[the]` becomes `(the|)`, so `2×2×2 = 8` combinations collapse (after
+whitespace normalization) to the 8-sentence sample set of §4.2:
+
+```python
+expand("(turn|switch) [the] (light|fan)")
+# ['turn the light', 'switch the light', 'turn light', 'switch light',
+#  'turn the fan', 'switch the fan', 'turn fan', 'switch fan']
+```
+
+The **sample set is a set** — §4 defines its membership, not an ordering — so
+the eight sentences are exactly those of §4.2; the sequence above is just the
+order `expand()` happens to emit them in. Throughout, `{name}` slots are
+**opaque** — carried through and never enumerated (§4.1 final note).
 
 ## The input model
 

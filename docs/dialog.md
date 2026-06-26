@@ -1,5 +1,13 @@
 # 4. Dialog
 
+> **Spec coverage.** This chapter is the reference for the **Dialog renderer**
+> conformance role of OVOS-INTENT-1 §7 over the `.dialog` format of
+> OVOS-INTENT-2 §4.2 (`dialog.py`), and for the `.prompt` format of
+> OVOS-INTENT-2 §4.4 (`prompt.py`, at the end of the chapter). A dialog renderer
+> MUST embed a conformant expander, verify slot-set consistency (§5.5), fill
+> every `{name}` from caller-supplied values, and MUST NOT emit an unfilled slot
+> (§5.1) — `UnfilledSlot` is that last MUST.
+
 A `.dialog` file holds the phrases an assistant may speak for one response.
 **Rendering** a dialog means: pick one phrase, expand its `(a|b)` / `[x]`
 variety down to a single variant, and fill its `{name}` slots with values. This
@@ -114,14 +122,20 @@ render_prompt("You are {role}. Answer: {query}", {"role": "concise"})
 # 'You are concise. Answer: {query}'
 ```
 
-A `{name}` is replaced **only** when it is a well-formed name, the caller
-supplied a value, and it is not inside a ``` ``` ``` fenced code block.
-Everything else stays literal:
+A `{name}` is replaced **only** when all three OVOS-INTENT-2 §4.4 conditions
+hold: it is a well-formed name (§4.4 condition 1), the caller supplied a value
+(condition 2), and it is not inside a ``` ``` ``` fenced code block
+(condition 3). Everything else stays literal:
 
-- an **unfilled** slot is left as `{name}` — slots are optional, the opposite
-  of `.dialog`, where every slot must be filled;
+- an **unfilled** slot is left as `{name}` — §4.4 "slots are optional", the
+  deliberate opposite of `.dialog`, where every slot must be filled;
 - any other `{`/`}` — `{}`, `{ }`, JSON like `{"k": 1}` — is untouched;
 - a `{name}` inside a fenced code block is never substituted.
+
+> **Known gap.** OVOS-INTENT-2 §4.4 also requires author-only HTML comments
+> `<!-- … -->` to be **stripped** before a prompt reaches a model (a MUST).
+> `render_prompt()` does **not** yet do this — a comment passes through
+> verbatim. Do not rely on comment removal until it is implemented.
 
 `PromptRenderer` is the resource-backed, multilingual form — built from a
 `LocaleResources`, with the language given per call and optional default slots:

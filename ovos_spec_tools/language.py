@@ -1,18 +1,51 @@
 """Language-tag utilities — standardization, distance, and closest match.
 
+This module is the cross-spec implementation of OVOS's BCP-47 language-matching
+and locale-resolution rules. It is referenced by — but not owned by — a single
+spec; the rules it encodes are drawn from:
+
+- **OVOS-INTENT-2 §2** — locale directories are named with BCP-47 tags and tag
+  comparison is **case-insensitive** (``en-us`` and ``en-US`` denote the same
+  language). :func:`standardize_lang` is the canonicalization that makes that
+  comparison total, and :func:`lang_distance` returns ``0`` for tags that differ
+  only in case.
+- **OVOS-INTENT-2 §2.2** — the *language fallback* suggestion: a loader MAY fall
+  back to the nearest available language, and the spec names ``langcodes``'
+  ``tag_distance()`` with a "distance below 10 is a usable regional match"
+  threshold. :data:`DEFAULT_MAX_LANGUAGE_DISTANCE` is exactly that ``10``;
+  :func:`closest_lang` is exactly that "nearest available" selection. §2.2 is
+  explicitly **non-normative** ("an implementation choice, not a requirement"),
+  so everything here is a reference policy, not a conformance obligation.
+- the **SESSION-1 language family** — a session carries a ``lang`` tag; the same
+  matching rules decide whether a session's language is served by an available
+  resource/voice/model.
+
 OVOS resolves "the closest available language for a request" in many places —
 locale resources, TTS voices, STT models — and the logic has been
 reimplemented repeatedly (``ovos_utils.lang.get_language_dir``,
 ``phoonnx.match_lang``, …) with subtle drift between the copies. This module is
-intended to be the **single implementation**.
+intended to be the **single implementation** behind all of them.
 
 It is built on one distance function, :func:`lang_distance`; :func:`closest_lang`
 is simply "the candidate with the smallest distance". All the policy — tag
 standardization, the norm-region preference, the behaviour when ``langcodes``
 is absent — lives inside :func:`lang_distance`, not in branchy callers.
 
-``langcodes`` is an optional dependency. Without it, :func:`lang_distance`
-falls back to a coarse same-language / different-language measure.
+**Dialect-fallback semantics**, precisely. A request resolves to a candidate iff
+their :func:`lang_distance` is below the threshold (an exact match — distance
+``0`` — always resolves). The distance ladder is, from nearest to farthest:
+identical tag (``0``) < a bare tag vs its own norm region (``0``, see
+:func:`_with_norm_region`) < two regions of one language (a small regional
+distance) < the bare/generic form vs a region of the same language < a different
+primary language (``>= 100`` with the coarse measure — never a usable match).
+The asymmetry that matters: a bare ``pt`` is measured **from ``pt-PT``**, not
+from the most-populous ``pt-BR``, so ``pt`` falls back to ``pt-PT`` before
+``pt-BR`` — correcting ``langcodes``' population default (see :data:`_NORM_REGION`).
+
+``langcodes`` is an optional dependency (OVOS-INTENT-2 §2.2 names it). Without
+it, :func:`lang_distance` falls back to a coarse same-language /
+different-language measure that still honours the same ordering for the cases
+locale resolution actually depends on.
 """
 from __future__ import annotations
 
@@ -44,6 +77,21 @@ _NORM_REGION = {
 
 def standardize_lang(tag: str) -> str:
     """Normalize a BCP-47 language tag for comparison.
+
+    Implements the canonicalization presupposed by OVOS-INTENT-2 §2's
+    "tag comparison is case-insensitive" rule: it folds underscores to hyphens,
+    lowercases the primary subtag, uppercases the region, and (via ``langcodes``)
+    resolves canonical script/region forms — so that two on-disk spellings of
+    one language (``en_us``, ``en-US``) reduce to a single comparable string.
+
+    Args:
+        tag: a BCP-47-ish language tag, possibly underscore-separated or
+            mixed-case (as locale directory names and config values often are).
+
+    Returns:
+        The standardized tag. With ``langcodes`` installed this is
+        ``langcodes.standardize_tag``'s output; without it, a primary-lowercase,
+        region-uppercase normalization.
 
     Uses ``langcodes.standardize_tag`` when available — handling underscores,
     case, and script/region forms — and falls back to a simple normalization
@@ -108,11 +156,26 @@ def _coarse_distance(desired: str, supported: str) -> int:
 def lang_distance(desired: str, supported: str) -> int:
     """The distance between two BCP-47 language tags.
 
+    The numeric backbone of the OVOS-INTENT-2 §2.2 fallback: §2.2 names
+    ``langcodes``' ``tag_distance()`` and its "below 10 is a usable regional
+    match" reading, which this function adopts (with the norm-region correction
+    below) so every OVOS component ranks dialects identically.
+
     ``0`` is identical; a larger number is further apart; a value of 10 or
     more is not a usable match. Both tags are standardized, and a bare tag is
     measured **from its norm region** — so ``lang_distance("pt", "pt-PT")`` is
     ``0`` while ``lang_distance("pt", "pt-BR")`` is a regional difference,
-    correcting ``langcodes``' population-based default.
+    correcting ``langcodes``' population-based default (see :data:`_NORM_REGION`).
+
+    Args:
+        desired: the requested BCP-47 tag.
+        supported: the candidate BCP-47 tag to measure against.
+
+    Returns:
+        A non-negative distance: ``0`` for identical (after standardization and
+        norm-region expansion), a small value for a regional difference, and a
+        large value (``>= 100`` under the coarse measure) for a different
+        primary language.
 
     Uses ``langcodes.tag_distance`` when available, and a coarse same-language
     measure otherwise.
@@ -135,8 +198,19 @@ def lang_matches(a: str, b: str,
     Convenience wrapper around :func:`lang_distance` for the common
     ``if score < threshold`` check that cross-component boundaries (intent
     engines, TTS/STT plugin routing, locale lookup) reimplement by hand. The
-    default threshold matches :data:`DEFAULT_MAX_LANGUAGE_DISTANCE` — an exact
-    match always matches; pass ``max_distance=0`` to require an exact match.
+    default threshold matches :data:`DEFAULT_MAX_LANGUAGE_DISTANCE` — the
+    OVOS-INTENT-2 §2.2 "distance below 10 is a usable regional match" line.
+
+    Args:
+        a: one BCP-47 tag.
+        b: the other BCP-47 tag. The relation is symmetric.
+        max_distance: the exclusive upper bound on an acceptable distance. An
+            exact match (distance ``0``) always matches regardless; pass
+            ``max_distance=0`` to require an exact match (OVOS-INTENT-2 §2.2's
+            "SHOULD prefer an exact match", with fallback disabled).
+
+    Returns:
+        ``True`` iff the tags are identical or within ``max_distance``.
     """
     distance = lang_distance(a, b)
     if distance == 0:
@@ -149,13 +223,30 @@ def closest_lang(target: str, available: Sequence[str],
                  ) -> Optional[str]:
     """Return the entry of ``available`` closest to ``target``.
 
+    This is the reference implementation of the OVOS-INTENT-2 §2.2 language
+    fallback ("a loader MAY fall back to the nearest available language"). §2.2
+    is non-normative, so this selection is the package's recommended policy, not
+    a conformance requirement; a loader is free to disable it (``max_distance=0``,
+    yielding §2.2's "SHOULD prefer an exact match" with no fallback).
+
     The candidate with the smallest :func:`lang_distance` wins. An exact match
     always resolves; any other match resolves only if its distance is **below**
     ``max_distance`` (so ``max_distance=0`` accepts exact matches only).
     ``None`` is returned when nothing qualifies.
 
-    The value returned is the original string from ``available``, so a caller
-    can map it back to a directory, a voice, a model, and so on.
+    Args:
+        target: the requested BCP-47 tag (e.g. a session/skill language).
+        available: the tags actually on hand — locale directory names, voice
+            ids, model languages. Iterated once; ties resolve to the first
+            smallest-distance candidate in iteration order.
+        max_distance: exclusive upper bound on an acceptable non-exact match
+            (default :data:`DEFAULT_MAX_LANGUAGE_DISTANCE` == §2.2's ``10``).
+
+    Returns:
+        The original string from ``available`` that best matches ``target``, or
+        ``None`` when nothing qualifies. The value is returned **verbatim** (not
+        standardized) so a caller can map it straight back to a directory, a
+        voice, a model, and so on.
     """
     best: Optional[str] = None
     best_distance: Optional[int] = None

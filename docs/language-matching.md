@@ -1,5 +1,14 @@
 # 5. Language matching
 
+> **Spec coverage.** This chapter is the reference for the cross-spec BCP-47
+> language-matching rules (`language.py`). The case-insensitive tag comparison
+> comes from **OVOS-INTENT-2 §2**; the nearest-language fallback and its
+> "distance below 10 is a usable regional match" threshold come from
+> **OVOS-INTENT-2 §2.2** (non-normative); the same rules decide whether a
+> **SESSION-1** session language is served by an available resource, voice, or
+> model. Everything here is a *reference policy*, not a conformance obligation —
+> §2.2 is explicitly an implementation choice.
+
 OVOS constantly needs to answer "the assistant was asked for language X — which
 of the languages I actually have is the best fit?" — for locale folders, TTS
 voices, STT models. The logic was reimplemented in several places
@@ -89,6 +98,25 @@ voice file, a model name.
 This is exactly what `LocaleResources` uses for its smart language fallback
 ([chapter 3](locale-resources.md)) — and you can use it directly anywhere else
 the same question comes up.
+
+### Dialect-fallback semantics, precisely
+
+A request resolves to a candidate **iff** their distance is below the threshold
+(an exact match, distance `0`, always resolves). The distance ladder, nearest
+to farthest:
+
+| Relationship | Distance | Resolves (default threshold 10)? |
+|--------------|----------|----------------------------------|
+| identical tag (case aside) | `0` | yes |
+| bare tag vs its norm region (`pt` / `pt-PT`) | `0` | yes |
+| two regions of one language (`en-US` / `en-GB`) | small (`<10`) | yes |
+| a different primary language (`en` / `fr`) | large (`≥100` coarse) | no |
+
+So `en-AU` falls back to `en-US` over `de-DE`, `pt` prefers `pt-PT` over
+`pt-BR`, and `zz-ZZ` resolves to nothing. The fallback is **dialect-only** by
+design: it never crosses primary languages, because serving French wording to a
+request for English is worse than failing (OVOS-INTENT-2 §2.2's caution that
+"cross-region substitution can produce wording a user would not expect").
 
 ## Next
 

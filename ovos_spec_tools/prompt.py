@@ -8,14 +8,31 @@ applied **conservatively** — a prompt is free-form text that routinely embeds
 code and JSON, and rendering it must never corrupt text the author did not
 write as a slot.
 
-A ``{name}`` is replaced by a caller-supplied value only when all three hold:
+A ``{name}`` is replaced by a caller-supplied value only when all three hold
+(OVOS-INTENT-2 §4.4, the three numbered substitution conditions):
 
 1. it is a well-formed slot name — lowercase ASCII letters, digits and
    underscores, not beginning with a digit (so ``{}``, ``{ }`` and JSON such
-   as ``{"key": 1}`` are left untouched);
+   as ``{"key": 1}`` are left untouched). The charset is INTENT-2 §4.4's
+   "lowercase ASCII letters, digits, and underscores … MUST NOT begin with a
+   digit", identical to the slot-name rule of OVOS-INTENT-1 §3.4;
 2. the caller supplied a value for that name — an **unfilled** slot is left as
-   literal text, not an error (the opposite of ``.dialog``, §4.2);
-3. it does not lie inside a ```` ``` ```` fenced code block.
+   literal text, not an error (the deliberate opposite of ``.dialog``, where
+   §4.2/OVOS-INTENT-1 §5.1 require **every** slot be filled before TTS);
+3. it does not lie inside a ```` ``` ```` fenced code block — §4.4 condition 3.
+   Fence detection here is the "simpler heuristic (counting triple backticks)"
+   §4.4 explicitly permits: a line whose first non-whitespace content is three
+   or more backticks toggles the fence, and an unterminated fence extends to
+   end-of-file. §4.4 marks nested/indented fences as implementation-defined.
+
+.. note::
+   **Known conformance gap — author-only comments (OVOS-INTENT-2 §4.4).** §4.4
+   requires that an HTML-style comment ``<!-- … -->`` be **stripped** before
+   the prompt reaches a language model, and that an unterminated ``<!--`` be
+   reported (a MUST) with the file then treated as literal text. This renderer
+   does **not** yet implement comment stripping: a ``<!-- … -->`` is passed
+   through verbatim. Until that is implemented, authors must not rely on
+   comments being removed. This is documented, not silently worked around.
 
 Two interfaces are provided:
 
@@ -35,7 +52,21 @@ _SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*)\}")
 
 
 def _is_fence(line: str) -> bool:
-    """Whether a line opens or closes a ```` ``` ```` fenced code block."""
+    """Whether a line opens or closes a ```` ``` ```` fenced code block.
+
+    Implements the OVOS-INTENT-2 §4.4 fence test in its permitted simplified
+    form: a line whose first non-whitespace content is three backticks toggles
+    the fenced-block state. ``lstrip(" \\t")`` mirrors §4.4's "first
+    non-whitespace content"; only the opening delimiter is checked (info
+    strings and longer fences are treated the same), which §4.4 allows as a
+    "simpler heuristic" so long as well-formed prompts render identically.
+
+    Args:
+        line: one line of the prompt, with or without its trailing newline.
+
+    Returns:
+        ``True`` if this line is a fence delimiter, else ``False``.
+    """
     return line.lstrip(" \t").startswith("```")
 
 
@@ -48,12 +79,19 @@ def render_prompt(text: str,
     docstring — conservatively, and leaving an unfilled slot as literal text.
 
     Args:
-        text: the whole-file content of a ``.prompt``.
+        text: the whole-file content of a ``.prompt`` (§4.4 "the whole file,
+            verbatim, is one prompt").
         slots: caller-supplied values, keyed by slot name. Values are
-            converted to text. Names not present here are left as ``{name}``.
+            converted to text via ``str()``. A name absent here, or any
+            malformed ``{…}`` (per §4.4 condition 1), is left as literal
+            ``{name}`` text — §4.4's "slots are optional".
 
     Returns:
-        The prompt with its supplied slots substituted, otherwise verbatim.
+        The prompt with its supplied slots substituted, otherwise verbatim —
+        byte-for-byte unchanged outside the substituted ``{name}`` points
+        (``splitlines(keepends=True)`` preserves the original line endings, and
+        text inside a fenced block is reproduced untouched). An empty ``text``
+        returns ``""``.
     """
     values = slots or {}
 

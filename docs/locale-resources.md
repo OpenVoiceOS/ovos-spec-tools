@@ -1,5 +1,13 @@
 # 3. Locale resources
 
+> **Spec coverage.** This chapter is the reference for **OVOS-INTENT-2 — Locale
+> Resource Formats** (`resources.py`). `LocaleResources` is the *conformant
+> loader* of OVOS-INTENT-2 §5: it discovers languages (§5.1 / §2), locates a
+> file under the override precedence (§5.2 / §2.1), applies the common reader
+> (§5.3 / §3), applies the per-format rule (§5.4 / §4), and rejects an empty
+> file (§5.5 / §5). Template expansion is delegated to the OVOS-INTENT-1
+> Expander ([chapter 2](templates.md)).
+
 A skill ships its localized text as plain-text files under a `locale/` folder.
 This chapter covers what those files are and how `LocaleResources` loads them.
 It is the implementation of OVOS-INTENT-2.
@@ -90,13 +98,20 @@ prompt renderer to fill ([chapter 4](dialog.md)).
 `<name>` references inside an `.intent` resolve automatically against the
 `.voc` files of the same language — you do not pass vocabularies yourself.
 
-A missing resource raises `FileNotFoundError`. A malformed one — an empty file,
-a duplicate `(role, base name)` in one language tree, a slot in a slot-free
-role — raises `MalformedResource`.
+A missing resource raises `FileNotFoundError`. A malformed one raises
+`MalformedResource`, each case tied to a spec MUST:
+
+- an **empty file** — OVOS-INTENT-2 §5 ("every file MUST contribute at least
+  one template");
+- a **duplicate `(role, base name)`** in one language tree — §2 ("MUST NOT share
+  a base name anywhere within one language directory tree");
+- a **named slot in a slot-free role** — §4.3 (`.entity`/`.voc`/`.blacklist`
+  are the slot-free format).
 
 ## Override precedence
 
-A resource may come from three places, highest priority first:
+A resource may come from three places (OVOS-INTENT-2 §2.1), highest priority
+first; **first match wins**, and an override replaces the whole lower file:
 
 1. **user** — per-user overrides, under a path the assistant decides;
 2. **skill** — the files bundled with the skill;
@@ -116,10 +131,13 @@ takes it as a parameter and imports no configuration of its own.
 
 ## Smart language fallback
 
-When a skill has no directory for the requested language, `LocaleResources`
-resolves to the **nearest available** language instead — a request for `en-AU`
-loads `en-US`. This is re-evaluated on every call, so the same instance can
-serve an exact language and a fallback one side by side.
+OVOS-INTENT-2 §2.2 is explicit that fallback is **non-normative**: a loader
+*SHOULD* prefer an exact match and *MAY* fall back to the nearest available
+language. `LocaleResources` implements that suggested fallback. When a skill has
+no directory for the requested language, it resolves to the **nearest
+available** language instead — a request for `en-AU` loads `en-US`. This is
+re-evaluated on every call, so the same instance can serve an exact language and
+a fallback one side by side.
 
 ```python
 res.load_intent("play", "en-AU")   # finds en-US/ if there is no en-AU/
