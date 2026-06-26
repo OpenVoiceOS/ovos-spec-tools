@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a1) (2026-06-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.11.0a1...0.12.0a1)
+
+**Merged pull requests:**
+
+- feat: OVOS-SESSION-1 canonical Session reference implementation [\#16](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/16) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.11.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.11.0a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.10.0a1...0.11.0a1)
