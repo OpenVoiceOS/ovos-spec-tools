@@ -4,9 +4,9 @@
 > (`lint.py`). Every finding enforces a specific clause — template syntax from
 > **OVOS-INTENT-1 §3.6**, naming/layout/empty-file/uniqueness from
 > **OVOS-INTENT-2 §2/§4.3/§5**, slot-set consistency from **OVOS-INTENT-1 §5.5**
-> (relaxed to *union slot sets* for `.intent`, reconciling §5.5 with the
-> multi-slot template-intent example of **OVOS-INTENT-3 §5.3**). Each message
-> names the clause it failed, so a red lint points straight at the violated MUST.
+> (restated for `.intent` by **OVOS-INTENT-2 §4.1** / **OVOS-INTENT-3 §5.1**,
+> and for `.dialog` by **OVOS-INTENT-2 §4.2**). Each message names the clause it
+> failed, so a red lint points straight at the violated MUST.
 
 `ovos-spec-lint` checks a skill's locale folder against both specs at once —
 the **syntax** of every template (OVOS-INTENT-1) and the **naming and layout**
@@ -42,10 +42,11 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 - an empty file (no templates after comments and blank lines);
 - a file that is not valid UTF-8;
 - a named slot inside a slot-free role (`.entity` / `.voc` / `.blacklist`);
-- templates within one **`.dialog`** declaring **different slot sets** — every
-  phrase of one dialog must use the same `{slots}` so the caller fills the same
-  values whichever is chosen (OVOS-INTENT-1 §5.5). For **`.intent`** this is
-  only a *warning*, not an error: union slot sets are valid there (see below);
+- templates within one **`.intent`** or **`.dialog`** declaring **different
+  slot sets** — every line of one definition MUST declare the same `{slots}` so
+  the engine captures, or the caller fills, the same slots whichever line
+  matched or was chosen (OVOS-INTENT-1 §5.5; OVOS-INTENT-2 §4.1/§4.2;
+  OVOS-INTENT-3 §5.1);
 - a base name outside the allowed charset (lowercase letters, digits,
   underscores);
 - an `.entity` whose base name — which names a slot — begins with a digit;
@@ -65,22 +66,25 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 A `.prompt` is checked too, but not as a template — it is plain text, so only
 its naming and non-emptiness are checked, never template syntax.
 
-### Union slot sets for `.intent`
+### Slot-set consistency
 
-OVOS-INTENT-1 §5.5 says every template of one definition must declare the
-identical slot set. The linter enforces that strictly for `.dialog` (an
-**error**) but relaxes it for `.intent` to a **warning**, because
-OVOS-INTENT-3 §5.3 presents a single template intent whose phrasings declare
-*different* slots:
+OVOS-INTENT-1 §5.5 says every template of one definition MUST declare the
+identical slot set, and a tool "MUST reject" one that does not. This is restated
+normatively for each slot-bearing role — `.intent` by OVOS-INTENT-2 §4.1 and
+OVOS-INTENT-3 §5.1 ("Every template in one intent MUST declare the same set of
+named slots"), `.dialog` by OVOS-INTENT-2 §4.2 — so the linter treats a
+divergent slot set as an **error** for both. A phrasing that genuinely needs a
+different slot, such as:
 
 ```
 (play|put on) {query}
 (play|put on) {query} (on|using) {engine}
 ```
 
-Here `{engine}` is an optional capture — present in some phrasings, absent in
-others. Treating the extra slots as optional makes this one valid intent, so
-the linter warns ("verify this is intentional") rather than rejecting it.
+is **two** intents, not one: §5.5 says "place them in separate files and handle
+them individually". (The two-line block above appears as a *worked example* in
+OVOS-INTENT-3 §5.3, but that example is illustrative and itself violates the
+§5.5 MUST it does not restate; the normative rule governs.)
 
 ## Targeting an older spec version
 

@@ -133,6 +133,7 @@ symbols it exports as imported by the package `__init__`.)
 | `render` | OVOS-INTENT-2 | §4.2 (select + fill a `.dialog` phrase) |
 | `DialogRenderer` | OVOS-INTENT-2 | §4.2 (stateful, multilingual renderer) |
 | `UnfilledSlot` | OVOS-INTENT-2 | §4.2 (a chosen phrase has an unfilled slot) |
+| `verify_slot_consistency` | OVOS-INTENT-1 | §7 + §5.5 (Dialog renderer MUST verify all phrases declare the same slot set) |
 
 ### `prompt.py` — OVOS-INTENT-2 §4.4 (`.prompt`)
 

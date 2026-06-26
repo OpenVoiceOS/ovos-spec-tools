@@ -311,16 +311,42 @@ def test_inline_keywords_none_vocab():
 
 
 def test_inline_keywords_strips_unresolved():
+    # An unknown keyword is left as literal text with its angle brackets
+    # stripped (the documented lenient behaviour), not raised on.
     vocab = {"known": ["yes"]}
     result = inline_keywords("<unknown> <known>", vocab)
-    assert result == "<unknown> (yes)"  # brackets kept for unresolvable
+    assert result == "unknown (yes)"
 
 
-def test_inline_keywords_max_values():
+def test_inline_keywords_inlines_all_values_by_default():
+    # No silent truncation: every value is inlined (OVOS-INTENT-1 §4.3 — a
+    # limit is enforced by refusing, not by dropping).
     vocab = {"x": [str(i) for i in range(20)]}
-    result = inline_keywords("<x>", vocab, max_values=5)
-    assert "10" not in result
-    assert "0" in result
+    result = inline_keywords("<x>", vocab)
+    for i in range(20):
+        assert f"|{i}|" in f"|{result[1:-1]}|"
+    assert result.count("|") == 19
+
+
+def test_inline_keywords_max_values_refuses():
+    # §4.3: an explicit bound, when exceeded, REFUSES (raises) — it never
+    # silently truncates the value list.
+    vocab = {"x": [str(i) for i in range(20)]}
+    with pytest.raises(MalformedTemplate):
+        inline_keywords("<x>", vocab, max_values=5)
+
+
+def test_inline_keywords_max_values_within_bound():
+    vocab = {"x": ["a", "b", "c"]}
+    assert inline_keywords("<x>", vocab, max_values=5) == "(a|b|c)"
+
+
+def test_inline_keywords_cycle_raises():
+    # A reference cycle is rejected (OVOS-INTENT-1 §4.1), not cut off at an
+    # arbitrary recursion depth.
+    vocab = {"a": ["<b>"], "b": ["<a>"]}
+    with pytest.raises(MalformedTemplate):
+        inline_keywords("<a>", vocab)
 
 
 def test_inline_keywords_no_refs():
