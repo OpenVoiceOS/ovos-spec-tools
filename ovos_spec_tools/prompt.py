@@ -3,36 +3,35 @@
 A ``.prompt`` is the localized, whole-file plain-text prompt a skill feeds to a
 language model. Unlike a ``.dialog`` it is **not** a sentence template: none of
 the OVOS-INTENT-1 grammar applies, so ``(``, ``[``, ``|`` and the rest are
-literal. The one special construct is ``{name}`` substitution, and it is
-applied **conservatively** — a prompt is free-form text that routinely embeds
-code and JSON, and rendering it must never corrupt text the author did not
-write as a slot.
+literal. The one special construct is the **double-brace** ``{{name}}``
+substitution point, and it is applied **conservatively** — a prompt is
+free-form text that routinely embeds code and JSON, and rendering it must
+never corrupt text the author did not write as a slot.
 
-A ``{name}`` is replaced by a caller-supplied value only when all three hold
-(OVOS-INTENT-2 §4.4, the three numbered substitution conditions):
+A ``.prompt`` uses the double-brace form **only** (OVOS-INTENT-2 §4.4): a
+single ``{name}`` is **literal text** and is never substituted, as are any
+lone ``{`` or ``}``. This is the rationale for the double-brace requirement —
+prompts are natural-language LLM text that routinely contains literal single
+braces (JSON such as ``{"key": 1}``, code), so a single brace must never
+trigger substitution. The single-brace ``{name}`` form (OVOS-INTENT-1 §3.4)
+remains the slot token of the *template* roles (``.intent``/``.dialog``); it
+has no special meaning in a ``.prompt``.
 
-1. it is a well-formed slot name — lowercase ASCII letters, digits and
-   underscores, not beginning with a digit (so ``{}``, ``{ }`` and JSON such
-   as ``{"key": 1}`` are left untouched). The charset is INTENT-2 §4.4's
-   "lowercase ASCII letters, digits, and underscores … MUST NOT begin with a
-   digit", identical to the slot-name rule of OVOS-INTENT-1 §3.4;
-2. the caller supplied a value for that name — an **unfilled** slot is left as
-   literal text, not an error (the deliberate opposite of ``.dialog``, where
-   §4.2/OVOS-INTENT-1 §5.1 require **every** slot be filled before TTS);
-3. it does not lie inside a ```` ``` ```` fenced code block — §4.4 condition 3.
-   Fence detection here is the "simpler heuristic (counting triple backticks)"
-   §4.4 explicitly permits: a line whose first non-whitespace content is three
-   or more backticks toggles the fence, and an unterminated fence extends to
-   end-of-file. §4.4 marks nested/indented fences as implementation-defined.
+A ``{{name}}`` is replaced by a caller-supplied value only when all three hold:
 
-.. note::
-   **Known conformance gap — author-only comments (OVOS-INTENT-2 §4.4).** §4.4
-   requires that an HTML-style comment ``<!-- … -->`` be **stripped** before
-   the prompt reaches a language model, and that an unterminated ``<!--`` be
-   reported (a MUST) with the file then treated as literal text. This renderer
-   does **not** yet implement comment stripping: a ``<!-- … -->`` is passed
-   through verbatim. Until that is implemented, authors must not rely on
-   comments being removed. This is documented, not silently worked around.
+1. it is a well-formed double-brace token ``{{name}}`` whose name is lowercase
+   ASCII letters, digits and underscores, not beginning with a digit (so
+   ``{{}}``, ``{{ }}``, a single ``{name}``, and JSON such as ``{"key": 1}``
+   are left untouched). The name charset is identical to the slot-name rule of
+   OVOS-INTENT-1 §3.4;
+2. the caller supplied a value for that name — an **unfilled** ``{{name}}`` is
+   left as literal text, not an error (the deliberate opposite of ``.dialog``,
+   where §4.2/OVOS-INTENT-1 §5.1 require **every** slot be filled before TTS);
+3. it does not lie inside a ```` ``` ```` fenced code block. Fence detection
+   here is a simple heuristic (counting triple backticks): a line whose first
+   non-whitespace content is three or more backticks toggles the fence, and an
+   unterminated fence extends to end-of-file. Nested/indented fences are
+   implementation-defined.
 
 Two interfaces are provided:
 
@@ -47,8 +46,12 @@ from typing import Dict, List, Optional
 
 __all__ = ["render_prompt", "PromptRenderer"]
 
-# A {name} substitution point — the OVOS-INTENT-2 §4.4 slot-name charset.
-_SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+# A {{name}} substitution point — the OVOS-INTENT-2 §4.4 double-brace form,
+# the ONLY substitution token in a .prompt. The name uses the §3.4 charset.
+# A single-brace {name} is deliberately NOT matched: in a prompt it is literal
+# text. The interior of the braces forbids ``{``/``}`` so the token is flat and
+# a single ``{name}`` nested inside ``{{ }}`` cannot accidentally extend it.
+_SLOT_RE = re.compile(r"\{\{([a-z][a-z0-9_]*)\}\}")
 
 
 def _is_fence(line: str) -> bool:
@@ -75,20 +78,23 @@ def render_prompt(text: str,
     """Render a ``.prompt`` string (stateless).
 
     The whole ``text`` is the prompt; every character is significant.
-    ``{name}`` substitution points are filled per the rules in the module
+    ``{{name}}`` substitution points are filled per the rules in the module
     docstring — conservatively, and leaving an unfilled slot as literal text.
+    A single-brace ``{name}`` and any literal brace are passed through
+    unchanged.
 
     Args:
         text: the whole-file content of a ``.prompt`` (§4.4 "the whole file,
             verbatim, is one prompt").
         slots: caller-supplied values, keyed by slot name. Values are
-            converted to text via ``str()``. A name absent here, or any
-            malformed ``{…}`` (per §4.4 condition 1), is left as literal
-            ``{name}`` text — §4.4's "slots are optional".
+            converted to text via ``str()``. A name absent here, any
+            malformed ``{{…}}`` (per §4.4 condition 1), and every single-brace
+            ``{name}`` are left as literal text — §4.4's "slots are optional"
+            and the double-brace-only rule.
 
     Returns:
         The prompt with its supplied slots substituted, otherwise verbatim —
-        byte-for-byte unchanged outside the substituted ``{name}`` points
+        byte-for-byte unchanged outside the substituted ``{{name}}`` points
         (``splitlines(keepends=True)`` preserves the original line endings, and
         text inside a fenced block is reproduced untouched). An empty ``text``
         returns ``""``.
@@ -99,7 +105,7 @@ def render_prompt(text: str,
         name = match.group(1)
         if name in values:
             return str(values[name])
-        return match.group(0)  # an unfilled slot stays literal (§4.4)
+        return match.group(0)  # an unfilled {{name}} stays literal (§4.4)
 
     rendered: List[str] = []
     in_fence = False

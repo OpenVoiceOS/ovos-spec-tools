@@ -9,7 +9,11 @@ The grammar has four tokens:
 - literal words;
 - ``(a|b|c)`` alternatives;
 - ``[x]`` optional segments, equivalent to ``(x|)``;
-- ``{name}`` named slots — opaque, carried through unchanged, never expanded;
+- ``{name}`` named slots — opaque, carried through unchanged, never expanded.
+  The double-brace form ``{{name}}`` is an **equivalent** spelling of the same
+  named slot (OVOS-INTENT-1 §3.4): ``{name}`` and ``{{name}}`` denote the same
+  slot, so a template may use either spelling and the resulting sample set is
+  identical;
 - ``<name>`` inline vocabulary references — replaced, before expansion, by a
   named slot-free vocabulary (OVOS-INTENT-1 §3.7).
 
@@ -24,7 +28,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional, Sequence, Tuple
 
-__all__ = ["expand", "MalformedTemplate"]
+__all__ = ["expand", "fold_double_braces", "MalformedTemplate"]
 
 # A slot or vocabulary name: lowercase ASCII letters, digits, underscores;
 # never beginning with a digit (OVOS-INTENT-1 §3.4).
@@ -33,6 +37,13 @@ _NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
 # forbid the matching bracket so a malformed/nested token cannot be matched.
 _SLOT_TOKEN_RE = re.compile(r"\{([^{}]*)\}")
 _VOC_TOKEN_RE = re.compile(r"<([^<>]*)>")
+# The double-brace slot spelling ``{{name}}`` (OVOS-INTENT-1 §3.4) — an
+# equivalent form of the single-brace named slot. It is folded to ``{name}``
+# before any other parsing. The interior forbids braces so the token is flat,
+# and the form is matched here (and folded) **before** the single-brace token
+# is ever considered, so ``{{x}}`` is read as one slot and never mis-parsed as
+# ``{`` + ``{x}`` + ``}``.
+_DOUBLE_SLOT_TOKEN_RE = re.compile(r"\{\{([^{}]*)\}\}")
 # Two named slots in a sample with only whitespace between them.
 _ADJACENT_SLOTS_RE = re.compile(r"\}\s*\{")
 
@@ -75,6 +86,14 @@ def _expand(template: str,
     if not isinstance(template, str):
         raise MalformedTemplate(f"template must be a string, got {type(template)!r}")
 
+    # Fold the double-brace slot spelling ``{{name}}`` to the canonical
+    # single-brace ``{name}`` (OVOS-INTENT-1 §3.4) before any other parsing,
+    # so the two spellings are exactly equivalent and every downstream check
+    # (balance, names, slot-only, adjacency, repetition) sees one slot form.
+    # Done first — and matching the double form before the single — so
+    # ``{{x}}`` is never mis-read as ``{`` + ``{x}`` + ``}``.
+    template = fold_double_braces(template)
+
     _check_balanced(template)
     _check_names(template)
 
@@ -97,6 +116,18 @@ def _expand(template: str,
     for sentence in samples:
         _check_sample(sentence, template)
     return samples
+
+
+def fold_double_braces(template: str) -> str:
+    """Fold every ``{{name}}`` to the equivalent ``{name}`` (§3.4).
+
+    The double-brace spelling is matched and replaced **before** the
+    single-brace token is ever examined, so ``{{x}}`` collapses to ``{x}`` as
+    a single slot rather than being read as ``{`` + ``{x}`` + ``}``. The
+    interior is carried through verbatim, so an ill-formed interior survives
+    to be rejected by the same §3.4 name check that guards ``{name}``.
+    """
+    return _DOUBLE_SLOT_TOKEN_RE.sub(lambda m: "{" + m.group(1) + "}", template)
 
 
 def _check_balanced(template: str) -> None:
