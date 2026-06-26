@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a2) (2026-06-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.12.0a1...0.12.0a2)
+
+**Merged pull requests:**
+
+- docs: spec traceability for the locale/template/lint domain [\#33](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/33) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.12.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.11.0a1...0.12.0a1)
