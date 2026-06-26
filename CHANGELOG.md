@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.0a1) (2026-06-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.13.0a1...0.14.0a1)
+
+**Merged pull requests:**
+
+- feat: add persona\_id to canonical Session \(OVOS-PERSONA-1 registered field\) [\#37](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/37) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.13.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.13.0a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.12.1a1...0.13.0a1)
