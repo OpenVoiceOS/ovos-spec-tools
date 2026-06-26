@@ -6,6 +6,7 @@
 
 **Merged pull requests:**
 
+- docs: spec-traceability for the bus/message domain \(MSG-1\) [\#34](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/34) ([JarbasAl](https://github.com/JarbasAl))
 - docs: spec traceability for the locale/template/lint domain [\#33](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/33) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.12.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a1) (2026-06-26)
