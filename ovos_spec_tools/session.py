@@ -1,12 +1,14 @@
-"""Reference implementation of OVOS-SESSION-1 — the session carrier.
+"""Reference implementation of OVOS-SESSION-1 — the session **wire carrier**.
 
-This module defines the **wire shape** of the JSON object that travels
-inside ``Message.context.session``, and the rules consumers follow when
-reading and propagating it. It is the canonical reference implementation
-of the field set OVOS-SESSION-1 §3 claims, carrying every registered
-field with spec-correct serialize / deserialize and the recency / cap /
-prune helpers the field owners (OVOS-PIPELINE-1 §7.1, OVOS-CONVERSE-1
-§2.1 / §2.2) describe.
+SESSION-1 §1 scopes this module to one thing: the **wire shape** of the
+JSON object that travels inside ``Message.context.session``, plus the
+consumer rules for reading and propagating it. It is a pure
+**WIRE-CARRIER**. The *semantics* of every field — recency ordering,
+the converse cap, TTL decay, response-window timing — belong to the
+owner specifications and to the orchestrator that drives them, **not**
+to this carrier. This module fixes the field name + wire type (§3) and
+the consume / produce rules (§2 / §5 / §6); it does not own, schedule,
+or apply any orchestrator mechanic.
 
 Scope per OVOS-SESSION-1 §1:
 
@@ -19,6 +21,29 @@ Scope per OVOS-SESSION-1 §1:
   here as round-trip equality;
 - serialization per OVOS-MSG-1 §6 (§5).
 
+The **consume / produce split** is the load-bearing design rule:
+
+- **Consume** (:meth:`Session.from_dict` / :meth:`Session.deserialize`)
+  is **tolerant**. SESSION-1 §6 forbids a consumer from rejecting a
+  Message because of the *value* of any single session field — an
+  invalid value triggers that field's fallback (the deployment
+  default), never Message rejection. ``from_dict`` therefore
+  sanitizes each field, dropping bad values back to omission, and
+  raises :class:`MalformedSession` **only** for the genuinely
+  structural failures §5 mandates (a non-object root, unparsable JSON).
+- **Produce** (:meth:`Session.serialize` / the constructor's producer
+  guards) **enforces** the producer MUSTs: ``session_id`` non-empty
+  when set (§6), omission-not-``null`` and finite numbers (§5, §2).
+
+This carrier never fabricates orchestrator-stamped data. A missing
+``activated_at`` (PIPELINE-1 §7.1 / CONVERSE-1 §2.1 — the orchestrator
+stamps it at dispatch) is treated as a malformed handler entry and
+dropped; the carrier never invents a timestamp. The recency / cap /
+prune **helpers** on this class are inert conveniences an
+**orchestrator** may call at the boundaries its owner spec defines
+(PIPELINE-1 §7.1, CONVERSE-1 §3.1 / §3.2); nothing in this module
+auto-invokes them.
+
 Design constraints — this is **pure data + stdlib only**. It does not
 import ``ovos-bus-client``, ``ovos-config``, the bus, or any heavy
 ``ovos-utils`` machinery. Deployment defaults (the pipeline ordering,
@@ -30,11 +55,9 @@ back-compat projections — lives in bus-client's subclass, not here.
 
 Out of scope (§1 non-goals): session lifecycle, a session store,
 authentication / authorization, encryption, and the *semantics* of any
-field whose owner is not OVOS-SESSION-1 — those are owned by the citing
-specification. This module fixes only the wire contract, the §3.1 /
-§3.2 / §3.3 fields whose meaning OVOS-SESSION-1 itself owns, and the
-mechanical recency / cap / prune behaviour the owners describe for the
-handler-list fields.
+field — owned by the citing specification or by the orchestrator. This
+module fixes only the wire contract and the §3.1 / §3.2 / §3.3 fields
+whose meaning OVOS-SESSION-1 itself owns.
 """
 from __future__ import annotations
 
@@ -133,7 +156,25 @@ def _is_bcp47(value: Any) -> bool:
 
 
 class Session:
-    """OVOS-SESSION-1 carrier — the canonical reference implementation.
+    """OVOS-SESSION-1 **wire carrier** — the canonical reference
+    implementation of the §3 field set.
+
+    This class is a pure carrier of the SESSION-1 wire contract. It does
+    not own the *semantics* of any field: recency ordering, the converse
+    cap, TTL pruning, and response-window timing are owned by the citing
+    specs (PIPELINE-1 §7.1, CONVERSE-1 §2 / §3) and applied by an
+    orchestrator. The mutation helpers below (``add_active_handler``,
+    ``add_converse_handler``, ``prune_converse_handlers`` …) are inert
+    conveniences an orchestrator may call at the boundaries those specs
+    define; nothing on this class invokes them automatically.
+
+    Consume vs. produce: construction from the wire
+    (:meth:`from_dict` / :meth:`deserialize`) is **tolerant** — a bad
+    single field value falls back to omission rather than rejecting the
+    Message (§6). Producing the wire (:meth:`serialize` and the
+    constructor's producer guards) **enforces** the producer MUSTs
+    (``session_id`` non-empty when set §6; omission-not-``null`` §2;
+    finite numbers §5).
 
     Every field is **optional** on the wire (§2). The constructor and
     :meth:`to_dict` honour the omissible-but-never-nullable rule: a
@@ -334,22 +375,37 @@ class Session:
         """Normalize a handler list into the spec ``{skill_id,
         activated_at}`` object shape (PIPELINE-1 §7.1 / CONVERSE-1 §2.1).
 
-        Accepts either the spec object shape (list of dicts) or the
-        legacy ``[skill_id, activated_at]`` pair shape (tolerated on
-        deserialization). Entries are deduplicated by ``skill_id``
-        (head wins) and kept head-first by recency."""
+        Both PIPELINE-1 §7.1 and CONVERSE-1 §2.1 fix the wire type as an
+        array of ``{skill_id, activated_at}`` **objects**. Only the
+        object shape is accepted — no spec defines a pair shape, and
+        the spec-adoption program forbids back-compat shims.
+
+        ``activated_at`` is **orchestrator-stamped at dispatch**
+        (PIPELINE-1 §7.1); a carrier MUST NOT fabricate it. An entry
+        that lacks a usable ``skill_id`` or a finite numeric
+        ``activated_at`` is malformed and is **dropped** (the whole
+        session is not rejected — SESSION-1 §6). Surviving entries are
+        deduplicated by ``skill_id`` (head wins) and kept head-first by
+        recency."""
         out: List[Dict[str, Any]] = []
         seen = set()
         for entry in handlers or []:
-            if isinstance(entry, dict):
-                skill_id = entry.get("skill_id")
-                activated_at = entry.get("activated_at", time.time())
-            elif isinstance(entry, (list, tuple)) and entry:
-                skill_id = entry[0]
-                activated_at = entry[1] if len(entry) > 1 else time.time()
-            else:
+            if not isinstance(entry, dict):
+                # only the spec object shape is accepted; drop the rest.
                 continue
+            skill_id = entry.get("skill_id")
+            activated_at = entry.get("activated_at")
             if not skill_id or skill_id in seen:
+                continue
+            # activated_at is orchestrator-stamped (PIPELINE-1 §7.1); the
+            # carrier never mints it. A missing/invalid stamp makes the
+            # entry malformed — drop it, never invent time.time().
+            if not isinstance(activated_at, (int, float)) \
+                    or isinstance(activated_at, bool):
+                _log.warning(
+                    "OVOS-PIPELINE-1 §7.1: handler entry for `%s` lacks a "
+                    "valid orchestrator-stamped activated_at; dropping the "
+                    "malformed entry (not fabricating a timestamp)", skill_id)
                 continue
             seen.add(skill_id)
             out.append({"skill_id": skill_id, "activated_at": activated_at})
@@ -361,14 +417,23 @@ class Session:
         """Normalize a ``response_mode`` value into the spec
         ``{skill_id, expires_at}`` shape, or ``None`` when there is no
         holder. Malformed values resolve to ``None`` (SESSION-1 §2.1,
-        CONVERSE-1 §2.2)."""
+        CONVERSE-1 §2.2).
+
+        CONVERSE-1 §2.2 marks **both** ``skill_id`` and ``expires_at``
+        Required and defines **no** default for either. A holder missing
+        a usable ``skill_id`` or a finite numeric ``expires_at`` is not
+        a valid window — it resolves to ``None``. The carrier never
+        fabricates an ``expires_at`` (no ``-1`` sentinel)."""
         if not isinstance(response_mode, dict):
             return None
         skill_id = response_mode.get("skill_id")
         if not skill_id:
             return None
-        return {"skill_id": skill_id,
-                "expires_at": response_mode.get("expires_at", -1)}
+        expires_at = response_mode.get("expires_at")
+        if not isinstance(expires_at, (int, float)) \
+                or isinstance(expires_at, bool):
+            return None
+        return {"skill_id": skill_id, "expires_at": expires_at}
 
     @staticmethod
     def _promote_handler(handlers: List[Dict[str, Any]], skill_id: str,
@@ -445,10 +510,14 @@ class Session:
         """Drop ``converse_handlers`` entries older than ``ttl`` seconds
         (OVOS-CONVERSE-1 §3.2).
 
+        This is an **orchestrator-invoked** operation, not carrier
+        behaviour. CONVERSE-1 §3.2 / §9.1 assign TTL pruning to the
+        orchestrator, which runs it at two boundaries (pre-converse and
+        pre-list-emission); this carrier never invokes it automatically.
+        It is exposed only as an inert helper the orchestrator may call.
+
         ``now - activated_at > ttl`` is dropped. A non-positive ``ttl``
-        disables time-based pruning. The caller (the orchestrator)
-        invokes this at the pre-converse and pre-list-emission
-        boundaries."""
+        disables time-based pruning."""
         if not ttl or ttl <= 0:
             return
         now = now if now is not None else time.time()
@@ -539,19 +608,112 @@ class Session:
 
     # --- construction from the wire -----------------------------------------
 
+    @staticmethod
+    def _sanitize_inbound(kwargs: Dict[str, Any]) -> None:
+        """Apply the SESSION-1 §6 consumer rule to inbound field values
+        (in place): a consumer **MUST NOT** reject a Message because of
+        the value of any single session field — an invalid value falls
+        back to the field's deployment default (omission), never a
+        Message rejection.
+
+        This sanitizes the consume path so the constructor's producer
+        guards never fire on inbound wire data. Each bad value is logged
+        and dropped from ``kwargs`` (→ omitted ⇒ deployment default):
+
+        - non-BCP-47 ``lang`` / ``output_lang`` / ``stt_lang`` /
+          ``request_lang`` / ``detected_lang`` (§3.2);
+        - empty / non-string ``site_id`` (§3.3 imposes no non-empty
+          rule, unlike §6's ``session_id``-only MUST);
+        - ``secondary_langs`` that is not a list, or whose entries are
+          bad / duplicated / include ``lang`` — §3.2.2 is a **producer**
+          emission rule, not a consumer rejection trigger;
+        - non-list list-valued overrides (``pipeline`` etc.) and non-dict
+          object overrides (``intent_context``).
+
+        ``session_id`` is *not* sanitized away here: an empty/non-string
+        ``session_id`` on the wire is dropped to omission (resolving to
+        ``"default"`` §3.1 / §2.1) rather than rejected, but a valid
+        non-empty string passes through to the producer guard unchanged.
+        """
+        def _drop(field: str, reason: str) -> None:
+            _log.warning(
+                "OVOS-SESSION-1 §6: invalid `%s` (%s); falling back to the "
+                "deployment default (treating field as omitted)",
+                field, reason)
+            kwargs.pop(field, None)
+
+        # §6 / §3.1 — session_id: non-empty string or omit-and-default.
+        if "session_id" in kwargs:
+            sid = kwargs["session_id"]
+            if not isinstance(sid, str) or not sid:
+                _drop("session_id", "not a non-empty string")
+
+        # §3.2 — BCP-47 language scalars.
+        for field in ("lang", "output_lang", "stt_lang",
+                      "request_lang", "detected_lang"):
+            if field in kwargs and not _is_bcp47(kwargs[field]):
+                _drop(field, "not a BCP-47 string")
+
+        # §3.3 — site_id is opaque; the spec imposes no non-empty MUST,
+        # but an empty / non-string value carries no meaning → omit.
+        if "site_id" in kwargs:
+            site = kwargs["site_id"]
+            if not isinstance(site, str) or not site:
+                _drop("site_id", "not a non-empty string")
+
+        # §3.2.2 — secondary_langs producer rules (no dup, no `lang`,
+        # BCP-47 entries) MUST NOT reject on consume. Drop bad entries /
+        # the whole field rather than raise.
+        if "secondary_langs" in kwargs:
+            raw = kwargs["secondary_langs"]
+            if not isinstance(raw, list):
+                _drop("secondary_langs", "not an array")
+            else:
+                primary = kwargs.get("lang")
+                cleaned: List[str] = []
+                seen = set()
+                for tag in raw:
+                    if not _is_bcp47(tag) or tag in seen or tag == primary:
+                        # bad / duplicate / equals primary → drop the entry
+                        continue
+                    seen.add(tag)
+                    cleaned.append(tag)
+                if cleaned != raw:
+                    _log.warning(
+                        "OVOS-SESSION-1 §6 / §3.2.2: sanitized inbound "
+                        "`secondary_langs` (dropped invalid / duplicate / "
+                        "primary-language entries) instead of rejecting")
+                kwargs["secondary_langs"] = cleaned or None
+
+        # §3 list/object overrides — wrong wire type falls back, no raise.
+        for field in _LIST_OVERRIDE_FIELDS:
+            if field in kwargs and not isinstance(kwargs[field], list):
+                _drop(field, "not an array")
+        for field in _OBJECT_OVERRIDE_FIELDS:
+            if field in kwargs and not isinstance(kwargs[field], dict):
+                _drop(field, "not an object")
+
     @classmethod
     def from_dict(cls, payload: Optional[Dict[str, Any]]) -> "Session":
-        """Construct a Session from a JSON-decoded dict per §2.
+        """Construct a Session from a JSON-decoded dict per §2 — the
+        **tolerant consume path**.
 
-        Tolerant of the §2.1 deferral surface: an explicit ``null`` on
-        any registered field is logged and treated as omitted, not as a
-        rejection. Unknown fields are preserved verbatim in
-        :attr:`extras` (§2.4). Passing ``None`` (no ``session`` key in
-        ``context``) yields the same well-formed empty session as ``{}``
-        (§2.1)."""
+        SESSION-1 §6: a consumer MUST NOT reject a Message because of the
+        presence / absence / value of any single session field. An
+        explicit ``null`` (§2.1) or any otherwise-invalid single field
+        value is logged and falls back to omission (→ the deployment
+        default), **never** a Message rejection. Only the structural
+        failures §5 mandates raise :class:`MalformedSession`: a non-object
+        root here, and unparsable JSON in :meth:`deserialize`.
+
+        Unknown fields are preserved verbatim in :attr:`extras` (§2.4).
+        Passing ``None`` (no ``session`` key in ``context``) yields the
+        same well-formed empty session as ``{}`` (§2.1)."""
         if payload is None:
             return cls()
         if not isinstance(payload, dict):
+            # §5 — a non-object root is the one structural failure that is
+            # a hard error; everything below it falls back per §6.
             raise MalformedSession(
                 "session must be a JSON object (§2 / §5)")
 
@@ -568,6 +730,9 @@ class Session:
                     "malformed; treating as omitted", key)
                 continue
             kwargs[key] = value
+        # §6 — fall back per-field on bad values before construction so the
+        # constructor's producer guards never reject inbound wire data.
+        cls._sanitize_inbound(kwargs)
         if extras:
             kwargs["extras"] = extras
         return cls(**kwargs)

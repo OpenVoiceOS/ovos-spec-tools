@@ -236,13 +236,32 @@ class TestActiveHandlers(unittest.TestCase):
         s.add_active_handler("a", activated_at=1.0)
         self.assertEqual(Session.from_dict(s.to_dict()), s)
 
-    def test_legacy_pair_shape_coerced_on_deserialize(self):
-        # tolerant input — the legacy [skill_id, ts] pair shape coerces
-        # into the spec object shape.
+    def test_legacy_pair_shape_rejected_object_shape_only(self):
+        # PIPELINE-1 §7.1 / CONVERSE-1 §2.1 fix the wire type as an array
+        # of {skill_id, activated_at} OBJECTS. No spec defines a pair
+        # shape; the spec-adoption program forbids back-compat shims. A
+        # pair entry is malformed and is dropped (not raised — §6).
         s = Session.from_dict({"active_handlers": [["a", 1.0], ["b", 2.0]]})
+        self.assertEqual(s.active_handlers, [])
+
+    def test_handler_missing_activated_at_is_dropped_not_timestamped(self):
+        # PIPELINE-1 §7.1 — activated_at is orchestrator-stamped at
+        # dispatch; the carrier MUST NOT fabricate it. An entry without a
+        # valid activated_at is malformed and dropped — never minted with
+        # time.time(), and the whole session is NOT rejected (§6).
+        s = Session.from_dict({"active_handlers": [
+            {"skill_id": "good", "activated_at": 5.0},
+            {"skill_id": "no_stamp"},
+            {"skill_id": "bad_stamp", "activated_at": "soon"},
+        ]})
         self.assertEqual(s.active_handlers,
-                         [{"skill_id": "a", "activated_at": 1.0},
-                          {"skill_id": "b", "activated_at": 2.0}])
+                         [{"skill_id": "good", "activated_at": 5.0}])
+
+    def test_handler_bool_activated_at_is_dropped(self):
+        # bool is a numeric subtype in Python but is not a valid timestamp.
+        s = Session.from_dict({"active_handlers": [
+            {"skill_id": "x", "activated_at": True}]})
+        self.assertEqual(s.active_handlers, [])
 
 
 # --- OVOS-CONVERSE-1 §2.1 converse_handlers --------------------------------
@@ -382,10 +401,136 @@ class TestResponseMode(unittest.TestCase):
         self.assertIsNone(
             Session.from_dict({"response_mode": {"expires_at": 1}}).response_mode)
 
+    def test_response_mode_missing_expires_at_drops_entry_no_default(self):
+        # CONVERSE-1 §2.2 marks expires_at Required with NO default; the
+        # carrier MUST NOT fabricate -1. A holder lacking a valid numeric
+        # expires_at is not a valid window → None.
+        self.assertIsNone(
+            Session(response_mode={"skill_id": "a"}).response_mode)
+        self.assertIsNone(
+            Session.from_dict(
+                {"response_mode": {"skill_id": "a"}}).response_mode)
+
+    def test_response_mode_invalid_expires_at_drops_entry(self):
+        # non-numeric or bool expires_at is not a valid window.
+        self.assertIsNone(
+            Session(response_mode={"skill_id": "a",
+                                   "expires_at": "later"}).response_mode)
+        self.assertIsNone(
+            Session(response_mode={"skill_id": "a",
+                                   "expires_at": True}).response_mode)
+
+    def test_response_mode_never_fabricates_minus_one(self):
+        # regression: the carrier used to default expires_at = -1.
+        s = Session.from_dict({"response_mode": {"skill_id": "a"}})
+        self.assertNotEqual(
+            (s.response_mode or {}).get("expires_at"), -1)
+        self.assertIsNone(s.response_mode)
+
     def test_response_mode_round_trip(self):
         s = Session()
         s.set_response_mode("skill-a", expires_at=99.0)
         self.assertEqual(Session.from_dict(s.to_dict()), s)
+
+
+# --- §6 consume-vs-produce split: from_dict tolerates field values ---------
+
+class TestConsumeTolerance(unittest.TestCase):
+    """SESSION-1 §6: a consumer MUST NOT reject a Message because of the
+    value of any single session field — an invalid value falls back to
+    the field's deployment default (omission), never Message rejection.
+    The constructor (PRODUCE path) still enforces producer MUSTs; only
+    from_dict (CONSUME path) is tolerant."""
+
+    def test_from_dict_tolerates_non_bcp47_lang(self):
+        # #13 — a bad lang falls back, does NOT raise on consume.
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict({"session_id": "x", "lang": "en US"})
+        self.assertIsNone(s.lang)
+        self.assertEqual(s.session_id, "x")
+
+    def test_from_dict_tolerates_non_bcp47_other_lang_fields(self):
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict({
+                "output_lang": "  ", "stt_lang": 42,
+                "request_lang": "", "detected_lang": "a\tb"})
+        self.assertIsNone(s.output_lang)
+        self.assertIsNone(s.stt_lang)
+        self.assertIsNone(s.request_lang)
+        self.assertIsNone(s.detected_lang)
+
+    def test_from_dict_tolerates_empty_site_id(self):
+        # #12 — §3.3 imposes no non-empty rule; empty falls back, no raise.
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict({"site_id": ""})
+        self.assertIsNone(s.site_id)
+
+    def test_from_dict_tolerates_secondary_langs_duplicates(self):
+        # #15 — §3.2.2 dup rule is a PRODUCER rule; consume drops dups.
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict({"secondary_langs": ["fr-FR", "fr-FR"]})
+        self.assertEqual(s.secondary_langs, ["fr-FR"])
+
+    def test_from_dict_tolerates_secondary_langs_contains_lang(self):
+        # #15 — secondary_langs containing `lang` is a PRODUCER rule; the
+        # consumer drops the offending entry rather than rejecting.
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict(
+                {"lang": "en-US", "secondary_langs": ["en-US", "fr-FR"]})
+        self.assertEqual(s.secondary_langs, ["fr-FR"])
+
+    def test_from_dict_tolerates_non_list_secondary_langs(self):
+        # #14 — wrong type falls back to omission, no raise.
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict({"secondary_langs": "en-US"})
+        self.assertIsNone(s.secondary_langs)
+
+    def test_from_dict_tolerates_non_list_overrides(self):
+        # #18 — non-list override fields fall back, no raise.
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict({"pipeline": "adapt_high",
+                                   "blacklisted_skills": {"a": 1},
+                                   "intent_context": ["not", "an", "object"]})
+        self.assertIsNone(s.pipeline)
+        self.assertIsNone(s.blacklisted_skills)
+        self.assertIsNone(s.intent_context)
+
+    def test_from_dict_tolerates_empty_session_id(self):
+        # #12-adjacent — empty session_id on the wire resolves to default,
+        # not a rejection (§6 / §3.1).
+        with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
+            s = Session.from_dict({"session_id": ""})
+        self.assertIsNone(s.session_id)
+        self.assertEqual(s.resolved_session_id(), DEFAULT_SESSION_ID)
+
+    def test_from_dict_still_raises_on_non_object_root(self):
+        # §5 — the one structural failure that stays a hard error.
+        with self.assertRaises(MalformedSession):
+            Session.from_dict(["not", "an", "object"])  # type: ignore[arg-type]
+
+    def test_deserialize_still_raises_on_unparsable_json(self):
+        # §5 — unparsable JSON is a hard error.
+        with self.assertRaises(MalformedSession):
+            Session.deserialize("{not valid")
+
+    def test_produce_path_still_enforces_producer_musts(self):
+        # The constructor (PRODUCE) still rejects producer-MUST violations:
+        # non-empty session_id (§6), BCP-47 langs (§3.2), secondary_langs
+        # producer rules (§3.2.2). Only from_dict (CONSUME) is tolerant.
+        with self.assertRaises(MalformedSession):
+            Session(session_id="")
+        with self.assertRaises(MalformedSession):
+            Session(lang="en US")
+        with self.assertRaises(MalformedSession):
+            Session(lang="en-US", secondary_langs=["en-US"])
+
+    def test_good_values_survive_consume_unchanged(self):
+        # tolerance must not corrupt valid input.
+        payload = {"session_id": "x", "lang": "en-US",
+                   "secondary_langs": ["es-ES", "fr-FR"], "site_id": "kitchen",
+                   "pipeline": ["adapt_high"]}
+        s = Session.from_dict(payload)
+        self.assertEqual(s.to_dict(), payload)
 
 
 # --- §4 propagation --------------------------------------------------------
