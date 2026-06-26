@@ -104,12 +104,12 @@ _OBJECT_OVERRIDE_FIELDS = ("intent_context",)
 #: OVOS-CONVERSE-1 §2.1 / §2.2).
 _HANDLER_FIELDS = ("active_handlers", "converse_handlers", "response_mode")
 
-#: Scalar fields claimed by other specs. ``persona_id`` is registered by
+#: String fields claimed by other specs. ``persona_id`` is registered by
 #: OVOS-PERSONA-1 and recognized here per the OVOS-SESSION-1 §2.2 field
 #: registry; OVOS-SESSION-1 carries it opaquely (its semantics are owned
 #: by OVOS-PERSONA-1). An empty / unset value is wire-equivalent to
 #: omission (§2.1).
-_SCALAR_OVERRIDE_FIELDS = ("persona_id",)
+_STRING_OVERRIDE_FIELDS = ("persona_id",)
 
 
 #: The full closed set of fields OVOS-SESSION-1 §3 recognizes in this
@@ -118,7 +118,7 @@ _SCALAR_OVERRIDE_FIELDS = ("persona_id",)
 #: (§2.4) carried opaquely in :attr:`Session.extras`.
 SESSION1_REGISTERED_FIELDS = frozenset(SESSION1_OWNED_FIELDS).union(
     _LIST_OVERRIDE_FIELDS, _OBJECT_OVERRIDE_FIELDS, _HANDLER_FIELDS,
-    _SCALAR_OVERRIDE_FIELDS)
+    _STRING_OVERRIDE_FIELDS)
 
 
 class MalformedSession(ValueError):
@@ -537,7 +537,7 @@ class Session:
                 out[name] = deepcopy(value)
 
         # OVOS-PERSONA-1 registered scalar(s) (omit-when-empty, §2.1)
-        for name in _SCALAR_OVERRIDE_FIELDS:
+        for name in _STRING_OVERRIDE_FIELDS:
             value = getattr(self, name)
             if value is not None:
                 out[name] = value
