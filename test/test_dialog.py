@@ -1,7 +1,14 @@
 """Conformance tests for the OVOS-INTENT-2 §4.2 reference dialog renderer."""
 import pytest
 
-from ovos_spec_tools import DialogRenderer, LocaleResources, UnfilledSlot, render
+from ovos_spec_tools import (
+    DialogRenderer,
+    LocaleResources,
+    MalformedTemplate,
+    UnfilledSlot,
+    render,
+    verify_slot_consistency,
+)
 
 
 class _FixedRng:
@@ -199,3 +206,40 @@ def test_renderer_missing_dialog_raises(tmp_path):
     renderer = DialogRenderer(res, "absent")
     with pytest.raises(FileNotFoundError):
         renderer.render("en-US")
+
+
+# --- §5.5 slot-set consistency (the §7 Dialog-renderer MUST) -----------------
+
+def test_verify_slot_consistency_accepts_identical_slot_sets():
+    # Optionality does not change a declared slot set (§5.5): `say [{x}]` and
+    # `say {x}` both declare {x}.
+    verify_slot_consistency(["say [{x}]", "say {x}"])  # no raise
+
+
+def test_verify_slot_consistency_rejects_divergent_slot_sets():
+    with pytest.raises(MalformedTemplate):
+        verify_slot_consistency(["hello {name}", "hi {name} and {title}"])
+
+
+def test_render_rejects_divergent_slot_sets():
+    # §7: the renderer MUST verify all phrases declare the same slot set (§5.5),
+    # regardless of which phrase the chooser would pick.
+    phrases = ["hello {name}", "hi {name} and {title}"]
+    with pytest.raises(MalformedTemplate):
+        render(phrases, slots={"name": "Sam", "title": "Dr"})
+
+
+def test_renderer_rejects_divergent_slot_sets(tmp_path):
+    res = _resources(tmp_path, {
+        "en-US/g.dialog": "hello {name}\nhi {name} and {title}\n"})
+    renderer = DialogRenderer(res, "g")
+    with pytest.raises(MalformedTemplate):
+        renderer.render("en-US", {"name": "Sam", "title": "Dr"})
+
+
+def test_render_consistent_dialog_still_works(tmp_path):
+    res = _resources(tmp_path, {
+        "en-US/g.dialog": "hello {name}\nhi there {name}\n"})
+    renderer = DialogRenderer(res, "g")
+    assert renderer.render("en-US", {"name": "Sam"}) in (
+        "hello Sam", "hi there Sam")

@@ -38,14 +38,20 @@ identical tag (``0``) < a bare tag vs its own norm region (``0``, see
 :func:`_with_norm_region`) < two regions of one language (a small regional
 distance) < the bare/generic form vs a region of the same language < a different
 primary language (``>= 100`` with the coarse measure — never a usable match).
-The asymmetry that matters: a bare ``pt`` is measured **from ``pt-PT``**, not
-from the most-populous ``pt-BR``, so ``pt`` falls back to ``pt-PT`` before
-``pt-BR`` — correcting ``langcodes``' population default (see :data:`_NORM_REGION`).
+
+The norm-region preference is **non-normative implementation policy**, not a
+spec rule: a bare ``pt`` is measured **from ``pt-PT``**, not from the
+most-populous ``pt-BR``, so ``pt`` falls back to ``pt-PT`` before ``pt-BR``.
+This deliberately *diverges* from ``langcodes``' population default — which
+§2.2 endorses — and is a choice this package makes, not a requirement of any
+spec (see :data:`_NORM_REGION`).
 
 ``langcodes`` is an optional dependency (OVOS-INTENT-2 §2.2 names it). Without
 it, :func:`lang_distance` falls back to a coarse same-language /
 different-language measure that still honours the same ordering for the cases
-locale resolution actually depends on.
+locale resolution actually depends on. That fallback, and its distance values,
+are likewise this package's own implementation policy — §2.2 is silent on the
+no-``langcodes`` case.
 """
 from __future__ import annotations
 
@@ -63,13 +69,14 @@ __all__ = [
 # see the langcodes distance-values documentation).
 DEFAULT_MAX_LANGUAGE_DISTANCE = 10
 
-# The norm region for a bare language tag. `langcodes` resolves a bare tag to
-# its *most-populous* region — for "pt" that is "pt-BR" — but the unmarked
-# form of a language should resolve to its reference variety. Portuguese is
-# "from Portugal" by name, and every Lusophone country except Brazil follows
-# the pt-PT norm, so a bare "pt" is measured from "pt-PT". Add a language here
-# only when its bare tag has a clear reference region distinct from the
-# populous one.
+# NON-NORMATIVE IMPLEMENTATION POLICY (no spec backing). `langcodes` resolves a
+# bare tag to its *most-populous* region — for "pt" that is "pt-BR". This map
+# deliberately overrides that for languages whose unmarked form OVOS prefers to
+# resolve to a reference variety instead: a bare "pt" is measured from "pt-PT".
+# OVOS-INTENT-2 §2.2 endorses `langcodes`; this preference diverges from it on
+# purpose and is this package's policy, not a requirement of any spec. Add a
+# language here only when its bare tag has a clear reference region distinct
+# from the populous one.
 _NORM_REGION = {
     "pt": "PT",
 }
@@ -98,8 +105,10 @@ def standardize_lang(tag: str) -> str:
     otherwise.
     """
     if tag.lower() in ("tl", "tgl"):
-        # langcodes folds Tagalog into the `fil` macrolanguage; OVOS keeps
-        # `tl` distinct, so this one tag is normalized by hand.
+        # NON-NORMATIVE IMPLEMENTATION POLICY (no spec backing). langcodes folds
+        # Tagalog into the `fil` macrolanguage; OVOS keeps `tl` distinct, so
+        # this one tag is normalized by hand. This is a deliberate divergence
+        # from langcodes (which §2.2 endorses), not a spec requirement.
         return "tl"
     try:
         from langcodes import standardize_tag
@@ -116,6 +125,8 @@ def _with_norm_region(tag: str) -> str:
     """Give a bare language tag its norm region (``pt`` -> ``pt-PT``).
 
     A regioned tag, or a language with no norm region, is returned unchanged.
+    The norm-region map is non-normative implementation policy (see
+    :data:`_NORM_REGION`); it diverges from ``langcodes`` on purpose.
     """
     if "-" in tag:
         return tag
@@ -145,6 +156,13 @@ def _coarse_distance(desired: str, supported: str) -> int:
     The two tags are already standardized and norm-expanded. A shared primary
     subtag is near, a differing one is far; the generic (region-less) form of
     a language counts as nearer than a sibling region of it.
+
+    The values 3 / 5 / 100 are **arbitrary, ordering-only** numbers with no
+    spec basis: OVOS-INTENT-2 §2.2 names ``langcodes``' ``tag_distance`` and is
+    silent on the no-``langcodes`` case, so this fallback exists purely to
+    preserve the same nearest-to-farthest *ordering* that locale resolution
+    depends on. Only the relative order (and being below/above the threshold of
+    10) is meaningful; the magnitudes are not.
     """
     if desired.split("-")[0].lower() != supported.split("-")[0].lower():
         return 100  # a different language — beyond any usable threshold
@@ -164,8 +182,10 @@ def lang_distance(desired: str, supported: str) -> int:
     ``0`` is identical; a larger number is further apart; a value of 10 or
     more is not a usable match. Both tags are standardized, and a bare tag is
     measured **from its norm region** — so ``lang_distance("pt", "pt-PT")`` is
-    ``0`` while ``lang_distance("pt", "pt-BR")`` is a regional difference,
-    correcting ``langcodes``' population-based default (see :data:`_NORM_REGION`).
+    ``0`` while ``lang_distance("pt", "pt-BR")`` is a regional difference. The
+    norm-region step is non-normative implementation policy that diverges from
+    ``langcodes``' population-based default on purpose (see :data:`_NORM_REGION`),
+    not a §2.2 requirement.
 
     Args:
         desired: the requested BCP-47 tag.

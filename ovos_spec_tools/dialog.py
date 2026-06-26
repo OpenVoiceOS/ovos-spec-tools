@@ -1,9 +1,12 @@
 """Reference dialog renderer for OVOS-INTENT-2 §4.2.
 
 This is the reference implementation of the **Dialog renderer** conformance
-role of OVOS-INTENT-1 §7. Rendering a dialog means: select one phrase from a
-loaded ``.dialog``, expand its ``(a|b)`` / ``[x]`` variety to a single variant,
-and fill every ``{name}`` slot with a value.
+role of OVOS-INTENT-1 §7. Rendering a dialog means: verify all phrases declare
+the same slot set (§5.5), select one phrase from a loaded ``.dialog``, expand
+its ``(a|b)`` / ``[x]`` variety to a single variant, and fill every ``{name}``
+slot with a value. The §7 role MUST "verify that all phrases in a dialog
+definition declare the same slot set (§5.5)"; :func:`verify_slot_consistency`
+performs that check and both render paths call it before rendering.
 
 Two interfaces are provided:
 
@@ -25,11 +28,47 @@ import random as _random
 import re
 from typing import Dict, Optional, Protocol, Sequence
 
-from ovos_spec_tools.expansion import expand
+from ovos_spec_tools.expansion import MalformedTemplate, expand
 
-__all__ = ["render", "DialogRenderer", "Chooser", "UnfilledSlot"]
+__all__ = [
+    "render",
+    "DialogRenderer",
+    "Chooser",
+    "UnfilledSlot",
+    "verify_slot_consistency",
+]
 
 _SLOT_TOKEN_RE = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+
+
+def verify_slot_consistency(phrases: Sequence[str]) -> None:
+    """Verify every phrase of a dialog declares the identical slot set (§5.5).
+
+    OVOS-INTENT-1 §7 makes this a **MUST** for the *Dialog renderer* role: it
+    "verify[s] that all phrases in a dialog definition declare the same slot
+    set (§5.5)". A definition MUST NOT mix templates that declare different
+    slots, so the caller supplies the same values whichever phrase is chosen
+    (§5.1, OVOS-INTENT-2 §4.2).
+
+    A phrase *declares* a slot name if that name appears anywhere in it;
+    optionality does not change this (§5.5), so ``say [{x}]`` and ``say {x}``
+    declare the same slot set ``{x}`` and may coexist.
+
+    Args:
+        phrases: the phrase strings of one ``.dialog`` definition.
+
+    Raises:
+        MalformedTemplate: two phrases declare different slot sets (§5.5).
+    """
+    slot_sets = {frozenset(_SLOT_TOKEN_RE.findall(phrase)) for phrase in phrases}
+    if len(slot_sets) > 1:
+        rendered = sorted(
+            "{" + ", ".join(sorted(s)) + "}" for s in slot_sets)
+        raise MalformedTemplate(
+            "dialog phrases declare different slot sets "
+            f"({', '.join(rendered)}): every phrase in one dialog definition "
+            "MUST declare the same {slots} (OVOS-INTENT-1 §5.5); a phrasing "
+            "that needs different slots belongs in a separate dialog")
 
 
 class Chooser(Protocol):
@@ -75,10 +114,15 @@ def render(phrases: Sequence[str],
     Raises:
         UnfilledSlot: a slot in the chosen phrase has no value.
         ValueError: ``phrases`` is empty.
-        MalformedTemplate: the chosen phrase is not a valid template.
+        MalformedTemplate: the chosen phrase is not a valid template, or the
+            phrases declare divergent slot sets (OVOS-INTENT-1 §5.5).
     """
     if not phrases:
         raise ValueError("no dialog phrases to render")
+    # §7 Dialog-renderer MUST: all phrases in a dialog declare the same slot
+    # set (§5.5). Enforce before choosing, so a divergent definition is
+    # rejected regardless of which phrase the chooser would pick.
+    verify_slot_consistency(phrases)
     chooser = rng if rng is not None else _random
     phrase = chooser.choice(list(phrases))
     return _render_phrase(phrase, slots or {}, vocabularies, chooser)
@@ -141,9 +185,14 @@ class DialogRenderer:
         Raises:
             UnfilledSlot: a slot in the chosen phrase has no value.
             FileNotFoundError: the dialog does not exist for ``lang``.
-            MalformedTemplate: the chosen phrase is not a valid template.
+            MalformedTemplate: the chosen phrase is not a valid template, or
+                the dialog's phrases declare divergent slot sets
+                (OVOS-INTENT-1 §5.5).
         """
         phrases = self.resources.load_dialog(self.name, lang)
+        # §7 Dialog-renderer MUST verify all phrases declare the same slot set
+        # (§5.5) before rendering.
+        verify_slot_consistency(phrases)
         effective = dict(self.default_slots)
         if slots:
             effective.update(slots)

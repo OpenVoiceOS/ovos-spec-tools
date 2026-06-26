@@ -25,8 +25,9 @@ Clause map (which spec rule each rule enforces):
   / ``.blacklist`` are slot-free.
 - *template syntax* → OVOS-INTENT-1 §3.6 (delegated to
   :func:`~ovos_spec_tools.expansion.expand`).
-- *slot-set consistency* → OVOS-INTENT-1 §5.5 (see :func:`_lint_file` for the
-  ``.intent`` union-slot relaxation reconciling §5.5 with OVOS-INTENT-3 §5.3).
+- *slot-set consistency* → OVOS-INTENT-1 §5.5 (restated normatively for
+  ``.intent`` by OVOS-INTENT-2 §4.1 and OVOS-INTENT-3 §5.1, and for ``.dialog``
+  by OVOS-INTENT-2 §4.2): a divergent slot set is an ERROR for both roles.
 - *blacklist with no matching ``.intent``* → OVOS-INTENT-2 §4.3 — a
   ``.blacklist`` "is paired by base name with exactly one ``.intent``".
 
@@ -345,31 +346,23 @@ def _lint_file(path: Path,
                 frozenset(_SLOT_RE.findall(fold_double_braces(template))))
 
     # --- slot consistency (OVOS-INTENT-1 §5.5) ------------------------------
-    # §5.5 (and OVOS-INTENT-3 §5.1) require every template of one definition to
-    # declare the identical slot set, and a tool "MUST reject" one that does
-    # not. For a `.dialog` that is enforced as an ERROR: the caller fills the
-    # same slots whichever phrase is chosen (§4.2), so a divergent slot set is a
-    # genuine fault.
-    #
-    # For an `.intent` the rule is *relaxed to union slot sets* (WARNING, not
-    # ERROR) to reconcile §5.5 with the worked example in OVOS-INTENT-3 §5.3,
-    # which presents `(play|put on) {query}` and
-    # `(play|put on) {query} (on|using) {engine}` as ONE valid template intent
-    # despite their differing slot sets ({query} vs {query},{engine}). Treating
-    # the extra slots as optional captures is the documented intent there, so
-    # the linter warns rather than rejects. Changing this from a warning to an
-    # error would regress that valid pattern — hence it stays a WARNING.
+    # §5.5 requires every template of one definition to declare the identical
+    # slot set and a tool "MUST reject" one that does not. The rule is
+    # restated, normatively, for both slot-bearing roles:
+    #   - `.intent`: OVOS-INTENT-2 §4.1 — "Every line in the file MUST declare
+    #     the same set of named slots"; OVOS-INTENT-3 §5.1 — "Every template in
+    #     one intent MUST declare the same set of named slots".
+    #   - `.dialog`: OVOS-INTENT-2 §4.2 — "Every phrase in the file MUST declare
+    #     the same set of named slots".
+    # A divergent slot set is therefore an ERROR for *both* roles — the caller
+    # (dialog) or the engine (intent) must see the same slots whichever phrase
+    # matched or was chosen.
     if len(set(slot_sets)) > 1:
-        if extension == ".dialog":
-            findings.append(Finding(
-                ERROR, str(path),
-                f"templates declare different slot sets — every template in one "
-                f"{extension} must use the same {{slots}} (OVOS-INTENT-1 §5.5)"))
-        else:
-            findings.append(Finding(
-                WARNING, str(path),
-                f"templates declare different slot sets — this is valid for "
-                f".intent but unusual; verify this is intentional (OVOS-INTENT-1 §5.5)"))
+        findings.append(Finding(
+            ERROR, str(path),
+            f"templates declare different slot sets — every template in one "
+            f"{extension} MUST declare the same {{slots}} (OVOS-INTENT-1 §5.5; "
+            f"OVOS-INTENT-2 §4.1/§4.2; OVOS-INTENT-3 §5.1)"))
 
     return findings
 
