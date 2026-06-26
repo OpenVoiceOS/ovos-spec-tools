@@ -185,3 +185,35 @@ assert isinstance(forwarded, TransportMessage)
 
 This is exactly how `ovos-bus-client.Message` is expected to extend
 the spec primitive once it adopts this class.
+
+## Spec section map
+
+Every part of the `Message` API traces to a specific OVOS-MSG-1
+clause. The module's docstrings cite these inline; this table is the
+quick index.
+
+| API surface | OVOS-MSG-1 § | What it implements |
+|---|---|---|
+| `Message(type, data, context)` | §2, §2.1–§2.3 | the three-field envelope; constructor type checks |
+| `MalformedMessage` (constructor) | §2.1–§2.3 | reject non-string `type`, non-dict `data`/`context` |
+| `msg_type` / `data` / `context` | §2 | the wire fields `type` / `data` / `context` |
+| `context["source"]` / `["destination"]` | §3, §3.2–§3.4 | opaque routing keys, carried not parsed |
+| `context["session"]` | §4 | session carrier (inner shape owned by OVOS-SESSION-1) |
+| `DEFAULT_SESSION_ID` | §4.1 | the reserved `"default"` session id |
+| `forward(type, data)` | §5.1 | relay, context preserved unchanged (deep-copied) |
+| `reply(type, data, context)` | §5.2 | swap routing keys, address back to the asker |
+| `response(data, context)` | §5.3 | `.response`-suffixed reply |
+| (no correlation API) | §5.4 | messages are fully async; no host-side correlation |
+| `serialize()` | §6 | single UTF-8 JSON object, finite numbers only |
+| `as_dict` | §2, §6 | JSON-decoded envelope view |
+| `deserialize(payload)` | §6, §7 | parse + reject malformed payloads |
+| `MalformedMessage` (deserialize) | §7 | the consumer "MUST reject" rules |
+
+## See also
+
+- [Bus namespaces](bus-namespaces.md) — `SpecMessage`, `MIGRATION_MAP`,
+  and the transparent legacy↔`ovos.*` bridge that rides on top of these
+  derivations (`forward` for the handler-lifecycle trio, `reply` for the
+  stop pong, and so on).
+- [Spec traceability](spec-traceability.md) — every public symbol in
+  `ovos-spec-tools` mapped to its authoritative spec section.

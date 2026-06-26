@@ -1,29 +1,57 @@
 """Reference implementation of OVOS-MSG-1 — the bus :class:`Message` envelope.
 
-This module owns only what the spec owns: the JSON envelope of §2, the
-routing keys of §3 (which it touches but does not interpret), the
-session carrier of §4 (which it treats as an opaque dict), and the
-three derivations of §5 — :meth:`Message.forward`, :meth:`Message.reply`,
-and :meth:`Message.response`.
+Spec implemented
+----------------
+**OVOS-MSG-1** (*Bus Message Specification*, Version 1, Draft). This module
+is the reference implementation of every normative clause the spec assigns
+to the Message *value* (as opposed to the transport): the JSON envelope of
+§2, the routing keys of §3 (carried but never interpreted), the session
+carrier of §4 (carried as an opaque dict), the three derivations of §5
+(:meth:`Message.forward`, :meth:`Message.reply`, :meth:`Message.response`),
+and the serialization/conformance rules of §6/§7.
 
-It explicitly does **not** own (§7 non-goals): transport, encryption,
-authentication, delivery guarantees, session lifecycle, identifier
-assignment, multi-tenant routing. Those concerns live in the layers
-that consume this primitive — ``ovos-bus-client`` for the websocket
-transport, HiveMind for multi-tenant routing, ``ovos-audio`` /
-``ovos-core`` for the per-topic policy decisions keyed on ``session_id``
-and ``lang``.
+Conformance surface
+-------------------
+This class is simultaneously a conformant **producer** and **consumer** in
+the §7 sense:
+
+- *producer* — :meth:`serialize` emits a single UTF-8 JSON object with only
+  ``type`` / ``data`` / ``context`` (§7 producer MUSTs, §6 serialization);
+  :meth:`forward` / :meth:`reply` / :meth:`response` follow §5 exactly.
+- *consumer* — :meth:`deserialize` rejects every payload the §7 consumer
+  rules call malformed, and treats absent ``data`` / ``context`` as ``{}``
+  (§2). ``source`` / ``destination`` / ``session`` are treated as opaque
+  and optional (§3.4, §4, §7 consumer MUSTs).
+
+Non-goals (§7 / §1)
+-------------------
+This module deliberately does **not** own: transport (websocket, queue, …),
+encryption, authentication, authorization, delivery/ordering guarantees,
+retry, session lifecycle (start/end/expiry/resumption), the *internal* shape
+of ``session`` (owned by OVOS-SESSION-1), identifier-assignment policy, and
+multi-tenant routing semantics beyond the opaque layer-2 substrate of §3.4 /
+§4.2. Those concerns live in the layers that consume this primitive —
+``ovos-bus-client`` for the websocket transport, HiveMind for multi-tenant
+routing, ``ovos-audio`` / ``ovos-core`` for the per-topic policy decisions
+keyed on ``session_id`` (§4) and ``lang``.
 
 The implementation has **no dependencies** outside the standard library;
-it is the foundation other bus-layer code builds on.
+it is the foundation other bus-layer code (notably ``ovos-bus-client``'s
+transport-layer ``Message`` subclass) builds on.
 """
 from __future__ import annotations
 
 import json
 from copy import deepcopy
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 __all__ = ["Message", "MalformedMessage", "DEFAULT_SESSION_ID"]
+
+#: A routing key value as it may appear on the wire (OVOS-MSG-1 §3): a single
+#: opaque identifier string, or — for ``destination`` only — an array of them
+#: (§3.3). ``None`` models the absent/broadcast case (§3.3). The envelope
+#: never parses these beyond string equality (§3.4).
+RoutingValue = Union[str, List[str], None]
 
 
 #: The reserved ``session_id`` meaning "the Message originates from the
@@ -74,7 +102,26 @@ class Message:
 
     def __init__(self, msg_type: str,
                  data: Optional[Dict[str, Any]] = None,
-                 context: Optional[Dict[str, Any]] = None):
+                 context: Optional[Dict[str, Any]] = None) -> None:
+        """Construct a Message envelope (OVOS-MSG-1 §2).
+
+        Args:
+            msg_type: the wire ``type`` field — the topic string (§2.1).
+                Stored as :attr:`msg_type`. May be empty at construction
+                time (see the inline note); :meth:`serialize` is the §7
+                conformance gate for emitted output.
+            data: the §2.2 payload object, or ``None`` for the empty
+                default (``{}``). Stored **by reference**.
+            context: the §2.3 metadata object (routing keys §3, session
+                carrier §4, layer-2 metadata), or ``None`` for ``{}``.
+                Stored **by reference**.
+
+        Raises:
+            MalformedMessage: if ``msg_type`` is not a ``str`` (§2.1), or
+                ``data`` / ``context`` are given but not ``dict`` (§2.2 /
+                §2.3). These mirror the §7 consumer "wrong types" rule at
+                the constructor boundary.
+        """
         # §2.1 requires the wire ``type`` to be non-empty, but it is a
         # spec rule for **emitted** Messages — the construct-then-forward
         # pattern (``Message("").forward(real_type, data)``) is widely
@@ -88,17 +135,23 @@ class Message:
             raise MalformedMessage("data must be a dict (§2.2)")
         if context is not None and not isinstance(context, dict):
             raise MalformedMessage("context must be a dict (§2.3)")
-        self.msg_type = msg_type
-        self.data = data if data is not None else {}
-        self.context = context if context is not None else {}
+        self.msg_type: str = msg_type
+        # §2.2 / §2.3: absent data/context are equivalent to ``{}``. Stored
+        # by reference per the class docstring (derivations deep-copy).
+        self.data: Dict[str, Any] = data if data is not None else {}
+        self.context: Dict[str, Any] = context if context is not None else {}
 
     def __eq__(self, other: object) -> bool:
+        # Value equality over the full §2 envelope (type + data + context).
+        # Two Messages are equal iff every wire field is equal; routing
+        # keys and session live inside ``context`` so they participate.
         return (isinstance(other, Message)
                 and other.msg_type == self.msg_type
                 and other.data == self.data
                 and other.context == self.context)
 
     def __repr__(self) -> str:
+        # Eval-friendly debug form; not the wire format (use serialize()).
         return (f"{self.__class__.__name__}("
                 f"msg_type={self.msg_type!r}, "
                 f"data={self.data!r}, context={self.context!r})")
@@ -107,28 +160,43 @@ class Message:
 
     @property
     def as_dict(self) -> Dict[str, Any]:
-        """The Message rendered as a JSON-decoded dictionary —
-        ``{"type": ..., "data": ..., "context": ...}``.
+        """The Message as a JSON-decoded ``dict`` (OVOS-MSG-1 §2 envelope).
 
-        Equivalent to ``json.loads(self.serialize())`` and round-trips
-        through :meth:`deserialize`; offered as a property for callers
-        that want a one-shot dict view without the JSON intermediate.
+        Returns ``{"type": ..., "data": ..., "context": ...}`` — the §2
+        envelope keyed by the **wire** field names (``type``, not
+        ``msg_type``). Equivalent to ``json.loads(self.serialize())`` and
+        round-trips through :meth:`deserialize`; offered as a property for
+        callers that want a one-shot dict view without the JSON-string
+        intermediate. Carriers exposing ``.serialize()`` are converted the
+        same way they would be on the wire (see :meth:`_to_jsonable`).
+
+        Returns:
+            The §2 envelope as a plain JSON-decoded dictionary.
         """
         return json.loads(self.serialize())
 
     @staticmethod
     def _to_jsonable(value: Any) -> Any:
-        """Convert ``value`` to a JSON-friendly form.
+        """Convert ``value`` to a JSON-friendly form for §6 serialization.
 
         Recursively walks containers and converts any object exposing a
         ``.serialize()`` method (the duck-typed protocol used by OVOS
-        carrier objects like ``Session``) by calling it. Plain JSON
-        types pass through unchanged.
+        carrier objects like the OVOS-SESSION-1 ``Session``) by calling it.
+        Plain JSON types pass through unchanged.
 
         This keeps :class:`Message` an honest pure-envelope class — it
-        doesn't know about ``Session`` or any other carrier type — while
-        letting callers stuff such objects directly into ``data`` /
-        ``context`` and serialize the result.
+        doesn't know about ``Session`` or any other carrier type, honouring
+        OVOS-MSG-1's separation of the envelope from the §4 session shape
+        (owned by OVOS-SESSION-1) — while letting callers stuff such objects
+        directly into ``data`` / ``context`` and serialize the result.
+
+        Args:
+            value: any value found inside ``data`` / ``context``.
+
+        Returns:
+            A JSON-encodable structure: the result of ``value.serialize()``
+            for carrier objects, a recursively-converted ``dict`` / ``list``
+            for containers, or ``value`` itself for plain JSON scalars.
         """
         # Direct .serialize() — Session, nested Message, etc.
         ser = getattr(value, "serialize", None)
@@ -144,16 +212,30 @@ class Message:
         return value
 
     def serialize(self) -> str:
-        """Render the Message as a single UTF-8 JSON object per §6.
+        """Render the Message as a single UTF-8 JSON object (OVOS-MSG-1 §6).
 
-        Object key order is not significant; ``NaN`` / ``Infinity`` are
-        forbidden (``allow_nan=False``). Nested objects in ``data`` or
-        ``context`` that expose ``.serialize()`` (e.g. OVOS ``Session``
-        carriers) are converted via that method before serialization.
+        The output is exactly one top-level JSON object — never an array or
+        a stream (§6) — with the §2 wire keys ``type`` / ``data`` /
+        ``context``. ``NaN`` / ``±Infinity`` are forbidden, so
+        ``allow_nan=False`` makes a non-finite number raise rather than emit
+        invalid JSON (§6: "Numbers MUST be finite"). ``ensure_ascii=False``
+        emits valid UTF-8 directly (§6: Unicode strings). Object key order
+        is **not** significant (§6), so no ordering is imposed. Nested
+        objects in ``data`` / ``context`` exposing ``.serialize()`` (e.g.
+        the OVOS-SESSION-1 ``Session`` carrier) are converted first via
+        :meth:`_to_jsonable`.
 
-        Subclasses may override to add transport-layer concerns —
-        encryption, framing, alternative encoders — which the spec
-        explicitly leaves out (§7).
+        Subclasses MAY override to add the transport-layer concerns §6/§7
+        leave out — framing, encryption, alternative encoders — without
+        touching this envelope contract.
+
+        Returns:
+            A single UTF-8 JSON object string conforming to §6.
+
+        Raises:
+            ValueError: from :func:`json.dumps` when ``data`` / ``context``
+                contain a non-finite number (``allow_nan=False``), enforcing
+                the §6 "Numbers MUST be finite" rule at emit time.
         """
         return json.dumps(
             {"type": self.msg_type,
@@ -164,13 +246,18 @@ class Message:
     @classmethod
     def deserialize(cls,
                     payload: Union[str, bytes, bytearray, Dict[str, Any]]
-                    ) -> "Message":
-        """Construct a Message from a serialized JSON object per §6.
+                    ) -> Message:
+        """Construct a Message from a serialized JSON object (OVOS-MSG-1 §6).
 
-        ``payload`` may be a UTF-8 byte string, a ``str`` (parsed as JSON),
-        or an already-parsed ``dict``. Returns an instance of ``cls`` so
-        subclasses (e.g. ``ovos-bus-client``'s transport-layer Message)
-        deserialize to their own type.
+        Args:
+            payload: a UTF-8 ``bytes`` / ``bytearray`` (decoded first), a
+                ``str`` (parsed as JSON), or an already-parsed ``dict``
+                (the JSON step is skipped).
+
+        Returns:
+            An instance of ``cls`` — subclasses (e.g. ``ovos-bus-client``'s
+            transport-layer Message) deserialize to their own type — with
+            absent ``data`` / ``context`` defaulted to ``{}`` (§2).
 
         Raises :class:`MalformedMessage` per the §7 ``MUST reject``
         conformance rules: unparsable JSON, non-object root, unknown
@@ -205,39 +292,72 @@ class Message:
     # --- §5 derivations -----------------------------------------------------
 
     def forward(self, msg_type: str,
-                data: Optional[Dict[str, Any]] = None) -> "Message":
-        """OVOS-MSG-1 §5.1 — relay under a new topic, preserve context.
+                data: Optional[Dict[str, Any]] = None) -> Message:
+        """Implement OVOS-MSG-1 §5.1 (``forward``) — relay under a new topic.
 
-        The forwarder does **not** become the new ``source``; the original
-        producer remains named. Returns an instance of this Message's
-        runtime class so subclasses propagate naturally.
+        Produces ``{type: msg_type, data: data, context: deepcopy(C)}``:
+        ``context`` (the §3 routing keys **and** the §4 ``session``) is
+        carried over **unchanged**, so the forwarder does **not** become
+        the new ``source`` — the original producer stays named (§5.1, §3.2).
+        This is the derivation the spec mandates for relay/notification
+        topics that must preserve the asker's routing — e.g. the
+        PIPELINE-1 §8 handler-lifecycle trio and SESSION-2 §2.7
+        ``ovos.session.sync`` are both required to be ``forward``-derived.
+
+        The context is **deep-copied** so the derived Message is independent
+        of the source (a §5.1 "MUST NOT modify a session already present"
+        guarantee — mutating either Message's context cannot leak into the
+        other).
+
+        Args:
+            msg_type: ``type`` of the relayed Message (``T'`` in §5.1).
+            data: payload of the relayed Message (``D'``); ``None`` → ``{}``.
+
+        Returns:
+            A new Message of ``self``'s runtime class (subclasses propagate,
+            see :ref:`Subclassing`).
         """
         return self.__class__(
             msg_type, data or {}, deepcopy(self.context))
 
     def reply(self, msg_type: str,
               data: Optional[Dict[str, Any]] = None,
-              context: Optional[Dict[str, Any]] = None) -> "Message":
-        """OVOS-MSG-1 §5.2 — send back to the asker.
+              context: Optional[Dict[str, Any]] = None) -> Message:
+        """Implement OVOS-MSG-1 §5.2 (``reply``) — address back to the asker.
 
-        Copies :attr:`context` and swaps the §3 routing keys so the new
-        Message is addressed back to the source Message's producer:
+        Deep-copies :attr:`context` and **reverses** the §3 routing keys so
+        the result is addressed back to the source Message's producer:
 
-        - the new ``destination`` is the old ``source`` (if set);
-        - the new ``source`` is the old ``destination`` — if the old
-          ``destination`` was an array, the first entry is chosen
-          (§5.2 leaves the exact choice implementation-defined);
-        - every other context key, including ``session`` (§4), is
-          preserved unchanged.
+        - new ``destination`` := old ``source`` (§5.2 step 1, when set);
+        - new ``source`` := old ``destination`` — if the old
+          ``destination`` was an array, the **first** entry is chosen
+          (§5.2 step 2: the choice is implementation-defined and consumers
+          MUST NOT rely on a particular member);
+        - every other context key, including ``session`` (§4), is preserved
+          unchanged (§5.2 step 3).
 
-        Any keys provided via ``context`` are merged in on top of the
-        copied context **before** the source/destination swap, matching
-        the historical ``ovos_bus_client.Message.reply`` behaviour:
-        passing ``context={"source": "C", "destination": "D"}`` ends up
-        producing ``source=D, destination=C`` because the swap is the
-        final step. Non-routing keys overlaid this way (a custom
-        ``session`` shape, a tracing identifier, …) pass through
-        untouched.
+        Any keys supplied via ``context`` are overlaid on the copied context
+        **before** the swap, matching the historical
+        ``ovos_bus_client.Message.reply`` behaviour: passing
+        ``context={"source": "C", "destination": "D"}`` yields
+        ``source=D, destination=C`` because the §5.2 swap is the final step.
+        Non-routing keys overlaid this way (a custom ``session`` shape, a
+        tracing identifier, …) pass through untouched — the envelope never
+        ascribes meaning to them (§2.3).
+
+        Args:
+            msg_type: ``type`` of the reply Message (``T'`` in §5.2).
+            data: payload of the reply (``D'``); ``None`` → ``{}``.
+            context: optional context keys overlaid before the §5.2 swap.
+
+        Returns:
+            A new Message of ``self``'s runtime class with the §5.2 routing.
+
+        Note:
+            A producer that maintains no ``source`` / ``destination`` at all
+            gets a context with neither key set — i.e. a broadcast (§3.3),
+            which §5.2 names as the only well-defined behaviour absent
+            addressing information.
         """
         new_context = deepcopy(self.context)
         if context:
@@ -255,10 +375,25 @@ class Message:
         return self.__class__(msg_type, data or {}, new_context)
 
     def response(self, data: Optional[Dict[str, Any]] = None,
-                 context: Optional[Dict[str, Any]] = None) -> "Message":
-        """OVOS-MSG-1 §5.3 — sugar for ``reply(self.msg_type + '.response', ...)``.
+                 context: Optional[Dict[str, Any]] = None) -> Message:
+        """Implement OVOS-MSG-1 §5.3 (``response``) — a ``.response``-suffixed reply.
 
-        Topics defined elsewhere MAY rely on the ``.response`` suffix
-        convention to mark a Message as the answer to a prior one.
+        Equivalent to ``reply(self.msg_type + ".response", data, context)``
+        (§5.3). Topics defined in other specifications MAY rely on the
+        ``.response`` suffix convention to mark a Message as the answer to a
+        prior request — e.g. INTENT-4 §10's ``ovos.intent.list.response`` /
+        ``ovos.intent.describe.response`` and PIPELINE-1 §10's
+        ``ovos.pipeline.<pipeline_id>.intents.list.response``. Because it
+        delegates to :meth:`reply`, the §5.2 routing reversal and the §4
+        session preservation both apply, which is exactly what lets an asker
+        correlate ``<request>.response`` against an outstanding request in
+        the same ``session`` (§5.4).
+
+        Args:
+            data: payload of the response (``D'``); ``None`` → ``{}``.
+            context: optional context keys overlaid before the §5.2 swap.
+
+        Returns:
+            A new Message whose ``type`` is ``self.msg_type + ".response"``.
         """
         return self.reply(self.msg_type + ".response", data, context)

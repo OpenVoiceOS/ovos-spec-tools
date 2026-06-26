@@ -35,9 +35,19 @@ are the foundation everything else rests on.
    and closest-match resolution.
 6. [Bus messages](message.md) — the on-the-wire envelope, the three
    derivations (`forward` / `reply` / `response`), and the session carrier.
-7. [Linting](linting.md) — validating a locale folder, from the command line
+7. [Bus namespaces](bus-namespaces.md) — the spec topic vocabulary
+   (`SpecMessage`), the legacy↔`ovos.*` `MIGRATION_MAP`, and the transparent
+   dual-emit bridge with its migration window.
+8. [Linting](linting.md) — validating a locale folder, from the command line
    or in CI.
-8. [API reference](api-reference.md) — every public name, in brief.
+9. [API reference](api-reference.md) — every public name, in brief.
+
+### Proving the scope
+
+- **[Spec traceability](spec-traceability.md)** — every public symbol in
+  `ovos-spec-tools` mapped to its authoritative OVOS spec section. This is
+  the index that backs the scope note below: the package is *exclusively* a
+  reference implementation of the specs, with no general-purpose code.
 
 ## A note on scope
 
