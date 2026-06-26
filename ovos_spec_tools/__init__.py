@@ -24,6 +24,10 @@ formal specifications describe:
   grouping (§4.3) and utterance match / strip primitives;
 - :class:`~ovos_spec_tools.message.Message` — the OVOS-MSG-1 bus message
   envelope with the ``forward`` / ``reply`` / ``response`` derivations;
+- :class:`~ovos_spec_tools.session.Session` — the OVOS-SESSION-1 session
+  carrier reference implementation, carrying the full §3 registered field
+  set with omission-not-null serialization and the
+  OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1 / §2.2 handler-list helpers;
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
@@ -49,6 +53,13 @@ from ovos_spec_tools.messages import (
     migration_counterpart,
 )
 from ovos_spec_tools.prompt import PromptRenderer, render_prompt
+from ovos_spec_tools.session import (
+    DEFAULT_CONVERSE_HANDLERS_CAP,
+    MalformedSession,
+    SESSION1_OWNED_FIELDS,
+    SESSION1_REGISTERED_FIELDS,
+    Session,
+)
 from ovos_spec_tools.resources import (
     LocaleResources,
     MalformedResource,
@@ -67,6 +78,11 @@ __all__ = [
     "Message",
     "MalformedMessage",
     "DEFAULT_SESSION_ID",
+    "Session",
+    "MalformedSession",
+    "SESSION1_OWNED_FIELDS",
+    "SESSION1_REGISTERED_FIELDS",
+    "DEFAULT_CONVERSE_HANDLERS_CAP",
     "expand",
     "inline_keywords",
     "MalformedTemplate",
