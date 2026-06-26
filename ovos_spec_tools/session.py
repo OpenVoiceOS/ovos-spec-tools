@@ -102,13 +102,21 @@ _OBJECT_OVERRIDE_FIELDS = ("intent_context",)
 #: OVOS-CONVERSE-1 §2.1 / §2.2).
 _HANDLER_FIELDS = ("active_handlers", "converse_handlers", "response_mode")
 
+#: Scalar fields claimed by other specs. ``persona_id`` is registered by
+#: OVOS-PERSONA-1 and recognized here per the OVOS-SESSION-1 §2.2 field
+#: registry; OVOS-SESSION-1 carries it opaquely (its semantics are owned
+#: by OVOS-PERSONA-1). An empty / unset value is wire-equivalent to
+#: omission (§2.1).
+_SCALAR_OVERRIDE_FIELDS = ("persona_id",)
+
 
 #: The full closed set of fields OVOS-SESSION-1 §3 recognizes in this
 #: version. A consumer that recognizes any of these interprets it per
 #: its owner specification; everything else is unknown-field passthrough
 #: (§2.4) carried opaquely in :attr:`Session.extras`.
 SESSION1_REGISTERED_FIELDS = frozenset(SESSION1_OWNED_FIELDS).union(
-    _LIST_OVERRIDE_FIELDS, _OBJECT_OVERRIDE_FIELDS, _HANDLER_FIELDS)
+    _LIST_OVERRIDE_FIELDS, _OBJECT_OVERRIDE_FIELDS, _HANDLER_FIELDS,
+    _SCALAR_OVERRIDE_FIELDS)
 
 
 class MalformedSession(ValueError):
@@ -169,6 +177,10 @@ class Session:
         list — head-first, deduplicated, tail-dropped at the cap.
     :param response_mode: OVOS-CONVERSE-1 §2.2 pending-response window —
         a single ``{skill_id, expires_at}`` object, or ``None``.
+    :param persona_id: OVOS-PERSONA-1 — opaque identifier of the persona
+        bound to this session. Registered as a session field by
+        OVOS-PERSONA-1 (recognized here per the OVOS-SESSION-1 §2.2 field
+        registry); ``None`` ⇒ omitted on the wire (§2.1).
     :param converse_handlers_cap: OVOS-CONVERSE-1 §2.1 maximum length of
         ``converse_handlers``; defaults to 64. A value ``<= 0`` means
         "unbounded".
@@ -206,6 +218,7 @@ class Session:
                  active_handlers: Optional[List[Dict[str, Any]]] = None,
                  converse_handlers: Optional[List[Dict[str, Any]]] = None,
                  response_mode: Optional[Dict[str, Any]] = None,
+                 persona_id: Optional[str] = None,
                  converse_handlers_cap: Optional[int] = None,
                  extras: Optional[Dict[str, Any]] = None):
         if session_id is not None and (not isinstance(session_id, str)
@@ -217,6 +230,12 @@ class Session:
                                     or not site_id):
             raise MalformedSession(
                 "site_id must be a non-empty string when set (§3.3)")
+        if persona_id is not None and (not isinstance(persona_id, str)
+                                       or not persona_id):
+            # OVOS-PERSONA-1 registered field: non-empty string when set.
+            raise MalformedSession(
+                "persona_id must be a non-empty string when set "
+                "(OVOS-PERSONA-1)")
         for name, value in (("lang", lang), ("output_lang", output_lang),
                             ("stt_lang", stt_lang),
                             ("request_lang", request_lang),
@@ -259,6 +278,8 @@ class Session:
         # --- other-spec list/object override fields (carried opaquely) ------
         self.pipeline = list(pipeline) if pipeline else None
         self.intent_context = dict(intent_context) if intent_context else None
+        # OVOS-PERSONA-1 registered scalar (carried opaquely)
+        self.persona_id = persona_id
         self.blacklisted_skills = self._as_str_list(blacklisted_skills)
         self.blacklisted_intents = self._as_str_list(blacklisted_intents)
         self.blacklisted_pipelines = self._as_str_list(blacklisted_pipelines)
@@ -504,6 +525,12 @@ class Session:
             value = getattr(self, name)
             if value:
                 out[name] = deepcopy(value)
+
+        # OVOS-PERSONA-1 registered scalar(s) (omit-when-empty, §2.1)
+        for name in _SCALAR_OVERRIDE_FIELDS:
+            value = getattr(self, name)
+            if value is not None:
+                out[name] = value
 
         # PIPELINE-1 §7.1 / CONVERSE-1 §2.1 / §2.2 — omit-when-empty
         if self.active_handlers:

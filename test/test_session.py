@@ -145,6 +145,43 @@ class TestSiteId(unittest.TestCase):
         self.assertEqual(s.to_dict(), {"site_id": "unknown"})
 
 
+# --- OVOS-PERSONA-1 registered persona_id ----------------------------------
+
+class TestPersonaId(unittest.TestCase):
+    def test_persona_id_round_trip(self):
+        s = Session(persona_id="default")
+        self.assertEqual(s.to_dict(), {"persona_id": "default"})
+        self.assertEqual(Session.from_dict(s.to_dict()), s)
+
+    def test_persona_id_omitted_not_null_when_none(self):
+        # §2.1 omission-not-null: absent persona_id never serializes.
+        s = Session()
+        self.assertIsNone(s.persona_id)
+        self.assertNotIn("persona_id", s.to_dict())
+        self.assertNotIn("persona_id", s.serialize())
+
+    def test_persona_id_is_registered_not_owned(self):
+        # OVOS-PERSONA-1 registers it; OVOS-SESSION-1 does not own it.
+        self.assertIn("persona_id", SESSION1_REGISTERED_FIELDS)
+        self.assertNotIn("persona_id", SESSION1_OWNED_FIELDS)
+
+    def test_persona_id_is_first_class_not_extra(self):
+        # Registered ⇒ lands as a first-class attribute, not in `extras`.
+        s = Session.from_dict({"persona_id": "assistant"})
+        self.assertEqual(s.persona_id, "assistant")
+        self.assertNotIn("persona_id", s.extras)
+
+    def test_empty_persona_id_rejected(self):
+        with self.assertRaises(MalformedSession):
+            Session(persona_id="")
+
+    def test_explicit_null_persona_id_treated_as_omitted(self):
+        # §2.1: explicit null on a registered field ⇒ omitted, not error.
+        s = Session.from_dict({"persona_id": None})
+        self.assertIsNone(s.persona_id)
+        self.assertNotIn("persona_id", s.to_dict())
+
+
 # --- §3 / §3.4 other-spec override fields ----------------------------------
 
 class TestOverrideFields(unittest.TestCase):
