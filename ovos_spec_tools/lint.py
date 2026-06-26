@@ -33,6 +33,15 @@ Clause map (which spec rule each rule enforces):
   flagged.
 - *blacklist with no matching ``.intent``* → OVOS-INTENT-2 §4.3 — a
   ``.blacklist`` "is paired by base name with exactly one ``.intent``".
+- *required slot declared by no template* → OVOS-INTENT-3 §5.3 — "A required
+  slot MUST be declared by at least one template in the intent … a tool MUST
+  reject the definition at registration time." This is an intent-**definition**
+  rule, not a single-file rule: ``required_slots`` lives above the raw
+  ``.intent`` file. The locale linter (which sees only files) cannot enforce
+  it; the check is exposed as :func:`validate_required_slots` (raises) and
+  :func:`lint_required_slots` (returns a :class:`Finding`) for the
+  registration/loading path that has both the ``required_slots`` list and the
+  templates in hand.
 
 Exposed as the ``ovos-spec-lint`` command::
 
@@ -71,7 +80,14 @@ from ovos_spec_tools.resources import (
     read_resource_file,
 )
 
-__all__ = ["Finding", "lint_locale", "main"]
+__all__ = [
+    "Finding",
+    "lint_locale",
+    "declared_slots",
+    "validate_required_slots",
+    "lint_required_slots",
+    "main",
+]
 
 # The six OVOS-INTENT-2 resource roles.
 ROLE_EXTENSIONS = SLOT_BEARING_ROLES + SLOT_FREE_ROLES + (PROMPT_ROLE,)
@@ -123,6 +139,91 @@ class Finding:
 
     def __str__(self) -> str:
         return f"{self.path}: {self.severity}: {self.message}"
+
+
+def declared_slots(templates: Sequence[str]) -> frozenset:
+    """The union of the named slots declared across ``templates``.
+
+    An intent's slot set is the **union** of the slots declared by its
+    templates (OVOS-INTENT-2 §4.1, OVOS-INTENT-3 §5.1): the engine extracts
+    only the slots of whichever template matched, so a slot the intent can
+    ever fill is one declared by *some* template. Both equivalent spellings
+    ``{name}`` and ``{{name}}`` (OVOS-INTENT-1 §3.4) count, so each template is
+    folded to the single-brace canonical form before its slots are read.
+
+    Args:
+        templates: the template lines of one ``.intent`` definition.
+
+    Returns:
+        The frozen union of every named slot any template declares.
+    """
+    slots: set = set()
+    for template in templates:
+        slots.update(_SLOT_RE.findall(fold_double_braces(template)))
+    return frozenset(slots)
+
+
+def validate_required_slots(
+        required_slots: Sequence[str],
+        templates: Sequence[str]) -> None:
+    """Verify every required slot is declared by at least one template (§5.3).
+
+    OVOS-INTENT-3 §5.3 makes this a **MUST** at registration time: "A required
+    slot MUST be declared by at least one template in the intent. Declaring a
+    required slot that no template mentions is malformed: the intent can never
+    match, and a tool MUST reject the definition at registration time."
+
+    ``required_slots`` is an intent-**definition** field — it lives above the
+    raw ``.intent`` file, alongside the templates. This validator is the place
+    that sees both together; call it when registering or loading an intent
+    definition so a malformed one (a required slot no template can fill) is
+    rejected before it can silently never fire.
+
+    Args:
+        required_slots: the slot names the intent declares as required.
+        templates: the intent's template lines (its ``.intent`` samples).
+
+    Raises:
+        MalformedTemplate: a required slot is declared by no template, so the
+            intent can never match (OVOS-INTENT-3 §5.3).
+    """
+    available = declared_slots(templates)
+    missing = [name for name in required_slots if name not in available]
+    if missing:
+        have = "{" + ", ".join(sorted(available)) + "}" if available else "{}"
+        raise MalformedTemplate(
+            f"required slot(s) {{{', '.join(missing)}}} declared by no "
+            f"template — the intent's templates declare only {have}, so the "
+            "intent can never match. A required slot MUST be declared by at "
+            "least one template (OVOS-INTENT-3 §5.3)")
+
+
+def lint_required_slots(
+        path: str,
+        required_slots: Sequence[str],
+        templates: Sequence[str]) -> List[Finding]:
+    """Lint an intent's ``required_slots`` against its templates (§5.3).
+
+    A :class:`Finding`-returning wrapper over :func:`validate_required_slots`,
+    for callers that lint intent definitions (where ``required_slots`` metadata
+    is available alongside the templates) and want findings rather than an
+    exception. Each undeclared required slot is an :data:`ERROR` (a §5.3 MUST).
+
+    Args:
+        path: the offending intent's identifier (file path or name), reported
+            on the finding.
+        required_slots: the slot names the intent declares as required.
+        templates: the intent's template lines.
+
+    Returns:
+        One :data:`ERROR` finding if any required slot is undeclared, else an
+        empty list.
+    """
+    try:
+        validate_required_slots(required_slots, templates)
+    except MalformedTemplate as exc:
+        return [Finding(ERROR, path, str(exc))]
+    return []
 
 
 def lint_locale(path, spec_version: int = DEFAULT_SPEC_VERSION) -> List[Finding]:

@@ -49,7 +49,13 @@ from ovos_spec_tools.language import (
     lang_matches,
     standardize_lang,
 )
-from ovos_spec_tools.lint import Finding, lint_locale
+from ovos_spec_tools.lint import (
+    Finding,
+    declared_slots,
+    lint_locale,
+    lint_required_slots,
+    validate_required_slots,
+)
 from ovos_spec_tools.messages import (
     MIGRATION_MAP,
     SPEC_TO_LEGACY,
@@ -112,6 +118,9 @@ __all__ = [
     "lang_matches",
     "closest_lang",
     "lint_locale",
+    "declared_slots",
+    "validate_required_slots",
+    "lint_required_slots",
     "Finding",
     "SpecMessage",
     "MIGRATION_MAP",
