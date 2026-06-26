@@ -145,22 +145,23 @@ def test_lint_accepts_a_single_language_directory(tmp_path):
     assert lint_locale(locale / "en-US") == []
 
 
-# --- slot consistency (OVOS-INTENT-1 §5.5) ----------------------------------
+# --- slot consistency: .dialog ONLY (OVOS-INTENT-2 §4.2) ---------------------
 
-# §5.5 "MUST reject" — restated for .intent by OVOS-INTENT-2 §4.1 and
-# OVOS-INTENT-3 §5.1 — so a divergent slot set is an ERROR for .intent too, the
-# same as for .dialog.
+# .intent templates MAY declare different slot sets — the engine extracts only
+# the matched template's slots and the intent's slot set is their union
+# (OVOS-INTENT-2 §4.1, OVOS-INTENT-3 §5.1). A tool MUST NOT reject .intent for
+# divergent slots, so divergence is NOT flagged for the .intent role.
 
-def test_inconsistent_slots_in_one_intent_is_an_error(tmp_path):
+def test_divergent_slots_in_one_intent_is_allowed(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\nstop {engine}\n")
-    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
+    assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
-def test_mixing_slotted_and_slotless_lines_in_intent_is_an_error(tmp_path):
+def test_mixing_slotted_and_slotless_lines_in_intent_is_allowed(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\njust stop\n")
-    assert any("slot sets" in f.message for f in _errors(lint_locale(locale)))
+    assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
 def test_consistent_slots_across_an_intent_is_clean(tmp_path):
