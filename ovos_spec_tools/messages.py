@@ -19,12 +19,14 @@ is tied to its owning spec section in the per-member comments below:
   AUDIO-IN-1 §6.1–§6.4 is **merged**, so ``ovos.listener.record.started`` /
   ``.record.ended`` / ``ovos.listener.sleep`` / ``ovos.listener.awoken`` are
   **mandated** (not provisional);
-- **OVOS-AUDIO-1** *(open PR, unmerged)* — the audio **output** service's
-  playback-lifecycle and mic-reopen signals (``ovos.audio.output.started`` /
-  ``.output.ended`` §5.1/§5.2, ``ovos.mic.listen`` §4.4). The owning spec
-  (audio-out, PR #38) is **not yet merged**, so these three are genuinely
-  **PROVISIONAL** — their topic strings are stable but the normative prose
-  could still change before merge.
+- **OVOS-AUDIO-1** — the audio **output** service bus surface (§7), now
+  **merged** and mandated. Two rendering modes (``ovos.utterance.speak.b64``
+  §3.4 → ``ovos.audio.speech`` §4.3 for remote clients); the playback model
+  (``ovos.audio.queue`` §4.1 scheduled sounds, ``ovos.audio.play_sound`` §4.2
+  instant sounds); the output-lifecycle signals (``ovos.audio.output.started``
+  / ``.output.ended`` §5.1/§5.2); the speaking-status query
+  (``ovos.audio.is_speaking`` §5.3); stop integration (``ovos.audio.stop``
+  §6); and the listen-flag mic re-open (``ovos.mic.listen`` §4.4).
 
 Why an enum
 -----------
@@ -165,16 +167,33 @@ class SpecMessage(str, Enum):
     #: §5.3 — universal stop broadcast; ``ovos.stop.*`` namespace is reserved by STOP-1.
     STOP = "ovos.stop"
 
-    # --- OVOS-AUDIO-1 audio-OUTPUT signals (PROVISIONAL: owning spec unmerged) ---
-    # Defined by OVOS-AUDIO-1 (audio-out.md, open PR #38), NOT by AUDIO-IN-1.
-    # The spec is not yet merged, so these three are genuinely provisional —
-    # the topic strings are stable but the normative prose may still change.
-    #: AUDIO-1 §5.1 — playback session started; audio-output → broadcast. PROVISIONAL.
+    # --- OVOS-AUDIO-1 audio-OUTPUT service bus surface (§7, MERGED → mandated) ---
+    # Defined by OVOS-AUDIO-1 (audio-out.md), NOT by AUDIO-IN-1.
+    #: §3.4 — remote-client rendering mode; same TTS pipeline as ``SPEAK`` but
+    #: emits ``ovos.audio.speech`` (b64) instead of enqueueing local playback.
+    SPEAK_B64 = "ovos.utterance.speak.b64"
+    #: §4.3 — synthesised audio (base64) emitted for a ``SPEAK_B64`` Message; a
+    #: bridge relays it to the remote client; audio-output → broadcast.
+    AUDIO_SPEECH = "ovos.audio.speech"
+    #: §4.1 — queue a sound for sequential (FIFO) scheduled playback; any → audio.
+    AUDIO_QUEUE = "ovos.audio.queue"
+    #: §4.2 — fire-and-forget instant sound, played immediately over the queue;
+    #: any → audio.
+    AUDIO_PLAY_SOUND = "ovos.audio.play_sound"
+    #: §6 — stop audio output: clear the scheduled queue and terminate playback;
+    #: any → audio.
+    AUDIO_STOP = "ovos.audio.stop"
+    #: §5.3 — query whether the audio output service is currently speaking; the
+    #: service answers ``{"speaking": bool}`` (§7 names no distinct response
+    #: topic, so the reply is ``reply``-derived, MSG-1 §5.2); any → audio.
+    AUDIO_IS_SPEAKING = "ovos.audio.is_speaking"
+    #: §5.1 — playback session started (idle→active); audio-output → broadcast.
     AUDIO_OUTPUT_STARTED = "ovos.audio.output.started"
-    #: AUDIO-1 §5.2 — playback session ended; audio-output → broadcast. PROVISIONAL.
+    #: §5.2 — playback session ended (queue empty, last item done); audio-output
+    #: → broadcast.
     AUDIO_OUTPUT_ENDED = "ovos.audio.output.ended"
-    #: AUDIO-1 §4.4 — re-open the mic after a ``listen: true`` item; audio-output →
-    #: broadcast. PROVISIONAL.
+    #: §4.4 — re-open the mic after a ``listen: true`` item; audio-output →
+    #: broadcast.
     MIC_LISTEN = "ovos.mic.listen"
 
     # --- OVOS-AUDIO-IN-1 listener lifecycle signals (§6, MERGED → mandated) ---
@@ -216,11 +235,11 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     # --- PIPELINE-1 §9 utterance layer (payload-compatible 1:1 renames) ---
     "recognizer_loop:utterance": SpecMessage.UTTERANCE,        # PIPELINE-1 §9.1
     "speak": SpecMessage.SPEAK,                                # PIPELINE-1 §9.6
-    # --- AUDIO-1 §5.1/§5.2/§4.4 audio-output signals (open PR #38, provisional;
-    #     payload-compatible 1:1 renames) ---
-    "recognizer_loop:audio_output_start": SpecMessage.AUDIO_OUTPUT_STARTED,  # AUDIO-1 §5.1 (provisional)
-    "recognizer_loop:audio_output_end": SpecMessage.AUDIO_OUTPUT_ENDED,      # AUDIO-1 §5.2 (provisional)
-    "mycroft.mic.listen": SpecMessage.MIC_LISTEN,             # AUDIO-1 §4.4 (provisional)
+    # --- AUDIO-1 §5.1/§5.2/§4.4 audio-output signals (merged; payload-compatible
+    #     1:1 renames) ---
+    "recognizer_loop:audio_output_start": SpecMessage.AUDIO_OUTPUT_STARTED,  # AUDIO-1 §5.1
+    "recognizer_loop:audio_output_end": SpecMessage.AUDIO_OUTPUT_ENDED,      # AUDIO-1 §5.2
+    "mycroft.mic.listen": SpecMessage.MIC_LISTEN,             # AUDIO-1 §4.4
     # --- AUDIO-IN-1 §6 listener lifecycle (merged; payload-compatible renames) ---
     "recognizer_loop:record_begin": SpecMessage.LISTENER_RECORD_STARTED,  # AUDIO-IN-1 §6.1
     "recognizer_loop:record_end": SpecMessage.LISTENER_RECORD_ENDED,      # AUDIO-IN-1 §6.2

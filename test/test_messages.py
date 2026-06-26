@@ -81,6 +81,25 @@ class TestSpecMessage(unittest.TestCase):
         values = [m.value for m in SpecMessage]
         self.assertEqual(len(values), len(set(values)))
 
+    def test_audio1_bus_surface_members(self):
+        # OVOS-AUDIO-1 §7 bus surface — enum-only topics (not legacy renames).
+        self.assertEqual(SpecMessage.SPEAK_B64, "ovos.utterance.speak.b64")  # §3.4
+        self.assertEqual(SpecMessage.AUDIO_SPEECH, "ovos.audio.speech")      # §4.3
+        self.assertEqual(SpecMessage.AUDIO_QUEUE, "ovos.audio.queue")        # §4.1
+        self.assertEqual(SpecMessage.AUDIO_PLAY_SOUND, "ovos.audio.play_sound")  # §4.2
+        self.assertEqual(SpecMessage.AUDIO_STOP, "ovos.audio.stop")          # §6
+        self.assertEqual(SpecMessage.AUDIO_IS_SPEAKING, "ovos.audio.is_speaking")  # §5.3
+
+    def test_audio1_members_are_enum_only_not_migration(self):
+        # These 6 are not legacy renames -> must not appear in the migration map
+        # or its payload transforms.
+        for m in (SpecMessage.SPEAK_B64, SpecMessage.AUDIO_SPEECH,
+                  SpecMessage.AUDIO_QUEUE, SpecMessage.AUDIO_PLAY_SOUND,
+                  SpecMessage.AUDIO_STOP, SpecMessage.AUDIO_IS_SPEAKING):
+            self.assertNotIn(m.value, SPEC_TO_LEGACY)
+            self.assertIsNone(migration_counterpart(m.value))
+            self.assertNotIn(m.value, MIGRATION_PAYLOAD_TRANSFORMS)
+
 
 class TestMigrationMap(unittest.TestCase):
     def test_maps_legacy_to_specmessage(self):
