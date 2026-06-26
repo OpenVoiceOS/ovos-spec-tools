@@ -86,14 +86,17 @@ _TRANSFORMER_FIELDS = (
 )
 
 #: The list-valued denylist / override fields claimed by other specs
-#: (OVOS-PIPELINE-1 §5, OVOS-TRANSFORM-1 §5.2). All are arrays of string
-#: for which an empty array is wire-equivalent to omission (§3.4).
+#: (OVOS-PIPELINE-1 §5, OVOS-TRANSFORM-1 §5.2, OVOS-FALLBACK-1 §4). All are
+#: arrays of string for which an empty array is wire-equivalent to omission
+#: (§3.4). ``fallback_handlers`` is registered here per the SESSION-1 §3
+#: field table (owner OVOS-FALLBACK-1 §4); see the constructor docstring.
 _LIST_OVERRIDE_FIELDS = (
     "pipeline",
     "blacklisted_skills", "blacklisted_intents", "blacklisted_pipelines",
     "blacklisted_audio_transformers", "blacklisted_utterance_transformers",
     "blacklisted_metadata_transformers", "blacklisted_intent_transformers",
     "blacklisted_dialog_transformers", "blacklisted_tts_transformers",
+    "fallback_handlers",
 ) + _TRANSFORMER_FIELDS
 
 #: The object-valued override field (OVOS-CONTEXT-1 §2 ``intent_context``).
@@ -173,6 +176,14 @@ class Session:
         the six ordered transformer chains.
     :param blacklisted_*_transformers: OVOS-TRANSFORM-1 §5.2 — per-chain
         denylists.
+    :param fallback_handlers: OVOS-FALLBACK-1 §4 — an ordered array of
+        skill-id strings registered as a session field by the SESSION-1 §3
+        field table (owner OVOS-FALLBACK-1 §4). Carried opaquely here; its
+        semantics are owned by OVOS-FALLBACK-1. Empty list and ``None`` are
+        wire-equivalent (both omitted, §3.4 / §2.1). Like
+        ``converse_handlers``, OVOS-FALLBACK-1 is a **forward reference**
+        (it cites this field but is not yet merged); the field is carried
+        regardless, on the strength of the SESSION-1 §3 registration.
     :param active_handlers: OVOS-PIPELINE-1 §7.1 dispatch-recency record —
         a head-first, deduplicated list of ``{skill_id, activated_at}``.
     :param converse_handlers: OVOS-CONVERSE-1 §2.1 converse-eligibility
@@ -218,6 +229,7 @@ class Session:
                  blacklisted_intent_transformers: Optional[List[str]] = None,
                  blacklisted_dialog_transformers: Optional[List[str]] = None,
                  blacklisted_tts_transformers: Optional[List[str]] = None,
+                 fallback_handlers: Optional[List[str]] = None,
                  active_handlers: Optional[List[Dict[str, Any]]] = None,
                  converse_handlers: Optional[List[Dict[str, Any]]] = None,
                  response_mode: Optional[Dict[str, Any]] = None,
@@ -303,6 +315,8 @@ class Session:
             blacklisted_dialog_transformers)
         self.blacklisted_tts_transformers = self._as_str_list(
             blacklisted_tts_transformers)
+        # OVOS-FALLBACK-1 §4 registered array-of-string (carried opaquely)
+        self.fallback_handlers = self._as_str_list(fallback_handlers)
 
         # --- PIPELINE-1 §7.1 / CONVERSE-1 §2.1 / §2.2 handler state ---------
         # The §2.1 converse-handler cap is NOT session state: a constructed

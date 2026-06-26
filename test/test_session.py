@@ -183,6 +183,55 @@ class TestPersonaId(unittest.TestCase):
         self.assertNotIn("persona_id", s.to_dict())
 
 
+class TestFallbackHandlers(unittest.TestCase):
+    """OVOS-SESSION-1 §3 registers ``fallback_handlers`` (array of string,
+    owner OVOS-FALLBACK-1 §4). It is an array-of-string override field —
+    same bucket / wire rules as the blacklists and transformer chains."""
+
+    def test_fallback_handlers_round_trip(self):
+        s = Session(fallback_handlers=["skill-a", "skill-b"])
+        self.assertEqual(s.to_dict(),
+                         {"fallback_handlers": ["skill-a", "skill-b"]})
+        self.assertEqual(Session.from_dict(s.to_dict()), s)
+        self.assertEqual(Session.deserialize(s.serialize()), s)
+
+    def test_fallback_handlers_omitted_not_null_when_none(self):
+        # §2.1 omission-not-null: absent fallback_handlers never serializes.
+        s = Session()
+        self.assertIsNone(s.fallback_handlers)
+        self.assertNotIn("fallback_handlers", s.to_dict())
+        self.assertNotIn("fallback_handlers", s.serialize())
+
+    def test_empty_fallback_handlers_is_wire_equivalent_to_omission(self):
+        # §3.4 — an empty array on a list override is dropped to omission.
+        s = Session(fallback_handlers=[])
+        self.assertIsNone(s.fallback_handlers)
+        self.assertEqual(s.to_dict(), {})
+
+    def test_fallback_handlers_is_registered_not_owned(self):
+        # OVOS-FALLBACK-1 registers it; OVOS-SESSION-1 does not own it.
+        self.assertIn("fallback_handlers", SESSION1_REGISTERED_FIELDS)
+        self.assertNotIn("fallback_handlers", SESSION1_OWNED_FIELDS)
+
+    def test_fallback_handlers_is_first_class_not_extra(self):
+        # Registered ⇒ lands as a first-class attribute, not in `extras`.
+        s = Session.from_dict({"fallback_handlers": ["skill-x"]})
+        self.assertEqual(s.fallback_handlers, ["skill-x"])
+        self.assertNotIn("fallback_handlers", s.extras)
+
+    def test_explicit_null_fallback_handlers_treated_as_omitted(self):
+        # §2.1: explicit null on a registered field ⇒ omitted, not error.
+        s = Session.from_dict({"fallback_handlers": None})
+        self.assertIsNone(s.fallback_handlers)
+        self.assertNotIn("fallback_handlers", s.to_dict())
+
+    def test_non_list_fallback_handlers_rejected(self):
+        # Wrong wire type for an array-of-string override is malformed,
+        # same as the blacklists / transformer chains (§3).
+        with self.assertRaises(MalformedSession):
+            Session(fallback_handlers="not-a-list")
+
+
 # --- §3 / §3.4 other-spec override fields ----------------------------------
 
 class TestOverrideFields(unittest.TestCase):
