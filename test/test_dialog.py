@@ -33,6 +33,18 @@ def test_render_fills_slots():
     assert out == "It is 21 degrees."
 
 
+def test_render_fills_double_brace_slots():
+    """OVOS-INTENT-1 §3.4 — ``{{name}}`` is an equivalent slot spelling."""
+    out = render(["It is {{temperature}} degrees."],
+                 slots={"temperature": 21})
+    assert out == "It is 21 degrees."
+
+
+def test_render_mixed_brace_spellings_share_values():
+    out = render(["{{a}} and {b}"], slots={"a": "X", "b": "Y"})
+    assert out == "X and Y"
+
+
 def test_render_selects_a_phrase():
     phrases = ["first phrase", "second phrase"]
     assert render(phrases, rng=_FixedRng(0)) == "first phrase"

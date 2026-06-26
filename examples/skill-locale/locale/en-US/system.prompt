@@ -1,12 +1,12 @@
 # Assistant system prompt
 
-You are {assistant}, a helpful voice assistant. Keep your answers short.
+You are {{assistant}}, a helpful voice assistant. Keep your answers short.
 
-The user asked: {query}
+The user asked: {{query}}
 
 When you reply with structured data, use a JSON object like {"answer": "..."}.
-The placeholder in the example below is illustrative and is left untouched:
+The single-brace placeholder below is illustrative and is left untouched:
 
 ```
-{"answer": "{example}"}
+{"answer": "{{example}}"}
 ```

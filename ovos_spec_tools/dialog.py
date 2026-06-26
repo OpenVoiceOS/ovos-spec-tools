@@ -13,8 +13,11 @@ Two interfaces are provided:
   per :meth:`DialogRenderer.render` call, and the renderer avoids repeating
   the phrase it chose last (independently per language).
 
-Only the single-brace slot form ``{name}`` is recognized; there is no ``{{ }}``
-form (OVOS-INTENT-2 §4.2). A slot with no value raises :class:`UnfilledSlot`.
+A slot may be written in either equivalent spelling — single-brace ``{name}``
+or double-brace ``{{name}}`` (OVOS-INTENT-1 §3.4). The two are folded to the
+same canonical ``{name}`` slot by :func:`~ovos_spec_tools.expansion.expand`
+during expansion, so this renderer fills both transparently. A slot with no
+value raises :class:`UnfilledSlot`.
 """
 from __future__ import annotations
 

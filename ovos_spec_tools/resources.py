@@ -378,16 +378,17 @@ def read_prompt_file(path: Path) -> str:
     Args:
         path: the resolved ``.prompt`` file.
 
+    A ``.prompt`` has **no** special syntax beyond ``{{name}}`` substitution
+    (OVOS-INTENT-2 §4.4): a single ``{name}``, any lone brace, and an
+    ``<!-- … -->`` HTML comment are all **literal pass-through text** — they
+    reach the model unchanged. The whole file is returned verbatim.
+
+    Args:
+        path: the resolved ``.prompt`` file.
+
     Returns:
         The file's whole content as a single string, byte-for-byte except the
         stripped BOM and Python's universal-newline decoding.
-
-    .. note::
-       **Known conformance gap (OVOS-INTENT-2 §4.4).** This reader does **not**
-       strip the author-only ``<!-- … -->`` HTML comments §4.4 requires be
-       removed before the prompt reaches a language model, nor does it report an
-       unterminated ``<!--`` (a §4.4 MUST). The whole file is returned as-is.
-       See :func:`ovos_spec_tools.prompt.render_prompt`.
     """
     return path.read_text(encoding="utf-8-sig")  # utf-8-sig discards a BOM (§3)
 

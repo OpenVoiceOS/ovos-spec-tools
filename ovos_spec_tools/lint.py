@@ -54,7 +54,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
-from ovos_spec_tools.expansion import MalformedTemplate, expand
+from ovos_spec_tools.expansion import (
+    MalformedTemplate,
+    expand,
+    fold_double_braces,
+)
 from ovos_spec_tools.resources import (
     PROMPT_ROLE,
     SLOT_BEARING_ROLES,
@@ -334,7 +338,11 @@ def _lint_file(path: Path,
                 f"{extension} is slot-free but a template contains a named "
                 f"slot (OVOS-INTENT-2 §4.3)  [in: {template!r}]"))
         if slot_bearing:
-            slot_sets.append(frozenset(_SLOT_RE.findall(template)))
+            # Fold ``{{name}}`` to ``{name}`` first (OVOS-INTENT-1 §3.4) so the
+            # two equivalent slot spellings yield the identical slot set and a
+            # template mixing them is not mis-flagged as slot-inconsistent.
+            slot_sets.append(
+                frozenset(_SLOT_RE.findall(fold_double_braces(template))))
 
     # --- slot consistency (OVOS-INTENT-1 §5.5) ------------------------------
     # §5.5 (and OVOS-INTENT-3 §5.1) require every template of one definition to

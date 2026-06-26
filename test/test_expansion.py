@@ -76,6 +76,60 @@ def test_digit_in_slot_name():
     assert expand("set channel {channel_2}") == ["set channel {channel_2}"]
 
 
+# --- §3.4 dual-brace slot spelling: {name} == {{name}} ----------------------
+
+def test_double_brace_slot_is_equivalent_to_single_brace():
+    """§3.4 — ``{{name}}`` is an equivalent spelling of ``{name}``."""
+    assert expand("(buy|sell) {{item}}") == expand("(buy|sell) {item}")
+    assert sorted(expand("(buy|sell) {{item}}")) == ["buy {item}", "sell {item}"]
+
+
+def test_double_brace_folds_to_single_brace_in_samples():
+    """A ``{{name}}`` slot is emitted as the canonical single-brace ``{name}``."""
+    assert expand("it is currently {{temperature}} degrees") == [
+        "it is currently {temperature} degrees",
+    ]
+
+
+def test_double_brace_inside_groups():
+    assert sorted(expand("(buy {{item}}|sell {{item}})")) == [
+        "buy {item}", "sell {item}",
+    ]
+    assert sorted(expand("[really ]want {{item}}")) == [
+        "really want {item}", "want {item}",
+    ]
+
+
+def test_mixed_single_and_double_brace_slots():
+    """Both spellings may appear in one template and mean distinct slots."""
+    assert expand("move {{from}} to {to}") == ["move {from} to {to}"]
+
+
+def test_double_brace_slot_only_template_is_malformed():
+    """§3.6 — a bare slot is malformed in either spelling."""
+    with pytest.raises(MalformedTemplate):
+        expand("{{name}}")
+
+
+def test_double_brace_invalid_name_is_malformed():
+    """§3.4 — the folded interior is name-checked exactly like a single slot."""
+    for tpl in ("{{Name}} here", "{{1st}} here", "{{bad name}} here"):
+        with pytest.raises(MalformedTemplate):
+            expand(tpl)
+
+
+def test_double_brace_repeated_slot_is_malformed():
+    """§3.6 — repeating a slot is malformed across spellings too."""
+    with pytest.raises(MalformedTemplate):
+        expand("{{x}} and {x}")
+
+
+def test_double_brace_adjacent_slots_is_malformed():
+    """§3.6 — adjacent slots remain malformed after folding."""
+    with pytest.raises(MalformedTemplate):
+        expand("{{a}} {b}")
+
+
 # --- §3.7 inline vocabulary references --------------------------------------
 
 VOCAB = {"greeting": ["hello", "hi", "good morning"]}
