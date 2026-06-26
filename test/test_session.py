@@ -3,6 +3,7 @@
 Every section heading below cites the spec section under test. The
 handler-list sections additionally cite OVOS-PIPELINE-1 §7.1 and
 OVOS-CONVERSE-1 §2.1 / §2.2 / §3, whose fields SESSION-1 §3 registers."""
+import json
 import unittest
 
 from ovos_spec_tools import (
@@ -248,8 +249,16 @@ class TestActiveHandlers(unittest.TestCase):
 
 class TestConverseHandlers(unittest.TestCase):
     def test_default_cap_is_64(self):
+        # The cap is the spec's §2.1 default for the add_converse_handler
+        # argument — NOT a session field.
         self.assertEqual(DEFAULT_CONVERSE_HANDLERS_CAP, 64)
-        self.assertEqual(Session().converse_handlers_cap, 64)
+
+    def test_cap_is_not_session_state(self):
+        # §2.1 — the cap is a deployment value the orchestrator applies at
+        # insertion time, never an attribute carried on the session.
+        s = Session()
+        self.assertFalse(hasattr(s, "converse_handlers_cap"))
+        self.assertNotIn("converse_handlers_cap", s.to_dict())
 
     def test_add_converse_handler_head_first_dedup(self):
         s = Session()
@@ -261,24 +270,46 @@ class TestConverseHandlers(unittest.TestCase):
 
     def test_cap_evicts_tail(self):
         # §2.1 — when the cap would be exceeded, drop the least-recent tail.
-        s = Session(converse_handlers_cap=3)
+        # The cap is supplied per insertion by the orchestrator.
+        s = Session()
         for i in range(5):
-            s.add_converse_handler(f"s{i}", activated_at=float(i))
+            s.add_converse_handler(f"s{i}", activated_at=float(i), cap=3)
         self.assertEqual([h["skill_id"] for h in s.converse_handlers],
                          ["s4", "s3", "s2"])
         self.assertEqual(len(s.converse_handlers), 3)
 
-    def test_cap_applied_on_construction(self):
+    def test_not_capped_on_construction(self):
+        # §2.1 — a constructed session with an over-cap converse_handlers
+        # list is NOT auto-truncated on load; the cap applies only at the
+        # next insertion.
         seed = [{"skill_id": f"s{i}", "activated_at": float(i)}
                 for i in range(10)]
-        s = Session(converse_handlers=seed, converse_handlers_cap=4)
+        s = Session(converse_handlers=seed)
+        self.assertEqual(len(s.converse_handlers), 10)
+        # the cap is enforced only on the next add_converse_handler.
+        s.add_converse_handler("new", activated_at=99.0, cap=4)
         self.assertEqual(len(s.converse_handlers), 4)
-        self.assertEqual(s.converse_handlers[0]["skill_id"], "s0")
+        self.assertEqual(s.converse_handlers[0]["skill_id"], "new")
+
+    def test_not_capped_on_deserialize(self):
+        # §2.1 — a deserialized over-cap list is preserved verbatim; the
+        # cap is applied only on the next capped insertion.
+        seed = {"converse_handlers": [
+            {"skill_id": f"s{i}", "activated_at": float(i)}
+            for i in range(10)]}
+        s = Session.deserialize(json.dumps(seed))
+        self.assertEqual(len(s.converse_handlers), 10)
 
     def test_cap_unbounded_when_non_positive(self):
-        s = Session(converse_handlers_cap=0)
+        s = Session()
         for i in range(100):
-            s.add_converse_handler(f"s{i}", activated_at=float(i))
+            s.add_converse_handler(f"s{i}", activated_at=float(i), cap=0)
+        self.assertEqual(len(s.converse_handlers), 100)
+
+    def test_cap_unbounded_when_none(self):
+        s = Session()
+        for i in range(100):
+            s.add_converse_handler(f"s{i}", activated_at=float(i), cap=None)
         self.assertEqual(len(s.converse_handlers), 100)
 
     def test_prune_drops_stale_entries(self):
@@ -367,14 +398,15 @@ class TestPropagation(unittest.TestCase):
         copy.pipeline.append("adapt_high")
         self.assertEqual(s.pipeline, ["padatious_high"])
 
-    def test_propagate_carries_handlers_and_cap(self):
-        s = Session(converse_handlers_cap=7)
+    def test_propagate_carries_handlers(self):
+        s = Session()
         s.add_active_handler("a", activated_at=1.0)
         s.add_converse_handler("b", activated_at=2.0)
         s.set_response_mode("c", expires_at=3.0)
         copy = s.propagate()
         self.assertEqual(copy, s)
-        self.assertEqual(copy.converse_handlers_cap, 7)
+        # the cap is not session state — nothing to carry across propagation.
+        self.assertFalse(hasattr(copy, "converse_handlers_cap"))
         self.assertEqual(copy.active_handlers, s.active_handlers)
         # deep copy — mutating the twin does not touch the source
         copy.active_handlers[0]["activated_at"] = 999.0

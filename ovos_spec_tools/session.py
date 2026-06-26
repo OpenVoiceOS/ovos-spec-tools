@@ -61,8 +61,10 @@ _log = logging.getLogger(__name__)
 
 #: OVOS-CONVERSE-1 §2.1 default cap for the converse-handler recency
 #: stack. A deployment MAY raise, lower, or set it to "unbounded"
-#: (a value ``<= 0``). Injected via the ``converse_handlers_cap``
-#: constructor argument; this is only the fallback when none is given.
+#: (a value ``<= 0``). The cap is **not** session state: it is a
+#: deployment value the orchestrator applies at insertion time, passed
+#: as the ``cap`` argument to :meth:`Session.add_converse_handler`. This
+#: constant is the spec's documented §2.1 default for that argument.
 DEFAULT_CONVERSE_HANDLERS_CAP = 64
 
 
@@ -166,12 +168,13 @@ class Session:
     :param active_handlers: OVOS-PIPELINE-1 §7.1 dispatch-recency record —
         a head-first, deduplicated list of ``{skill_id, activated_at}``.
     :param converse_handlers: OVOS-CONVERSE-1 §2.1 converse-eligibility
-        list — head-first, deduplicated, tail-dropped at the cap.
+        list — head-first, deduplicated, tail-dropped at the
+        orchestrator-supplied cap. The cap itself is **not** a session
+        field (not serialized, not in :data:`SESSION1_REGISTERED_FIELDS`);
+        it is a deployment value the orchestrator applies at insertion
+        time via the ``cap`` argument to :meth:`add_converse_handler`.
     :param response_mode: OVOS-CONVERSE-1 §2.2 pending-response window —
         a single ``{skill_id, expires_at}`` object, or ``None``.
-    :param converse_handlers_cap: OVOS-CONVERSE-1 §2.1 maximum length of
-        ``converse_handlers``; defaults to 64. A value ``<= 0`` means
-        "unbounded".
     :param extras: passthrough mapping for fields claimed by future
         specifications (anything outside :data:`SESSION1_REGISTERED_FIELDS`).
         Treated opaquely per §2.4.
@@ -206,7 +209,6 @@ class Session:
                  active_handlers: Optional[List[Dict[str, Any]]] = None,
                  converse_handlers: Optional[List[Dict[str, Any]]] = None,
                  response_mode: Optional[Dict[str, Any]] = None,
-                 converse_handlers_cap: Optional[int] = None,
                  extras: Optional[Dict[str, Any]] = None):
         if session_id is not None and (not isinstance(session_id, str)
                                        or not session_id):
@@ -282,14 +284,14 @@ class Session:
             blacklisted_tts_transformers)
 
         # --- PIPELINE-1 §7.1 / CONVERSE-1 §2.1 / §2.2 handler state ---------
-        if converse_handlers_cap is None:
-            converse_handlers_cap = DEFAULT_CONVERSE_HANDLERS_CAP
-        self.converse_handlers_cap = converse_handlers_cap
+        # The §2.1 converse-handler cap is NOT session state: a constructed
+        # or deserialized session is never capped on load. The cap is a
+        # deployment value the orchestrator supplies at insertion time
+        # (see :meth:`add_converse_handler`).
         self.active_handlers: List[Dict[str, Any]] = self._coerce_handlers(
             active_handlers)
         self.converse_handlers: List[Dict[str, Any]] = self._coerce_handlers(
             converse_handlers)
-        self._cap_handlers(self.converse_handlers)
         self.response_mode: Optional[Dict[str, Any]] = self._coerce_response_mode(
             response_mode)
 
@@ -385,14 +387,15 @@ class Session:
         handlers.insert(0, {"skill_id": skill_id, "activated_at": activated_at})
         return handlers
 
-    def _cap_handlers(self,
-                      handlers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Tail-drop ``handlers`` down to :attr:`converse_handlers_cap`
-        entries (in place).
+    @staticmethod
+    def _cap_handlers(handlers: List[Dict[str, Any]],
+                      cap: Optional[int]) -> List[Dict[str, Any]]:
+        """Tail-drop ``handlers`` down to ``cap`` entries (in place).
 
-        A cap ``<= 0`` means "unbounded" (OVOS-CONVERSE-1 §2.1). The
-        least-recent surviving owners (the tail) are dropped."""
-        cap = self.converse_handlers_cap
+        ``cap`` is the orchestrator-supplied per-insertion limit
+        (OVOS-CONVERSE-1 §2.1), not session state. A ``cap`` of ``None``
+        or ``<= 0`` means "unbounded". The least-recent surviving owners
+        (the tail) are dropped."""
         if cap and cap > 0 and len(handlers) > cap:
             del handlers[cap:]
         return handlers
@@ -419,11 +422,18 @@ class Session:
 
     # converse_handlers (OVOS-CONVERSE-1 §2.1 / §3.1)
     def add_converse_handler(self, skill_id: str,
-                             activated_at: Optional[float] = None):
+                             activated_at: Optional[float] = None,
+                             cap: Optional[int] = DEFAULT_CONVERSE_HANDLERS_CAP):
         """Stamp a handler onto ``converse_handlers``: dedup-promote to
-        head, then tail-drop at the §2.1 cap (OVOS-CONVERSE-1 §3.1)."""
+        head, then tail-drop at ``cap`` (OVOS-CONVERSE-1 §2.1 / §3.1).
+
+        ``cap`` is the orchestrator-supplied per-insertion limit — a
+        deployment value applied here, never stored on the session. It
+        defaults to the spec's documented §2.1 default
+        (:data:`DEFAULT_CONVERSE_HANDLERS_CAP`); ``None`` or ``<= 0``
+        means "unbounded"."""
         self._promote_handler(self.converse_handlers, skill_id, activated_at)
-        self._cap_handlers(self.converse_handlers)
+        self._cap_handlers(self.converse_handlers, cap)
 
     def remove_converse_handler(self, skill_id: str):
         """Remove ``skill_id`` from ``converse_handlers``."""
@@ -591,9 +601,7 @@ class Session:
         """Return a deep copy suitable for attaching to a derived
         Message (§4). Every field — known and unknown — rides along
         unchanged."""
-        twin = Session.from_dict(self.to_dict())
-        twin.converse_handlers_cap = self.converse_handlers_cap
-        return twin
+        return Session.from_dict(self.to_dict())
 
     @classmethod
     def materialize_default(cls) -> "Session":
