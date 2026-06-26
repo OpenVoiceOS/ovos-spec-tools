@@ -113,6 +113,13 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     # --- STOP-1 §4.2/§5.3 (1:1 renames) ---
     "skill.stop.pong": SpecMessage.STOP_PONG,
     "mycroft.stop": SpecMessage.STOP,
+    # --- PIPELINE-1 intent outcome (1:1 rename) ---
+    "complete_intent_failure": SpecMessage.INTENT_UNMATCHED,
+    # NOTE: INTENT-4 registration topics (ovos.intent.register.keyword/.template,
+    # ovos.entity.register, ...) are NOT here because they are not 1:1 renames —
+    # ovos.intent.register.keyword consolidates legacy register_vocab + register_intent
+    # into one restructured message, so they require INTENT-4 *adoption* in the
+    # producers/consumers (the intent service + skill loaders), not a static bridge.
 }
 
 # reverse: spec topic (plain str) -> the legacy topic it replaces
