@@ -81,10 +81,21 @@ class SpecMessage(str, Enum):
     LISTENER_AWOKEN = "ovos.listener.awoken"
 
 
-# legacy topic -> SpecMessage that supersedes it, RESTRICTED to renames whose
-# legacy payload already satisfies the new topic's consumers (so a transparent
-# dual-emit is safe). Shape-changing renames are intentionally absent.
+# legacy topic -> SpecMessage that supersedes it. This is the single source of
+# truth for the legacy<->ovos.* topic renames; the bus (NamespaceTranslator) reads
+# it to bridge BOTH namespaces transparently, so producers emit only the spec topic
+# (from SpecMessage) and never hand-roll a dual-emit. Producers emit the spec
+# payload; the bridged legacy message carries that same payload (consumers still on
+# a legacy topic during the migration window receive the spec-shaped data — for the
+# shape-changing renames below, e.g. the handler trio, that means the new
+# skill_id/intent_name fields rather than the old `name`).
+#
+# Only 1:1 static renames live here. Per-instance topics with placeholders
+# (``{skill_id}.stop.ping``, ``{skill_id}.stop`` -> the broadcast ``ovos.stop.ping``
+# / ``ovos.stop``) cannot be expressed as a static map and are handled by
+# producers/consumers subscribing on both forms.
 MIGRATION_MAP: Dict[str, SpecMessage] = {
+    # --- AUDIO-IN-1 / PIPELINE-1 (payload-compatible) ---
     "recognizer_loop:utterance": SpecMessage.UTTERANCE,
     "speak": SpecMessage.SPEAK,
     "recognizer_loop:audio_output_start": SpecMessage.AUDIO_OUTPUT_STARTED,
@@ -94,6 +105,14 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     "recognizer_loop:record_end": SpecMessage.LISTENER_RECORD_ENDED,
     "recognizer_loop:sleep": SpecMessage.LISTENER_SLEEP,
     "mycroft.awoken": SpecMessage.LISTENER_AWOKEN,
+    # --- PIPELINE-1 §8 handler-lifecycle trio (payload restructured to
+    #     {skill_id, intent_name}; bridged transparently per the note above) ---
+    "mycroft.skill.handler.start": SpecMessage.INTENT_HANDLER_START,
+    "mycroft.skill.handler.complete": SpecMessage.INTENT_HANDLER_COMPLETE,
+    "mycroft.skill.handler.error": SpecMessage.INTENT_HANDLER_ERROR,
+    # --- STOP-1 §4.2/§5.3 (1:1 renames) ---
+    "skill.stop.pong": SpecMessage.STOP_PONG,
+    "mycroft.stop": SpecMessage.STOP,
 }
 
 # reverse: spec topic (plain str) -> the legacy topic it replaces
