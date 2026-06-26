@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.11.0a1) (2026-06-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.10.0a1...0.11.0a1)
+
+**Merged pull requests:**
+
+- feat: bridge PIPELINE-1 trio, STOP-1, intent-unmatched & INTENT-4 management topics [\#30](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/30) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.10.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.10.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.9.0a1...0.10.0a1)
