@@ -187,9 +187,6 @@ class Session:
         bound to this session. Registered as a session field by
         OVOS-PERSONA-1 (recognized here per the OVOS-SESSION-1 §2.2 field
         registry); ``None`` ⇒ omitted on the wire (§2.1).
-    :param converse_handlers_cap: OVOS-CONVERSE-1 §2.1 maximum length of
-        ``converse_handlers``; defaults to 64. A value ``<= 0`` means
-        "unbounded".
     :param extras: passthrough mapping for fields claimed by future
         specifications (anything outside :data:`SESSION1_REGISTERED_FIELDS`).
         Treated opaquely per §2.4.
@@ -225,7 +222,6 @@ class Session:
                  converse_handlers: Optional[List[Dict[str, Any]]] = None,
                  response_mode: Optional[Dict[str, Any]] = None,
                  persona_id: Optional[str] = None,
-                 converse_handlers_cap: Optional[int] = None,
                  extras: Optional[Dict[str, Any]] = None):
         if session_id is not None and (not isinstance(session_id, str)
                                        or not session_id):
