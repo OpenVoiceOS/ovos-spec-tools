@@ -1,7 +1,16 @@
 """Tests for the locale resource linter (`ovos-spec-lint`)."""
 import pytest
 
-from ovos_spec_tools.lint import ERROR, WARNING, lint_locale, main
+from ovos_spec_tools.expansion import MalformedTemplate
+from ovos_spec_tools.lint import (
+    ERROR,
+    WARNING,
+    declared_slots,
+    lint_locale,
+    lint_required_slots,
+    main,
+    validate_required_slots,
+)
 
 
 def _write(path, text):
@@ -145,23 +154,22 @@ def test_lint_accepts_a_single_language_directory(tmp_path):
     assert lint_locale(locale / "en-US") == []
 
 
-# --- slot consistency (OVOS-INTENT-1 §5.5) ----------------------------------
+# --- slot consistency: .dialog ONLY (OVOS-INTENT-2 §4.2) ---------------------
 
-# .intent allows union slot sets — templates MAY declare different slots.
+# .intent templates MAY declare different slot sets — the engine extracts only
+# the matched template's slots and the intent's slot set is their union
+# (OVOS-INTENT-2 §4.1, OVOS-INTENT-3 §5.1). A tool MUST NOT reject .intent for
+# divergent slots, so divergence is NOT flagged for the .intent role.
 
-def test_inconsistent_slots_in_one_intent_warns(tmp_path):
+def test_divergent_slots_in_one_intent_is_allowed(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\nstop {engine}\n")
-    warnings = _warnings(lint_locale(locale))
-    assert any("slot sets" in f.message for f in warnings)
     assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
-def test_mixing_slotted_and_slotless_lines_in_intent_warns(tmp_path):
+def test_mixing_slotted_and_slotless_lines_in_intent_is_allowed(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "p.intent", "play {query}\njust stop\n")
-    warnings = _warnings(lint_locale(locale))
-    assert any("slot sets" in f.message for f in warnings)
     assert not any("slot sets" in f.message for f in _errors(lint_locale(locale)))
 
 
@@ -297,3 +305,75 @@ def test_default_spec_version_does_not_flag_prompt(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "system.prompt", "You are helpful.\n")
     assert not any("spec version" in f.message for f in lint_locale(locale))
+
+
+# --- required_slots validation (OVOS-INTENT-3 §5.3) ----------------------
+
+def test_declared_slots_is_the_union_across_templates():
+    templates = [
+        "(play|put on) {query}",
+        "(play|put on) {query} (on|using) {engine}",
+        "i want to listen to {query}",
+    ]
+    assert declared_slots(templates) == frozenset({"query", "engine"})
+
+
+def test_declared_slots_folds_double_brace_spelling():
+    # {{name}} and {name} are the same slot (OVOS-INTENT-1 §3.4).
+    assert declared_slots(["say {{name}}", "say {name}!"]) == frozenset({"name"})
+
+
+def test_required_slot_declared_by_a_template_is_accepted():
+    templates = [
+        "(play|put on) {query}",
+        "(play|put on) {query} (on|using) {engine}",
+    ]
+    # both required slots are declared by at least one template — no raise.
+    validate_required_slots(["query", "engine"], templates)
+
+
+def test_required_slot_declared_by_no_template_is_rejected():
+    templates = ["(play|put on) {query}"]
+    with pytest.raises(MalformedTemplate) as exc:
+        validate_required_slots(["query", "engine"], templates)
+    assert "engine" in str(exc.value)
+    assert "§5.3" in str(exc.value)
+
+
+def test_required_slot_in_only_one_of_several_templates_is_accepted():
+    # the engine extracts only the matched template's slots, so a required slot
+    # declared by a *single* template still satisfies §5.3 (it can fire).
+    templates = [
+        "i want to listen to {query}",
+        "(play|put on) {query} (on|using) {engine}",
+    ]
+    validate_required_slots(["engine"], templates)
+
+
+def test_no_required_slots_is_always_accepted():
+    validate_required_slots([], ["(play|put on) {query}"])
+
+
+def test_required_slot_against_slotless_templates_is_rejected():
+    with pytest.raises(MalformedTemplate):
+        validate_required_slots(["query"], ["just hello", "say hi"])
+
+
+def test_required_slot_declared_only_in_double_brace_is_accepted():
+    # {{engine}} declares the slot just as {engine} would (§3.4 fold).
+    validate_required_slots(["engine"], ["play {query} on {{engine}}"])
+
+
+def test_lint_required_slots_returns_an_error_finding():
+    findings = lint_required_slots(
+        "play.intent", ["query", "engine"], ["(play|put on) {query}"])
+    assert len(findings) == 1
+    assert findings[0].severity == ERROR
+    assert findings[0].path == "play.intent"
+    assert "engine" in findings[0].message
+
+
+def test_lint_required_slots_clean_returns_no_findings():
+    findings = lint_required_slots(
+        "play.intent", ["query"], ["(play|put on) {query}"])
+    assert findings == []

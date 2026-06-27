@@ -31,7 +31,12 @@ formal specifications describe:
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
-from ovos_spec_tools.dialog import DialogRenderer, UnfilledSlot, render
+from ovos_spec_tools.dialog import (
+    DialogRenderer,
+    UnfilledSlot,
+    render,
+    verify_slot_consistency,
+)
 from ovos_spec_tools.expansion import MalformedTemplate, expand, inline_keywords
 from ovos_spec_tools.message import (
     DEFAULT_SESSION_ID,
@@ -44,7 +49,13 @@ from ovos_spec_tools.language import (
     lang_matches,
     standardize_lang,
 )
-from ovos_spec_tools.lint import Finding, lint_locale
+from ovos_spec_tools.lint import (
+    Finding,
+    declared_slots,
+    lint_locale,
+    lint_required_slots,
+    validate_required_slots,
+)
 from ovos_spec_tools.messages import (
     MIGRATION_MAP,
     SPEC_TO_LEGACY,
@@ -98,6 +109,7 @@ __all__ = [
     "utterance_contains",
     "render",
     "DialogRenderer",
+    "verify_slot_consistency",
     "UnfilledSlot",
     "render_prompt",
     "PromptRenderer",
@@ -106,6 +118,9 @@ __all__ = [
     "lang_matches",
     "closest_lang",
     "lint_locale",
+    "declared_slots",
+    "validate_required_slots",
+    "lint_required_slots",
     "Finding",
     "SpecMessage",
     "MIGRATION_MAP",

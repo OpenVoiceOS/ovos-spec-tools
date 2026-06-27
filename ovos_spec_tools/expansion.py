@@ -263,7 +263,7 @@ def inline_keywords(
     template: str,
     vocabularies: Dict[str, Sequence[str]] | None = None,
     *,
-    max_values: int = 10,
+    max_values: Optional[int] = None,
 ) -> str:
     """Inline ``<keyword>`` references as ``(v1|v2|…)`` alternation groups.
 
@@ -277,11 +277,15 @@ def inline_keywords(
     alternations, then expand the result themselves.
 
     Unlike :func:`expand`, this is intentionally lenient and **not** a
-    conformant expander: it does no §3.6 validation, leaves an unknown keyword's
-    angle brackets stripped as literal text rather than raising
-    :class:`MalformedTemplate` for an undefined reference, and applies the
-    non-spec ``max_values`` cap below to bound the §4.3 sample-set blow-up.
-    Feed its output to :func:`expand` for the validated sample set.
+    conformant expander: it does no §3.6 validation and leaves an unknown
+    keyword's angle brackets stripped as literal text rather than raising
+    :class:`MalformedTemplate` for an undefined reference. Feed its output to
+    :func:`expand` for the validated sample set.
+
+    By default **every** value of a keyword is inlined (no silent truncation).
+    Resolution recurses through nested references — ``<a>`` inside ``<b>`` — and
+    a reference cycle raises :class:`MalformedTemplate` per OVOS-INTENT-1 §4.1,
+    rather than being cut off at an arbitrary depth.
 
     Parameters
     ----------
@@ -291,11 +295,12 @@ def inline_keywords(
         Flat ``{keyword: [values]}`` mapping.  If ``None`` or empty the
         template is returned unchanged.
     max_values
-        Cap the number of values per keyword inlined.  Default 10. This is an
-        engineering limit, **not** a spec rule: OVOS-INTENT-1 §4.3 warns that a
-        sample set grows as the product of branch counts, and §4.3 permits an
-        expander to bound it; capping members here keeps a downstream engine's
-        expansion finite without that engine having to re-implement the limit.
+        Optional bound on the number of values inlined per keyword. ``None``
+        (the default) inlines **all** values. OVOS-INTENT-1 §4.3 permits an
+        expander to *refuse* (not silently drop) a template whose expansion
+        exceeds a documented limit; accordingly, when a keyword has more than
+        ``max_values`` members this **raises** :class:`MalformedTemplate`. It
+        never silently truncates the value list.
 
     Returns
     -------
@@ -303,6 +308,13 @@ def inline_keywords(
         Template with all ``<keyword>`` references inlined as ``(a|b|c)``
         groups.  Keywords not found in ``vocabularies`` have their angle
         brackets stripped and become literal text.
+
+    Raises
+    ------
+    MalformedTemplate
+        On a reference cycle (OVOS-INTENT-1 §4.1), or when a keyword's value
+        count exceeds an explicit ``max_values`` bound (OVOS-INTENT-1 §4.3,
+        refuse-and-document).
 
     Example
     -------
@@ -312,17 +324,50 @@ def inline_keywords(
     """
     if not vocabularies:
         return template
+    return _inline_keywords(template, vocabularies, max_values, ())
 
-    def _sub(m: re.Match[str]) -> str:
-        vals = vocabularies.get(m.group(1))
-        if vals:
-            return "(" + "|".join(vals[:max_values]) + ")"
-        return m.group(0)  # keep brackets for unresolvable keywords
 
-    # Iterate until stable — handles nested refs like <a> inside <everywhere>
-    for _ in range(8):
-        new = _VOC_TOKEN_RE.sub(_sub, template)
-        if new == template:
-            break
-        template = new
-    return template
+def _inline_keywords(template: str,
+                     vocabularies: Dict[str, Sequence[str]],
+                     max_values: Optional[int],
+                     stack: Tuple[str, ...]) -> str:
+    """Resolve ``<name>`` references recursively, leftmost first, with cycle
+    detection (OVOS-INTENT-1 §4.1). ``stack`` is the chain of references being
+    resolved; a name already on it is a cycle and is rejected."""
+    while True:
+        match = _VOC_TOKEN_RE.search(template)
+        if match is None:
+            return template
+        name = match.group(1)
+
+        if name in stack:
+            raise MalformedTemplate(
+                f"cyclic vocabulary reference <{name}> "
+                f"(chain: {' -> '.join(stack + (name,))})")
+
+        vals = vocabularies.get(name)
+        if not vals:
+            # Lenient: an unknown keyword is left as literal text (brackets
+            # stripped) rather than raising. Skip past it so the leftmost-first
+            # scan continues and an undefined reference cannot loop forever.
+            template = (template[:match.start()] + name
+                        + template[match.end():])
+            continue
+
+        if max_values is not None and len(vals) > max_values:
+            # §4.3 permits a documented limit enforced by REFUSING — never by
+            # silently dropping values (which would be data loss).
+            raise MalformedTemplate(
+                f"vocabulary <{name}> has {len(vals)} values, exceeding the "
+                f"max_values bound of {max_values} (OVOS-INTENT-1 §4.3: a limit "
+                f"is enforced by refusing, not by truncating)")
+
+        # Resolve any nested references inside each value before substituting,
+        # carrying this name on the stack for cycle detection.
+        resolved_vals = [
+            _inline_keywords(v, vocabularies, max_values, stack + (name,))
+            for v in vals
+        ]
+        substitution = "(" + "|".join(resolved_vals) + ")"
+        template = (template[:match.start()] + substitution
+                    + template[match.end():])
