@@ -42,10 +42,20 @@ transport-layer ``Message`` subclass) builds on.
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
 
 __all__ = ["Message", "MalformedMessage", "DEFAULT_SESSION_ID"]
+
+#: The OVOS-MSG-1 §2.1 ``type`` syntax: a non-empty run of ASCII letters,
+#: digits, and the four punctuation characters the spec permits — ``.`` ``:``
+#: ``_`` ``-``. §2.1 forbids whitespace and any other character outright
+#: ("ASCII letters, digits, ``.``, ``:``, ``_``, ``-``; no whitespace"), so
+#: anything outside this set — an embedded space, a slash, a non-ASCII letter —
+#: is a malformed topic the producer MUST NOT emit. Lowercase is only
+#: RECOMMENDED (§2.1), so uppercase is accepted.
+_TYPE_SYNTAX_RE = re.compile(r"[A-Za-z0-9.:_-]+")
 
 #: A routing key value as it may appear on the wire (OVOS-MSG-1 §3): a single
 #: opaque identifier string, or — for ``destination`` only — an array of them
@@ -242,7 +252,10 @@ class Message:
             MalformedMessage: when ``msg_type`` is empty — §2.1/§7 require a
                 producer to emit a non-empty ``type``; an empty-``type``
                 scaffold Message must be ``forward``/``reply``-derived into
-                a real topic before it can be serialized.
+                a real topic before it can be serialized. Also when
+                ``msg_type`` violates the §2.1 syntax (a character outside
+                ASCII letters/digits/``.``/``:``/``_``/``-``, e.g. an embedded
+                space): such a topic must not reach the wire.
             ValueError: from :func:`json.dumps` when ``data`` / ``context``
                 contain a non-finite number (``allow_nan=False``), enforcing
                 the §6 "Numbers MUST be finite" rule at emit time.
@@ -255,6 +268,16 @@ class Message:
                 "cannot serialize a Message with an empty 'type' — §2.1/§7 "
                 "require a producer to emit a non-empty topic; derive a real "
                 "topic via forward()/reply() before serializing")
+        # §2.1 ``type`` syntax: ASCII letters, digits, ``.`` ``:`` ``_`` ``-``;
+        # no whitespace. The non-emptiness check above is the §7 producer MUST
+        # for an empty topic; this is the §2.1 producer MUST for the charset.
+        # An embedded space (``Message("a b")``) or any other character must
+        # not reach the wire, so ``serialize`` refuses it here.
+        if not _TYPE_SYNTAX_RE.fullmatch(self.msg_type):
+            raise MalformedMessage(
+                f"'type' {self.msg_type!r} violates OVOS-MSG-1 §2.1 syntax — a "
+                "topic may contain only ASCII letters, digits, '.', ':', '_', "
+                "'-' and no whitespace")
         return json.dumps(
             {"type": self.msg_type,
              "data": self._to_jsonable(self.data),
