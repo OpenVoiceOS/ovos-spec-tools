@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.15.0a1...0.16.0a1)
+
+**Merged pull requests:**
+
+- feat: plugin-agnostic IntentBuilder/Intent + voc\_match \(INTENT-4 keyword model, adapt-free\) [\#46](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/46) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.15.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.15.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.14.1a1...0.15.0a1)
