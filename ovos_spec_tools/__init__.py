@@ -57,6 +57,7 @@ from ovos_spec_tools.language import (
 from ovos_spec_tools.intent import (
     Intent,
     IntentBuilder,
+    MalformedIntent,
     open_intent_envelope,
     voc_match,
 )
