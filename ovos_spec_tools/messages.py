@@ -3,7 +3,7 @@
 Specs implemented
 -----------------
 This module is the vocabulary and migration map for the OVOS bus-namespace
-move from the historical Mycroft topics to the ``ovos.*`` namespace. Each
+move from the Mycroft topics to the ``ovos.*`` namespace. Each
 :class:`SpecMessage` member names a topic an OVOS specification defines, and
 is tied to its owning spec section in the per-member comments below:
 
@@ -16,11 +16,10 @@ is tied to its owning spec section in the per-member comments below:
 - **OVOS-STOP-1** — §4.2 ping/pong and §5 global-stop broadcast
   (``ovos.stop.*``);
 - **OVOS-AUDIO-IN-1** — listener lifecycle signals (``ovos.listener.*``).
-  AUDIO-IN-1 §6.1–§6.4 is **merged**, so ``ovos.listener.record.started`` /
-  ``.record.ended`` / ``ovos.listener.sleep`` / ``ovos.listener.awoken`` are
-  **mandated** (not provisional);
-- **OVOS-AUDIO-1** — the audio **output** service bus surface (§7), now
-  **merged** and mandated. Two rendering modes (``ovos.utterance.speak.b64``
+  AUDIO-IN-1 §6.1–§6.4 mandates ``ovos.listener.record.started`` /
+  ``.record.ended`` / ``ovos.listener.sleep`` / ``ovos.listener.awoken``;
+- **OVOS-AUDIO-1** — the audio **output** service bus surface (§7),
+  mandated. Two rendering modes (``ovos.utterance.speak.b64``
   §3.4 → ``ovos.audio.speech`` §4.3 for remote clients); the playback model
   (``ovos.audio.queue`` §4.1 scheduled sounds, ``ovos.audio.play_sound`` §4.2
   instant sounds); the output-lifecycle signals (``ovos.audio.output.started``
@@ -58,8 +57,8 @@ each shape-changing topic with two pure functions and
 direction, so the mirrored payload is in the **recipient's** shape. Several
 transforms are **best-effort / lossy** (a field that does not exist in the
 other shape is synthesized or dropped); each lossy case is documented at
-:data:`MIGRATION_PAYLOAD_TRANSFORMS`. There is no longer a blanket
-"legacy consumers keep working without code changes" guarantee: it holds for
+:data:`MIGRATION_PAYLOAD_TRANSFORMS`. The "legacy consumers keep working
+without code changes" guarantee is therefore scoped: it holds outright for
 payload-compatible renames, and holds *best-effort* (with documented loss) for
 the shape-changing ones.
 
@@ -101,9 +100,8 @@ class SpecMessage(str, Enum):
         bus.on(SpecMessage.SPEAK, handler)
         bus.emit(Message(SpecMessage.UTTERANCE, {...}))
 
-    The enum grows as specs are catalogued/merged; absence of a topic here
-    does not imply it is not spec-defined. Topics from specs still landing are
-    flagged *provisional* in the comments.
+    Absence of a topic here does not imply it is not spec-defined; topics from
+    specs not yet catalogued are flagged *provisional* in the comments.
     """
 
     def __str__(self) -> str:
@@ -167,7 +165,7 @@ class SpecMessage(str, Enum):
     #: §5.3 — universal stop broadcast; ``ovos.stop.*`` namespace is reserved by STOP-1.
     STOP = "ovos.stop"
 
-    # --- OVOS-AUDIO-1 audio-OUTPUT service bus surface (§7, MERGED → mandated) ---
+    # --- OVOS-AUDIO-1 audio-OUTPUT service bus surface (§7, mandated) ---
     # Defined by OVOS-AUDIO-1 (audio-out.md), NOT by AUDIO-IN-1.
     #: §3.4 — remote-client rendering mode; same TTS pipeline as ``SPEAK`` but
     #: emits ``ovos.audio.speech`` (b64) instead of enqueueing local playback.
@@ -196,7 +194,7 @@ class SpecMessage(str, Enum):
     #: broadcast.
     MIC_LISTEN = "ovos.mic.listen"
 
-    # --- OVOS-AUDIO-IN-1 listener lifecycle signals (§6, MERGED → mandated) ---
+    # --- OVOS-AUDIO-IN-1 listener lifecycle signals (§6, mandated) ---
     #: §6.1 — voice-command capture began; audio-input → broadcast.
     LISTENER_RECORD_STARTED = "ovos.listener.record.started"
     #: §6.2 — voice-command capture ended; audio-input → broadcast.
@@ -235,12 +233,12 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     # --- PIPELINE-1 §9 utterance layer (payload-compatible 1:1 renames) ---
     "recognizer_loop:utterance": SpecMessage.UTTERANCE,        # PIPELINE-1 §9.1
     "speak": SpecMessage.SPEAK,                                # PIPELINE-1 §9.6
-    # --- AUDIO-1 §5.1/§5.2/§4.4 audio-output signals (merged; payload-compatible
+    # --- AUDIO-1 §5.1/§5.2/§4.4 audio-output signals (payload-compatible
     #     1:1 renames) ---
     "recognizer_loop:audio_output_start": SpecMessage.AUDIO_OUTPUT_STARTED,  # AUDIO-1 §5.1
     "recognizer_loop:audio_output_end": SpecMessage.AUDIO_OUTPUT_ENDED,      # AUDIO-1 §5.2
     "mycroft.mic.listen": SpecMessage.MIC_LISTEN,             # AUDIO-1 §4.4
-    # --- AUDIO-IN-1 §6 listener lifecycle (merged; payload-compatible renames) ---
+    # --- AUDIO-IN-1 §6 listener lifecycle (payload-compatible renames) ---
     "recognizer_loop:record_begin": SpecMessage.LISTENER_RECORD_STARTED,  # AUDIO-IN-1 §6.1
     "recognizer_loop:record_end": SpecMessage.LISTENER_RECORD_ENDED,      # AUDIO-IN-1 §6.2
     "recognizer_loop:sleep": SpecMessage.LISTENER_SLEEP,     # AUDIO-IN-1 §6.3

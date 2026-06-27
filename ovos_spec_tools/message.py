@@ -70,12 +70,11 @@ class MalformedMessage(ValueError, AssertionError):
     keys (§2), missing ``type`` (§2), wrong value types, or unparsable
     JSON (§6).
 
-    Inherits from both :class:`ValueError` (the modern,
-    correctly-typed exception class) **and** :class:`AssertionError`
-    (the type historically raised by ``ovos_bus_client.Message``'s
-    bare ``assert`` constructor checks), so legacy ``except
-    AssertionError`` handlers in downstream code continue to catch
-    the same conditions.
+    Inherits from both :class:`ValueError` (the correctly-typed
+    exception class) **and** :class:`AssertionError` (the type raised by
+    ``ovos_bus_client.Message``'s bare ``assert`` constructor checks), so
+    ``except AssertionError`` handlers in downstream code also catch the
+    same conditions.
     """
 
 
@@ -371,8 +370,8 @@ class Message:
           unchanged (§5.2 step 3).
 
         Any keys supplied via ``context`` are overlaid on the copied context
-        **before** the swap, matching the historical
-        ``ovos_bus_client.Message.reply`` behaviour: passing
+        **before** the swap, matching ``ovos_bus_client.Message.reply``
+        behaviour: passing
         ``context={"source": "C", "destination": "D"}`` yields
         ``source=D, destination=C`` because the §5.2 swap is the final step.
         Non-routing keys overlaid this way (a custom ``session`` shape, a
