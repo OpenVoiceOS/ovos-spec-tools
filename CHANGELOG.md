@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.0a1)
+
+**Merged pull requests:**
+
+- feat: bridge AUDIO-1 §7 output topics in MIGRATION\_MAP [\#55](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/55) ([JarbasAl](https://github.com/JarbasAl))
+- fix: enforce OVOS-MSG-1 §2.1 type syntax on serialize [\#53](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/53) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.16.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.1a2) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a1...0.16.1a2)
