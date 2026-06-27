@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.1a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.14.0a1...0.14.1a1)
+
+**Merged pull requests:**
+
+- fix: locale/template/lint/language spec-conformance \(audit remediation\) [\#41](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/41) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.14.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.0a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.13.0a1...0.14.0a1)
