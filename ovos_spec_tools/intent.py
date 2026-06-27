@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 __all__ = [
     "Intent",
     "IntentBuilder",
+    "MalformedIntent",
     "open_intent_envelope",
     "voc_match",
 ]
@@ -46,6 +47,26 @@ __all__ = [
 # ``(entity_type, attribute_name)`` for required/optional, a bare entity type
 # for excludes, and a tuple of entity types for each one_of group.
 RoleEntry = Tuple[str, str]
+
+
+class MalformedIntent(ValueError):
+    """A keyword intent that violates an OVOS-INTENT-3 §4.2 structural MUST.
+
+    Raised when a built / emitted intent breaks one of the two §4.2
+    well-formedness MUSTs:
+
+    - it declares **no** ``required`` and **no** ``one-of`` constraint, so
+      nothing must be present for it to match ("an intent with only optional
+      and excluded constraints has nothing that must be present and is
+      malformed");
+    - it lists the **same vocabulary under two different roles** ("a vocabulary
+      MUST appear under at most one role within a single intent. Listing the
+      same vocabulary under two roles … is contradictory and malformed").
+
+    These are the data-model counterparts of the checks the locale linter
+    already performs; raising at build/emit time means an invalid keyword
+    intent is rejected before it can be registered on the bus.
+    """
 
 
 class Intent:
@@ -115,6 +136,56 @@ class Intent:
             return entry
         return entry[0]
 
+    # -- OVOS-INTENT-3 §4.2 well-formedness ----------------------------------
+
+    def validate(self) -> "Intent":
+        """Reject an intent that violates an OVOS-INTENT-3 §4.2 structural MUST.
+
+        Enforces the two §4.2 well-formedness rules the spec calls ``MUST``:
+
+        - **(a)** a keyword intent **MUST** declare at least one ``required``
+          or ``one-of`` constraint — "an intent with only optional and
+          excluded constraints has nothing that must be present and is
+          malformed";
+        - **(b)** a vocabulary **MUST** appear under at most one role — listing
+          the same vocabulary under two roles (e.g. both required and excluded)
+          "is contradictory and malformed".
+
+        Returns ``self`` so it can be used inline (``Intent(...).validate()``).
+
+        Raises:
+            MalformedIntent: if either §4.2 rule is violated.
+        """
+        # (a) at least one required or one-of must be present.
+        if not self.requires and not self.at_least_one:
+            raise MalformedIntent(
+                f"keyword intent {self.name!r} declares no required and no "
+                "one-of constraint — it has nothing that must be present "
+                "(OVOS-INTENT-3 §4.2)")
+
+        # (b) a vocabulary appears under at most one role. Collect every
+        # (vocabulary -> roles it appears in) and reject any vocabulary that
+        # spans more than one role. one-of vocabularies count once per name
+        # regardless of how many groups list them.
+        roles: Dict[str, set] = {}
+        for name, _ in self.requires:
+            roles.setdefault(name, set()).add("required")
+        for name, _ in self.optional:
+            roles.setdefault(name, set()).add("optional")
+        for group in self.at_least_one:
+            for name in group:
+                roles.setdefault(name, set()).add("one_of")
+        for name in self.excludes:
+            roles.setdefault(name, set()).add("excluded")
+        clashes = {name: sorted(r) for name, r in roles.items() if len(r) > 1}
+        if clashes:
+            detail = "; ".join(f"{name!r} under {roles}"
+                               for name, roles in sorted(clashes.items()))
+            raise MalformedIntent(
+                f"keyword intent {self.name!r} lists a vocabulary under more "
+                f"than one role — {detail} (OVOS-INTENT-3 §4.2)")
+        return self
+
     # -- OVOS-INTENT-4 §5 emission -------------------------------------------
 
     @staticmethod
@@ -158,7 +229,14 @@ class Intent:
 
         Returns:
             the §5.2 keyword payload structure.
+
+        Raises:
+            MalformedIntent: if the intent violates an OVOS-INTENT-3 §4.2
+                well-formedness MUST — a register payload MUST NOT be emitted
+                for an intent with no required/one-of constraint or with a
+                vocabulary listed under two roles.
         """
+        self.validate()
         payload: Dict[str, Any] = {}
         if skill_id is not None:
             payload["skill_id"] = skill_id
@@ -288,9 +366,15 @@ class IntentBuilder:
         return self
 
     def build(self) -> Intent:
-        """Freeze the accumulated roles into an :class:`Intent`."""
+        """Freeze the accumulated roles into a validated :class:`Intent`.
+
+        The result is checked against the OVOS-INTENT-3 §4.2 well-formedness
+        MUSTs (:meth:`Intent.validate`): a built intent must declare at least
+        one required or one-of constraint, and must not list a vocabulary under
+        two roles. A malformed builder state raises :class:`MalformedIntent`.
+        """
         return Intent(self.name, self.requires, self.at_least_one,
-                      self.optional, self.excludes)
+                      self.optional, self.excludes).validate()
 
 
 def open_intent_envelope(message) -> Intent:

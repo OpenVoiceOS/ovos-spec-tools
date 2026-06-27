@@ -5,6 +5,7 @@ from ovos_spec_tools import (
     Intent,
     IntentBuilder,
     LocaleResources,
+    MalformedIntent,
     open_intent_envelope,
     voc_match,
 )
@@ -179,3 +180,57 @@ def test_voc_match_accepts_sequence_of_dirs(locale):
 
 def test_voc_match_missing_voc_returns_false(locale):
     assert voc_match("anything", "nonexistent", "en-US", str(locale)) is False
+
+
+# --- OVOS-INTENT-3 §4.2 well-formedness MUSTs --------------------------------
+
+def test_build_rejects_intent_with_no_required_and_no_one_of():
+    """§4.2: a keyword intent MUST declare at least one required or one-of
+    constraint — only optional + excluded "has nothing that must be present
+    and is malformed"."""
+    builder = IntentBuilder("Bad").optionally("Politely").exclude("Question")
+    with pytest.raises(MalformedIntent):
+        builder.build()
+
+
+def test_build_accepts_intent_with_only_one_of():
+    """A single one-of group satisfies §4.2 (at least one of required/one-of)."""
+    intent = IntentBuilder("OK").one_of("Up", "Down").build()
+    assert intent.at_least_one == [("Up", "Down")]
+
+
+def test_build_rejects_same_vocab_under_two_roles():
+    """§4.2: a vocabulary MUST appear under at most one role; required + excluded
+    of the same vocab is contradictory and malformed."""
+    builder = IntentBuilder("Bad").require("Light").exclude("Light")
+    with pytest.raises(MalformedIntent):
+        builder.build()
+
+
+def test_build_rejects_vocab_required_and_one_of():
+    builder = IntentBuilder("Bad").require("Set").one_of("Set", "Down")
+    with pytest.raises(MalformedIntent):
+        builder.build()
+
+
+def test_validate_returns_self_for_well_formed_intent():
+    intent = Intent("Good", requires=[("Set", "Set")])
+    assert intent.validate() is intent
+
+
+def test_to_keyword_payload_rejects_malformed_intent():
+    """The §5.2 register payload MUST NOT be emitted for a §4.2-malformed
+    intent — emission validates."""
+    intent = Intent("Bad", optional=[("Politely", "Politely")],
+                    excludes=["Question"])
+    with pytest.raises(MalformedIntent):
+        intent.to_keyword_payload()
+
+
+def test_raw_intent_construction_does_not_validate():
+    """Raw ``Intent(...)`` construction stays permissive (the scaffold / wire
+    round-trip path); validation happens at build()/emit. The empty-default
+    Intent and open_intent_envelope reconstruction must not raise."""
+    Intent()  # scaffold default, no raise
+    rebuilt = open_intent_envelope({"intent_name": "Z"})
+    assert rebuilt.name == "Z"
