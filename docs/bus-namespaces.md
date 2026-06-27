@@ -41,11 +41,12 @@ spec section is cited in the source and in the table below.
 | Registration / management | OVOS-INTENT-4 §§5–8 | `INTENT_REGISTER_KEYWORD` (§5), `INTENT_REGISTER_TEMPLATE` (§6), `ENTITY_REGISTER` (§7), `INTENT_DEREGISTER` (§8.2), `ENTITY_DEREGISTER` (§8.3), `SKILL_DEREGISTER` (§8.4), `INTENT_ENABLE`/`INTENT_DISABLE` (§8.5) |
 | Introspection | OVOS-INTENT-4 §10 | `INTENT_LIST`, `INTENT_LIST_RESPONSE`, `INTENT_DESCRIBE`, `INTENT_DESCRIBE_RESPONSE` |
 | Stop cascade | OVOS-STOP-1 §4–§5 | `STOP_PING` (§4.2), `STOP_PONG` (§4.2), `STOP` (§5.3) |
-| Listener / mic / output | OVOS-AUDIO-IN-1 (provisional) | `MIC_LISTEN`, `LISTENER_RECORD_STARTED`, `LISTENER_RECORD_ENDED`, `LISTENER_SLEEP`, `LISTENER_AWOKEN`, `AUDIO_OUTPUT_STARTED`, `AUDIO_OUTPUT_ENDED` |
+| Listener lifecycle | OVOS-AUDIO-IN-1 §6 | `LISTENER_RECORD_STARTED`, `LISTENER_RECORD_ENDED`, `LISTENER_SLEEP`, `LISTENER_AWOKEN` |
+| Mic / audio output | OVOS-AUDIO-1 §4.4, §5 | `MIC_LISTEN` (§4.4), `AUDIO_OUTPUT_STARTED` (§5.1), `AUDIO_OUTPUT_ENDED` (§5.2) |
 
-The AUDIO-IN-1 group is **provisional**: the topic *names* are settled
-(listening signals belong on `ovos.listener.*`), but the spec prose that
-formally defines them is not yet finalized.
+The listener lifecycle signals live on the `ovos.listener.*` namespace
+(OVOS-AUDIO-IN-1 §6); the mic re-open flag and audio-output session signals
+belong to the audio-output service (OVOS-AUDIO-1 §4.4, §5).
 
 ## `MIGRATION_MAP` — the rename map
 
