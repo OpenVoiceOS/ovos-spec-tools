@@ -33,7 +33,10 @@ code changes:
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+_log = logging.getLogger(__name__)
 
 __all__ = [
     "Intent",
@@ -230,13 +233,16 @@ class Intent:
         Returns:
             the §5.2 keyword payload structure.
 
-        Raises:
-            MalformedIntent: if the intent violates an OVOS-INTENT-3 §4.2
-                well-formedness MUST — a register payload MUST NOT be emitted
-                for an intent with no required/one-of constraint or with a
-                vocabulary listed under two roles.
+        A malformed intent (OVOS-INTENT-3 §4.2 — no required/one-of
+        constraint, or a vocabulary listed under two roles) is **logged as a
+        warning** rather than raised, so emitting stays backward-compatible;
+        call :meth:`validate` explicitly to reject before emit.
         """
-        self.validate()
+        try:
+            self.validate()
+        except MalformedIntent as err:
+            _log.warning("emitting register payload for malformed intent %r "
+                         "(OVOS-INTENT-3 §4.2): %s", self.name, err)
         payload: Dict[str, Any] = {}
         if skill_id is not None:
             payload["skill_id"] = skill_id
@@ -366,15 +372,24 @@ class IntentBuilder:
         return self
 
     def build(self) -> Intent:
-        """Freeze the accumulated roles into a validated :class:`Intent`.
+        """Freeze the accumulated roles into an :class:`Intent`.
 
-        The result is checked against the OVOS-INTENT-3 §4.2 well-formedness
-        MUSTs (:meth:`Intent.validate`): a built intent must declare at least
-        one required or one-of constraint, and must not list a vocabulary under
-        two roles. A malformed builder state raises :class:`MalformedIntent`.
+        A built intent should satisfy the OVOS-INTENT-3 §4.2 well-formedness
+        MUSTs (:meth:`Intent.validate`): declare at least one required or
+        one-of constraint, and not list a vocabulary under two roles. A
+        malformed builder state is **logged as a warning** rather than raised,
+        so ``build()`` stays backward-compatible — call :meth:`Intent.validate`
+        explicitly (or rely on the locale linter) to enforce §4.2 where you
+        want to reject.
         """
-        return Intent(self.name, self.requires, self.at_least_one,
-                      self.optional, self.excludes).validate()
+        intent = Intent(self.name, self.requires, self.at_least_one,
+                        self.optional, self.excludes)
+        try:
+            intent.validate()
+        except MalformedIntent as err:
+            _log.warning("built intent %r is malformed per OVOS-INTENT-3 "
+                         "§4.2: %s", self.name, err)
+        return intent
 
 
 def open_intent_envelope(message) -> Intent:
