@@ -67,7 +67,8 @@ moves the bus onto those topics.
 | `SpecMessage.INTENT_DESCRIBE` / `_DESCRIBE_RESPONSE` | OVOS-INTENT-4 | §10.2 |
 | `SpecMessage.STOP_PING` / `STOP_PONG` | OVOS-STOP-1 | §4.2 |
 | `SpecMessage.STOP` | OVOS-STOP-1 | §5.3 |
-| `SpecMessage.MIC_LISTEN`, `LISTENER_*`, `AUDIO_OUTPUT_*` | OVOS-AUDIO-IN-1 | provisional (names settled, prose landing) |
+| `SpecMessage.LISTENER_*` | OVOS-AUDIO-IN-1 | §6 |
+| `SpecMessage.MIC_LISTEN`, `AUDIO_OUTPUT_*` | OVOS-AUDIO-1 | §4.4, §5.1/§5.2 |
 | `MIGRATION_MAP` | (bridge) | encodes the renames defined by PIPELINE-1 §8/§9, INTENT-4 §8, STOP-1 §4/§5, AUDIO-IN-1 |
 | `SPEC_TO_LEGACY` | (bridge) | reverse of `MIGRATION_MAP` |
 | `migration_counterpart` | (bridge) | symmetric counterpart lookup |
