@@ -1,12 +1,12 @@
 # Bus namespaces — the legacy ↔ `ovos.*` migration
 
-OVOS is moving its bus topics off the historical Mycroft-era names
+OVOS bus topics span two namespaces: the Mycroft-era names
 (`speak`, `recognizer_loop:utterance`, `mycroft.skill.handler.start`, …)
-and onto the `ovos.*` namespace the specifications define
+and the `ovos.*` namespace the specifications define
 (`ovos.utterance.speak`, `ovos.utterance.handle`,
 `ovos.intent.handler.start`, …). `ovos-spec-tools` owns the **vocabulary**
-of that move and the **transparent bridge** that lets it happen without a
-flag day. Two things implement it, both in `ovos_spec_tools/messages.py`:
+of the mapping between them and the **transparent bridge** that lets a
+deployment cross from one to the other without a flag day. Two things implement it, both in `ovos_spec_tools/messages.py`:
 
 - `SpecMessage` — the enum of spec-defined `ovos.*` topics;
 - `MIGRATION_MAP` + `NamespaceTranslator` — the rename map and the
@@ -45,7 +45,7 @@ spec section is cited in the source and in the table below.
 
 The AUDIO-IN-1 group is **provisional**: the topic *names* are settled
 (listening signals belong on `ovos.listener.*`), but the spec prose that
-formally defines them is still landing.
+formally defines them is not yet finalized.
 
 ## `MIGRATION_MAP` — the rename map
 

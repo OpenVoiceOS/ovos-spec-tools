@@ -1,9 +1,9 @@
 """Plugin-agnostic intent-definition primitives for the OVOS-INTENT-4 keyword model.
 
-This module is a clean, dependency-light reimplementation of the
-``IntentBuilder`` / ``Intent`` pair historically provided by ``ovos-workshop``
-(which vendored Mycroft's ``adapt`` data classes). It carries **no** ``adapt``
-dependency: it is pure data describing the **structure** of a keyword intent —
+This module is a clean, dependency-light ``IntentBuilder`` / ``Intent`` pair —
+the plugin-agnostic form of the intent-definition classes ``ovos-workshop``
+exposes to skills. It carries **no** ``adapt`` dependency: it is pure data
+describing the **structure** of a keyword intent —
 which vocabularies are *required*, *optional*, *one_of*, or *excluded* — exactly
 as OVOS-INTENT-4 §5 defines the ``ovos.intent.register.keyword`` payload.
 
@@ -360,12 +360,12 @@ def voc_match(utterance: str, voc_name: str, lang: str,
               strip_punct: bool = True) -> bool:
     """Load a named ``.voc`` and test whether ``utterance`` matches it.
 
-    This is the plugin-agnostic replacement for
-    ``OVOSAbstractApplication.voc_match`` / the skill ``voc_match`` that
-    common-query, OCP, and other pipelines historically reached into
-    ``ovos-workshop`` for. It loads the ``<voc_name>.voc`` for ``lang`` and
+    This is the plugin-agnostic equivalent of
+    ``OVOSAbstractApplication.voc_match`` / the skill ``voc_match`` — the
+    helper common-query, OCP, and other pipelines use without depending on
+    ``ovos-workshop``. It loads the ``<voc_name>.voc`` for ``lang`` and
     matches with whole-word OVOS-INTENT-2 §4.3 semantics — identical to the
-    skill helper (so pipelines behave unchanged): a sample ``yes`` matches
+    skill helper (so pipelines behave the same): a sample ``yes`` matches
     ``"yes, please"`` but not ``"yesterday"``.
 
     Args:
