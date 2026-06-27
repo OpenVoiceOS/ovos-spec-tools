@@ -182,15 +182,27 @@ def test_voc_match_missing_voc_returns_false(locale):
     assert voc_match("anything", "nonexistent", "en-US", str(locale)) is False
 
 
-# --- OVOS-INTENT-3 §4.2 well-formedness MUSTs --------------------------------
+# --- OVOS-INTENT-3 §4.2 well-formedness (validate raises; build/emit warn) ---
 
-def test_build_rejects_intent_with_no_required_and_no_one_of():
+def test_validate_rejects_intent_with_no_required_and_no_one_of():
     """§4.2: a keyword intent MUST declare at least one required or one-of
     constraint — only optional + excluded "has nothing that must be present
-    and is malformed"."""
-    builder = IntentBuilder("Bad").optionally("Politely").exclude("Question")
+    and is malformed". Explicit validate() enforces this."""
+    intent = Intent("Bad", optional=[("Politely", "Politely")],
+                    excludes=["Question"])
     with pytest.raises(MalformedIntent):
-        builder.build()
+        intent.validate()
+
+
+def test_build_warns_but_does_not_raise_on_malformed_intent(caplog):
+    """build() stays backward-compatible: a §4.2-malformed builder logs a
+    warning rather than raising. Enforcement is via explicit validate / lint."""
+    builder = IntentBuilder("Bad").optionally("Politely").exclude("Question")
+    with caplog.at_level("WARNING"):
+        intent = builder.build()  # must NOT raise
+    assert any("malformed" in r.message.lower() for r in caplog.records)
+    with pytest.raises(MalformedIntent):  # explicit validation still rejects
+        intent.validate()
 
 
 def test_build_accepts_intent_with_only_one_of():
@@ -199,18 +211,19 @@ def test_build_accepts_intent_with_only_one_of():
     assert intent.at_least_one == [("Up", "Down")]
 
 
-def test_build_rejects_same_vocab_under_two_roles():
+def test_validate_rejects_same_vocab_under_two_roles():
     """§4.2: a vocabulary MUST appear under at most one role; required + excluded
     of the same vocab is contradictory and malformed."""
-    builder = IntentBuilder("Bad").require("Light").exclude("Light")
+    intent = Intent("Bad", requires=[("Light", "Light")], excludes=["Light"])
     with pytest.raises(MalformedIntent):
-        builder.build()
+        intent.validate()
 
 
-def test_build_rejects_vocab_required_and_one_of():
-    builder = IntentBuilder("Bad").require("Set").one_of("Set", "Down")
+def test_validate_rejects_vocab_required_and_one_of():
+    intent = Intent("Bad", requires=[("Set", "Set")],
+                    at_least_one=[("Set", "Down")])
     with pytest.raises(MalformedIntent):
-        builder.build()
+        intent.validate()
 
 
 def test_validate_returns_self_for_well_formed_intent():
@@ -218,13 +231,15 @@ def test_validate_returns_self_for_well_formed_intent():
     assert intent.validate() is intent
 
 
-def test_to_keyword_payload_rejects_malformed_intent():
-    """The §5.2 register payload MUST NOT be emitted for a §4.2-malformed
-    intent — emission validates."""
+def test_to_keyword_payload_warns_but_emits_malformed_intent(caplog):
+    """Emitting a §4.2-malformed register payload warns rather than raising,
+    keeping the producer backward-compatible."""
     intent = Intent("Bad", optional=[("Politely", "Politely")],
                     excludes=["Question"])
-    with pytest.raises(MalformedIntent):
-        intent.to_keyword_payload()
+    with caplog.at_level("WARNING"):
+        payload = intent.to_keyword_payload()  # must NOT raise
+    assert payload["intent_name"] == "Bad"
+    assert any("malformed" in r.message.lower() for r in caplog.records)
 
 
 def test_raw_intent_construction_does_not_validate():
