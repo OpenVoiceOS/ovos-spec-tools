@@ -224,6 +224,16 @@ def keyword_form(template_line: str,
         whitespace-only line, or a line that fails to expand, yields
         ``("", [])`` (a malformed line is dropped, not raised, so one bad line
         does not poison a batch keyword load).
+
+    This leniency is **deliberate and confined to this low-level helper**: it
+    serves only the best-effort keyword extractors (:meth:`vocabulary_keywords`,
+    :meth:`entity_keywords`), which group ``.voc``/``.entity`` lines into
+    canonical/alias pairs and skip a line that will not expand. It is **not** a
+    conformant load path — the conformant loaders (:meth:`_load_expanded` and
+    everything built on it: :meth:`load_intent`, :meth:`load_vocabulary`, …)
+    call :func:`expand` directly and **raise** on a malformed template or a
+    slot in a slot-free role per OVOS-INTENT-2 §5 / OVOS-INTENT-1 §3.6. No
+    conformant load relies on this function's silent drop.
     """
     if not template_line.strip():
         return "", []
@@ -231,6 +241,8 @@ def keyword_form(template_line: str,
         samples = expand(template_line, vocabularies)
     except Exception:
         # A malformed line yields no keyword rather than poisoning the batch.
+        # Lenient by design — see the note in the docstring; conformant loaders
+        # call expand() directly and raise instead.
         return "", []
     options = sorted({s.lower() for s in samples})
     if not options:
