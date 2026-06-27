@@ -1,8 +1,20 @@
 # Changelog
 
+## [0.17.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.2a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.2a1)
+
+**Merged pull requests:**
+
+- fix: reject malformed keyword intents at build/emit \(INTENT-3 §4.2\) [\#54](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/54) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.17.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.1a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.1a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.1a1)
+
+## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.0a1)
 
 **Merged pull requests:**
 
