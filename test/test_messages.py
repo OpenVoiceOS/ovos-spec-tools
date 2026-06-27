@@ -82,7 +82,7 @@ class TestSpecMessage(unittest.TestCase):
         self.assertEqual(len(values), len(set(values)))
 
     def test_audio1_bus_surface_members(self):
-        # OVOS-AUDIO-1 §7 bus surface — enum-only topics (not legacy renames).
+        # OVOS-AUDIO-1 §7 bus surface members.
         self.assertEqual(SpecMessage.SPEAK_B64, "ovos.utterance.speak.b64")  # §3.4
         self.assertEqual(SpecMessage.AUDIO_SPEECH, "ovos.audio.speech")      # §4.3
         self.assertEqual(SpecMessage.AUDIO_QUEUE, "ovos.audio.queue")        # §4.1
@@ -90,15 +90,32 @@ class TestSpecMessage(unittest.TestCase):
         self.assertEqual(SpecMessage.AUDIO_STOP, "ovos.audio.stop")          # §6
         self.assertEqual(SpecMessage.AUDIO_IS_SPEAKING, "ovos.audio.is_speaking")  # §5.3
 
-    def test_audio1_members_are_enum_only_not_migration(self):
-        # These 6 are not legacy renames -> must not appear in the migration map
-        # or its payload transforms.
-        for m in (SpecMessage.SPEAK_B64, SpecMessage.AUDIO_SPEECH,
-                  SpecMessage.AUDIO_QUEUE, SpecMessage.AUDIO_PLAY_SOUND,
-                  SpecMessage.AUDIO_STOP, SpecMessage.AUDIO_IS_SPEAKING):
-            self.assertNotIn(m.value, SPEC_TO_LEGACY)
-            self.assertIsNone(migration_counterpart(m.value))
-            self.assertNotIn(m.value, MIGRATION_PAYLOAD_TRANSFORMS)
+    def test_audio1_output_topics_are_payload_compatible_renames(self):
+        # The AUDIO-1 §7 output topics are payload-compatible 1:1 renames of the
+        # Mycroft-era handler names (verified against ovos-audio
+        # register_handlers), so they migrate via MIGRATION_MAP with no payload
+        # transform (identity).
+        expected = {
+            "speak:b64_audio": SpecMessage.SPEAK_B64,
+            "speak:b64_audio.response": SpecMessage.AUDIO_SPEECH,
+            "mycroft.audio.queue": SpecMessage.AUDIO_QUEUE,
+            "mycroft.audio.play_sound": SpecMessage.AUDIO_PLAY_SOUND,
+            "mycroft.audio.speak.status": SpecMessage.AUDIO_IS_SPEAKING,
+            "mycroft.audio.speech.stop": SpecMessage.AUDIO_STOP,
+        }
+        for legacy, spec in expected.items():
+            self.assertEqual(MIGRATION_MAP[legacy], spec)
+            # payload-compatible: identity transform (no per-topic entry)
+            self.assertNotIn(legacy, MIGRATION_PAYLOAD_TRANSFORMS)
+
+    def test_audio1_output_topics_round_trip(self):
+        # legacy -> spec -> legacy and spec -> legacy round-trip.
+        for legacy in ("speak:b64_audio", "speak:b64_audio.response",
+                       "mycroft.audio.queue", "mycroft.audio.play_sound",
+                       "mycroft.audio.speak.status", "mycroft.audio.speech.stop"):
+            spec = migration_counterpart(legacy)
+            self.assertIsNotNone(spec)
+            self.assertEqual(migration_counterpart(spec), legacy)
 
 
 class TestMigrationMap(unittest.TestCase):

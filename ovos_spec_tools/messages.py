@@ -238,6 +238,15 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     "recognizer_loop:audio_output_start": SpecMessage.AUDIO_OUTPUT_STARTED,  # AUDIO-1 §5.1
     "recognizer_loop:audio_output_end": SpecMessage.AUDIO_OUTPUT_ENDED,      # AUDIO-1 §5.2
     "mycroft.mic.listen": SpecMessage.MIC_LISTEN,             # AUDIO-1 §4.4
+    # --- AUDIO-1 §3.4/§4.1/§4.2/§5.3/§6 audio-output bus surface
+    #     (payload-compatible 1:1 renames; legacy handler names verified against
+    #     ovos-audio register_handlers) ---
+    "speak:b64_audio": SpecMessage.SPEAK_B64,                 # AUDIO-1 §3.4 {utterance, listen}
+    "speak:b64_audio.response": SpecMessage.AUDIO_SPEECH,     # AUDIO-1 §4.3 {audio, listen, ...}
+    "mycroft.audio.queue": SpecMessage.AUDIO_QUEUE,           # AUDIO-1 §4.1 {uri}
+    "mycroft.audio.play_sound": SpecMessage.AUDIO_PLAY_SOUND,  # AUDIO-1 §4.2 {uri}
+    "mycroft.audio.speak.status": SpecMessage.AUDIO_IS_SPEAKING,  # AUDIO-1 §5.3 (query, empty)
+    "mycroft.audio.speech.stop": SpecMessage.AUDIO_STOP,     # AUDIO-1 §6 (empty)
     # --- AUDIO-IN-1 §6 listener lifecycle (payload-compatible renames) ---
     "recognizer_loop:record_begin": SpecMessage.LISTENER_RECORD_STARTED,  # AUDIO-IN-1 §6.1
     "recognizer_loop:record_end": SpecMessage.LISTENER_RECORD_ENDED,      # AUDIO-IN-1 §6.2
