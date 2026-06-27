@@ -72,6 +72,41 @@ RoutingValue = Union[str, List[str], None]
 DEFAULT_SESSION_ID = "default"
 
 
+def _freeze(value: Any) -> Any:
+    """Recursively convert ``value`` into a deterministic, hashable form.
+
+    Used to derive ``__hash__`` for :class:`Message` and
+    :class:`~ovos_spec_tools.session.Session` from the same nested
+    dict/list payloads their ``__eq__`` compares. The mapping preserves
+    Python's value-equality invariant: anything that compares equal
+    freezes to an equal (and therefore equally-hashing) form. In
+    particular ``{"x": 1}`` and ``{"x": 1.0}`` freeze equal because the
+    underlying ``int``/``float`` are themselves equal and hash equal —
+    unlike a ``json.dumps`` digest, which would diverge on ``"1"`` vs
+    ``"1.0"``.
+
+    - ``dict`` → ``frozenset`` of ``(key, _freeze(val))`` pairs
+      (order-independent, mirroring dict equality);
+    - ``list`` / ``tuple`` → ``tuple`` of frozen items (order-preserving);
+    - ``set`` / ``frozenset`` → ``frozenset`` of frozen items;
+    - already-hashable scalars (``str``, ``int``, ``float``, ``bool``,
+      ``None``, …) → returned unchanged;
+    - any remaining exotic unhashable → its ``repr`` (deterministic
+      last resort).
+    """
+    if isinstance(value, dict):
+        return frozenset((k, _freeze(v)) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(v) for v in value)
+    if isinstance(value, (set, frozenset)):
+        return frozenset(_freeze(v) for v in value)
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
+    return value
+
+
 class MalformedMessage(ValueError, AssertionError):
     """A serialized payload that does not conform to OVOS-MSG-1 §2 / §6.
 
@@ -158,6 +193,18 @@ class Message:
                 and other.msg_type == self.msg_type
                 and other.data == self.data
                 and other.context == self.context)
+
+    def __hash__(self) -> int:
+        # Hash over the same §2 fields ``__eq__`` compares (type + data +
+        # context), frozen into a deterministic hashable form so equal
+        # Messages always hash equal (the hash/eq contract). NOTE: ``data``
+        # and ``context`` are mutable dicts stored by reference, so this is
+        # a *point-in-time snapshot* — safe for ``functools.lru_cache`` keys
+        # and short-lived set/dict membership, but do not mutate a Message
+        # while it is live as a dict key.
+        return hash((self.msg_type,
+                     _freeze(self.data),
+                     _freeze(self.context)))
 
     def __repr__(self) -> str:
         # Eval-friendly debug form; not the wire format (use serialize()).

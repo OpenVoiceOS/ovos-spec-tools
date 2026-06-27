@@ -560,5 +560,53 @@ class TestRegistry(unittest.TestCase):
             self.assertIn(f, SESSION1_REGISTERED_FIELDS)
 
 
+# --- hashability (library-usefulness; not a spec rule) ---------------------
+
+class TestHashable(unittest.TestCase):
+    def test_equal_sessions_hash_equal(self):
+        a = Session(session_id="abc", lang="en-US")
+        b = Session(session_id="abc", lang="en-US")
+        self.assertEqual(a, b)
+        self.assertEqual(hash(a), hash(b))
+
+    def test_usable_as_dict_key_and_set_member(self):
+        a = Session(session_id="abc")
+        b = Session(session_id="abc")
+        c = Session(session_id="xyz")
+        d = {a: "value"}
+        self.assertEqual(d[b], "value")
+        self.assertEqual(len({a, b, c}), 2)
+
+    def test_usable_in_lru_cache(self):
+        import functools
+
+        calls = []
+
+        @functools.lru_cache(maxsize=None)
+        def resolve(sess):
+            calls.append(sess.session_id)
+            return sess.session_id
+
+        s1 = Session(session_id="abc", lang="en-US")
+        s2 = Session(session_id="abc", lang="en-US")  # equal to s1
+        self.assertEqual(resolve(s1), "abc")
+        self.assertEqual(resolve(s2), "abc")
+        self.assertEqual(calls, ["abc"])  # cached: only one underlying call
+
+    def test_nested_override_fields_hash(self):
+        s = Session(session_id="abc",
+                    secondary_langs=["pt-PT", "es-ES"],
+                    pipeline=["padatious_high"])
+        self.assertEqual(hash(s), hash(s))  # stable, must not raise
+
+    def test_mutation_then_rehash_changes_hash(self):
+        # documented behavior: the hash snapshots the mutable Session at the
+        # moment of hashing; mutating a field afterwards changes the hash.
+        s = Session(session_id="abc")
+        h1 = hash(s)
+        s.lang = "en-US"
+        self.assertNotEqual(hash(s), h1)
+
+
 if __name__ == "__main__":
     unittest.main()

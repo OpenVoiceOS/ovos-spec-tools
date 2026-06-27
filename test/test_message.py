@@ -389,3 +389,60 @@ def test_as_dict_walks_carrier_serialize_protocol():
 
     m = Message("ovos.test", {}, {"session": _Carrier()})
     assert m.as_dict["context"]["session"] == {"session_id": "s-7"}
+
+
+# --- hashability (library-usefulness; not a spec rule) ----------------------
+
+class TestHashable:
+    def test_equal_messages_hash_equal(self):
+        a = Message("ovos.test", {"x": 1}, {"source": "skills"})
+        b = Message("ovos.test", {"x": 1}, {"source": "skills"})
+        assert a == b
+        assert hash(a) == hash(b)
+
+    def test_usable_as_dict_key_and_set_member(self):
+        a = Message("ovos.test", {"x": 1})
+        b = Message("ovos.test", {"x": 1})
+        c = Message("ovos.other", {"x": 1})
+        d = {a: "value"}
+        assert d[b] == "value"          # equal key hits the same bucket
+        assert len({a, b, c}) == 2      # a and b collapse, c distinct
+
+    def test_usable_in_lru_cache(self):
+        import functools
+
+        calls = []
+
+        @functools.lru_cache(maxsize=None)
+        def handler(msg):
+            calls.append(msg.msg_type)
+            return msg.msg_type.upper()
+
+        m1 = Message("ovos.test", {"x": 1}, {"source": "a"})
+        m2 = Message("ovos.test", {"x": 1}, {"source": "a"})  # equal to m1
+        assert handler(m1) == "OVOS.TEST"
+        assert handler(m2) == "OVOS.TEST"
+        assert calls == ["ovos.test"]   # cached: only one underlying call
+
+    def test_nested_dict_and_list_data_hashes(self):
+        m = Message("ovos.test",
+                    {"items": [1, 2, {"k": "v"}], "meta": {"a": [3, 4]}},
+                    {"session": {"session_id": "s", "langs": ["en", "pt"]}})
+        # must not raise, and must be stable across repeated calls
+        assert hash(m) == hash(m)
+
+    def test_int_and_float_data_hash_equal(self):
+        # value-equality invariant: {"x": 1} == {"x": 1.0} so they MUST
+        # hash equal (a json.dumps digest would break this).
+        a = Message("ovos.test", {"x": 1})
+        b = Message("ovos.test", {"x": 1.0})
+        assert a == b
+        assert hash(a) == hash(b)
+
+    def test_mutation_then_rehash_changes_hash(self):
+        # documented behavior: the hash is a point-in-time snapshot of the
+        # mutable payload; mutating data after hashing changes the hash.
+        m = Message("ovos.test", {"x": 1})
+        h1 = hash(m)
+        m.data["x"] = 2
+        assert hash(m) != h1
