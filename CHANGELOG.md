@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.1a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.0a1...0.16.1a1)
+
+**Merged pull requests:**
+
+- fix: message-domain conformance + NamespaceTranslator per-topic payload translation [\#42](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/42) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.16.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.15.0a1...0.16.0a1)
