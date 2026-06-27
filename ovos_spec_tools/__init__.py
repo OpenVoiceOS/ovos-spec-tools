@@ -28,6 +28,11 @@ formal specifications describe:
   carrier reference implementation, carrying the full §3 registered field
   set with omission-not-null serialization and the
   OVOS-PIPELINE-1 §7.1 / OVOS-CONVERSE-1 §2.1 / §2.2 handler-list helpers;
+- :class:`~ovos_spec_tools.intent.IntentBuilder` /
+  :class:`~ovos_spec_tools.intent.Intent` — the adapt-free, plugin-agnostic
+  keyword intent-definition primitives mapping to the OVOS-INTENT-4 §5 keyword
+  registration model, with :func:`~ovos_spec_tools.intent.open_intent_envelope`
+  and the :func:`~ovos_spec_tools.intent.voc_match` ``.voc`` matching helper;
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
@@ -43,6 +48,12 @@ from ovos_spec_tools.language import (
     lang_distance,
     lang_matches,
     standardize_lang,
+)
+from ovos_spec_tools.intent import (
+    Intent,
+    IntentBuilder,
+    open_intent_envelope,
+    voc_match,
 )
 from ovos_spec_tools.lint import Finding, lint_locale
 from ovos_spec_tools.messages import (
@@ -83,6 +94,10 @@ __all__ = [
     "SESSION1_OWNED_FIELDS",
     "SESSION1_REGISTERED_FIELDS",
     "DEFAULT_CONVERSE_HANDLERS_CAP",
+    "Intent",
+    "IntentBuilder",
+    "open_intent_envelope",
+    "voc_match",
     "expand",
     "inline_keywords",
     "MalformedTemplate",
