@@ -90,8 +90,8 @@ addressed back to the original producer:
   an array — exact choice is implementation-defined).
 
 Other `context` keys, including `session`, pass through unchanged. The
-optional `context` argument is overlaid before the swap, matching the
-historical `ovos-bus-client.Message.reply` behaviour:
+optional `context` argument is overlaid before the swap, matching
+`ovos-bus-client.Message.reply` behaviour:
 
 ```python
 ack = m.reply("speak", {"utterance": "got it"})
