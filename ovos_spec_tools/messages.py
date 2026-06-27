@@ -100,8 +100,7 @@ class SpecMessage(str, Enum):
         bus.on(SpecMessage.SPEAK, handler)
         bus.emit(Message(SpecMessage.UTTERANCE, {...}))
 
-    Absence of a topic here does not imply it is not spec-defined; topics from
-    specs not yet catalogued are flagged *provisional* in the comments.
+    Absence of a topic here does not imply it is not spec-defined.
     """
 
     def __str__(self) -> str:
