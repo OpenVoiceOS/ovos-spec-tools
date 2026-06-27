@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.15.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.14.1a1...0.15.0a1)
+
+**Merged pull requests:**
+
+- feat: add fallback\_handlers to canonical Session \(OVOS-FALLBACK-1 registered field\) [\#45](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/45) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.14.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.14.0a1...0.14.1a1)
