@@ -180,10 +180,7 @@ class Session:
         skill-id strings registered as a session field by the SESSION-1 §3
         field table (owner OVOS-FALLBACK-1 §4). Carried opaquely here; its
         semantics are owned by OVOS-FALLBACK-1. Empty list and ``None`` are
-        wire-equivalent (both omitted, §3.4 / §2.1). Like
-        ``converse_handlers``, OVOS-FALLBACK-1 is a **forward reference**
-        (it cites this field but is not yet merged); the field is carried
-        regardless, on the strength of the SESSION-1 §3 registration.
+        wire-equivalent (both omitted, §3.4 / §2.1).
     :param active_handlers: OVOS-PIPELINE-1 §7.1 dispatch-recency record —
         a head-first, deduplicated list of ``{skill_id, activated_at}``.
     :param converse_handlers: OVOS-CONVERSE-1 §2.1 converse-eligibility
