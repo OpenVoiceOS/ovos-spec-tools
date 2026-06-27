@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.1a2) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a1...0.16.1a2)
+
+**Merged pull requests:**
+
+- docs: make intent + bus-namespace docs timeless and standalone [\#50](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/50) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.16.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.0a1...0.16.1a1)
