@@ -44,7 +44,7 @@ import time
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
 
-from ovos_spec_tools.message import DEFAULT_SESSION_ID
+from ovos_spec_tools.message import DEFAULT_SESSION_ID, _freeze
 
 __all__ = [
     "Session",
@@ -658,6 +658,16 @@ class Session:
     def __eq__(self, other: object) -> bool:
         return (isinstance(other, Session)
                 and self.to_dict() == other.to_dict())
+
+    def __hash__(self) -> int:
+        # Hash over the same canonical ``to_dict()`` view ``__eq__``
+        # compares, frozen into a deterministic hashable form so equal
+        # Sessions always hash equal (the hash/eq contract). NOTE: a
+        # Session is mutable, so this is a *point-in-time snapshot* — safe
+        # for ``functools.lru_cache`` keys and short-lived set/dict
+        # membership, but do not mutate a Session while it is live as a
+        # dict key.
+        return hash(_freeze(self.to_dict()))
 
     def __repr__(self) -> str:
         return f"Session({self.to_dict()!r})"
