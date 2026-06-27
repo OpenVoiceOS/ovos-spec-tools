@@ -70,12 +70,11 @@ class MalformedMessage(ValueError, AssertionError):
     keys (§2), missing ``type`` (§2), wrong value types, or unparsable
     JSON (§6).
 
-    Inherits from both :class:`ValueError` (the modern,
-    correctly-typed exception class) **and** :class:`AssertionError`
-    (the type historically raised by ``ovos_bus_client.Message``'s
-    bare ``assert`` constructor checks), so legacy ``except
-    AssertionError`` handlers in downstream code continue to catch
-    the same conditions.
+    Inherits from both :class:`ValueError` (the correctly-typed
+    exception class) **and** :class:`AssertionError` (the type raised by
+    ``ovos_bus_client.Message``'s bare ``assert`` constructor checks), so
+    ``except AssertionError`` handlers in downstream code also catch the
+    same conditions.
     """
 
 
@@ -127,8 +126,8 @@ class Message:
         # pattern (``Message("").forward(real_type, data)``) is widely
         # used to build a routing scaffold before the real topic is
         # known, so the constructor accepts an empty string here and
-        # :meth:`serialize` is the gate that flags non-conformant wire
-        # output (see §7 producer rules).
+        # :meth:`serialize` is the gate that *rejects* non-conformant wire
+        # output (an empty ``type`` raises there, per §7 producer rules).
         if not isinstance(msg_type, str):
             raise MalformedMessage("msg_type must be a string (§2.1)")
         if data is not None and not isinstance(data, dict):
@@ -229,14 +228,33 @@ class Message:
         leave out — framing, encryption, alternative encoders — without
         touching this envelope contract.
 
+        This method is the §7 producer conformance gate: §2.1 requires
+        ``type`` to be a **non-empty** string and §7 makes a non-empty
+        ``type`` a producer ``MUST``. The constructor tolerates an empty
+        ``msg_type`` to allow the construct-then-``forward`` scaffold
+        pattern, but emitting such a Message would put a malformed
+        envelope on the wire, so ``serialize`` **refuses** it.
+
         Returns:
             A single UTF-8 JSON object string conforming to §6.
 
         Raises:
+            MalformedMessage: when ``msg_type`` is empty — §2.1/§7 require a
+                producer to emit a non-empty ``type``; an empty-``type``
+                scaffold Message must be ``forward``/``reply``-derived into
+                a real topic before it can be serialized.
             ValueError: from :func:`json.dumps` when ``data`` / ``context``
                 contain a non-finite number (``allow_nan=False``), enforcing
                 the §6 "Numbers MUST be finite" rule at emit time.
         """
+        # §2.1 / §7 producer MUST: the emitted ``type`` must be a non-empty
+        # string. The constructor accepts "" for the construct-then-forward
+        # scaffold; this is the gate that refuses to put it on the wire.
+        if not self.msg_type:
+            raise MalformedMessage(
+                "cannot serialize a Message with an empty 'type' — §2.1/§7 "
+                "require a producer to emit a non-empty topic; derive a real "
+                "topic via forward()/reply() before serializing")
         return json.dumps(
             {"type": self.msg_type,
              "data": self._to_jsonable(self.data),
@@ -261,7 +279,9 @@ class Message:
 
         Raises :class:`MalformedMessage` per the §7 ``MUST reject``
         conformance rules: unparsable JSON, non-object root, unknown
-        top-level keys, missing ``type``, or wrong value types.
+        top-level keys, missing ``type``, or wrong value types — including
+        a present-but-non-object ``data`` / ``context`` (``[]``, ``0``,
+        ``false``, …), which §6 forbids silently coercing to ``{}``.
         """
         if isinstance(payload, (bytes, bytearray)):
             payload = payload.decode("utf-8")
@@ -285,9 +305,22 @@ class Message:
                 "forbids any key other than 'type', 'data', 'context'")
         if "type" not in obj:
             raise MalformedMessage("missing required key 'type' (§2)")
-        # data and context default to {} per §2.2/§2.3 ("MAY be empty").
-        return cls(obj["type"], obj.get("data") or {},
-                   obj.get("context") or {})
+        # §2.2/§2.3: when present, ``data`` and ``context`` MUST be JSON
+        # objects. An ABSENT key defaults to ``{}`` ("MAY be empty"), but a
+        # *present* wrong-typed value ([], 0, false, "", null) is malformed
+        # and §6 forbids silently coercing it — reject per the §7 consumer
+        # "wrong types" MUST instead of papering over it with ``or {}``.
+        for key in ("data", "context"):
+            if key in obj and obj[key] is not None \
+                    and not isinstance(obj[key], dict):
+                raise MalformedMessage(
+                    f"'{key}' must be a JSON object when present, got "
+                    f"{type(obj[key]).__name__} (§2.{2 if key == 'data' else 3}/§7)")
+        # An absent (or explicit null) data/context defaults to {} per
+        # §2.2/§2.3 ("an absent data/context is equivalent to {}").
+        return cls(obj["type"],
+                   obj["data"] if obj.get("data") is not None else {},
+                   obj["context"] if obj.get("context") is not None else {})
 
     # --- §5 derivations -----------------------------------------------------
 
@@ -337,8 +370,8 @@ class Message:
           unchanged (§5.2 step 3).
 
         Any keys supplied via ``context`` are overlaid on the copied context
-        **before** the swap, matching the historical
-        ``ovos_bus_client.Message.reply`` behaviour: passing
+        **before** the swap, matching ``ovos_bus_client.Message.reply``
+        behaviour: passing
         ``context={"source": "C", "destination": "D"}`` yields
         ``source=D, destination=C`` because the §5.2 swap is the final step.
         Non-routing keys overlaid this way (a custom ``session`` shape, a

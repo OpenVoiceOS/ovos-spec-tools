@@ -69,6 +69,7 @@ from ovos_spec_tools.lint import (
 )
 from ovos_spec_tools.messages import (
     MIGRATION_MAP,
+    MIGRATION_PAYLOAD_TRANSFORMS,
     SPEC_TO_LEGACY,
     NamespaceTranslator,
     SpecMessage,
@@ -139,6 +140,7 @@ __all__ = [
     "Finding",
     "SpecMessage",
     "MIGRATION_MAP",
+    "MIGRATION_PAYLOAD_TRANSFORMS",
     "SPEC_TO_LEGACY",
     "migration_counterpart",
     "NamespaceTranslator",
