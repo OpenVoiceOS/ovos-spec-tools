@@ -150,6 +150,28 @@ class TestSerialization:
         parsed = json.loads(m.serialize())
         assert parsed["type"] == "ovos.real"
 
+    def test_serialize_accepts_valid_type_syntax(self):
+        """§2.1: ASCII letters, digits, ``.`` ``:`` ``_`` ``-`` are all valid
+        topic characters; a dot/colon-segmented topic serializes unchanged."""
+        m = Message("assistant.intent.register.keyword")
+        assert json.loads(m.serialize())["type"] == \
+            "assistant.intent.register.keyword"
+        # the full permitted charset, including the colon separator and a digit
+        assert json.loads(Message("Foo_bar-1:Baz").serialize())["type"] == \
+            "Foo_bar-1:Baz"
+
+    def test_serialize_rejects_type_with_whitespace(self):
+        """§2.1 producer MUST: a topic carries no whitespace, so an embedded
+        space MUST be rejected at the wire gate rather than emitted."""
+        with pytest.raises(MalformedMessage):
+            Message("a b").serialize()
+
+    def test_serialize_rejects_type_with_illegal_char(self):
+        """§2.1: characters outside [A-Za-z0-9.:_-] (here a slash) are not
+        permitted in a topic."""
+        with pytest.raises(MalformedMessage):
+            Message("ovos/test").serialize()
+
     def test_deserialize_rejects_wrong_type_data(self):
         """§2.2/§6: a present-but-non-object ``data`` MUST be rejected, not
         silently coerced to ``{}``."""
