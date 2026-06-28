@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.0.0a1) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.18.0a1...1.0.0a1)
+
+**Breaking changes:**
+
+- fix!: drop handler-trio from the namespace migration bridge \(orchestrator-owned\) [\#63](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/63) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.18.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.18.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.3a1...0.18.0a1)
