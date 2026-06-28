@@ -218,17 +218,19 @@ class SpecMessage(str, Enum):
 #: * **Payload-compatible renames** — legacy and spec topics carry the same
 #:   ``data`` shape; the mirror forwards the payload unchanged (identity
 #:   transform). Most entries are of this kind.
-#: * **Shape-changing renames** — the handler trio
-#:   (``mycroft.skill.handler.*``) and the INTENT-4 management topics
+#: * **Shape-changing renames** — the INTENT-4 management topics
 #:   (``detach_intent``, ``enable_intent``/``disable_intent``) change the
 #:   payload shape across the rename. For these the bridge does NOT forward the
 #:   payload verbatim: :data:`MIGRATION_PAYLOAD_TRANSFORMS` carries a
 #:   best-effort, sometimes lossy transform pair (documented there) that
 #:   reshapes the payload per direction.
 #:
-#: The two deliberate exclusions (registration consolidation, per-skill stop
-#: ping placeholders) are documented at the bottom — no per-topic payload
-#: transform can bridge them.
+#: Deliberate exclusions (registration consolidation, per-skill stop ping
+#: placeholders) are documented at the bottom — no per-topic payload transform
+#: can bridge them. The PIPELINE-1 §8 handler-lifecycle trio is also excluded:
+#: it is orchestrator-owned (the orchestrator emits the spec topics directly;
+#: the skill framework keeps the legacy ones as a private done-signal), so it is
+#: deliberately NOT migrated.
 MIGRATION_MAP: Dict[str, SpecMessage] = {
     # --- PIPELINE-1 §9 utterance layer (payload-compatible 1:1 renames) ---
     "recognizer_loop:utterance": SpecMessage.UTTERANCE,        # PIPELINE-1 §9.1
@@ -252,11 +254,13 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     "recognizer_loop:record_end": SpecMessage.LISTENER_RECORD_ENDED,      # AUDIO-IN-1 §6.2
     "recognizer_loop:sleep": SpecMessage.LISTENER_SLEEP,     # AUDIO-IN-1 §6.3
     "mycroft.awoken": SpecMessage.LISTENER_AWOKEN,           # AUDIO-IN-1 §6.4
-    # --- PIPELINE-1 §8 handler-lifecycle trio (SHAPE-CHANGING rename; payload
-    #     reshaped per direction by MIGRATION_PAYLOAD_TRANSFORMS, best-effort) ---
-    "mycroft.skill.handler.start": SpecMessage.INTENT_HANDLER_START,        # §8.1
-    "mycroft.skill.handler.complete": SpecMessage.INTENT_HANDLER_COMPLETE,  # §8.1
-    "mycroft.skill.handler.error": SpecMessage.INTENT_HANDLER_ERROR,        # §8.1
+    # NOTE: the PIPELINE-1 §8 handler-lifecycle trio is intentionally NOT
+    # migrated. It is orchestrator-owned — the orchestrator emits the spec
+    # ``ovos.intent.handler.*`` directly, while the skill framework keeps
+    # emitting the legacy ``mycroft.skill.handler.*`` as a private done-signal.
+    # It is also a shape-changing (not payload-compatible) event, so bridging it
+    # would both double-emit the spec trio and reshape the payload. The two
+    # namespaces are kept separate by design (PIPELINE-1 §8 / §11).
     # --- STOP-1 (1:1 renames) ---
     "skill.stop.pong": SpecMessage.STOP_PONG,   # STOP-1 §4.2 stoppability reply
     "mycroft.stop": SpecMessage.STOP,           # STOP-1 §5.3 universal stop broadcast
@@ -317,55 +321,6 @@ PayloadTransform = Callable[[Dict[str, Any]], Dict[str, Any]]
 def _identity(data: Dict[str, Any]) -> Dict[str, Any]:
     """Payload-compatible default: copy the payload through unchanged."""
     return dict(data)
-
-
-# --- handler trio: mycroft.skill.handler.{start,complete,error} ↔
-#     ovos.intent.handler.{start,complete,error} (PIPELINE-1 §8) ---
-#
-# Legacy shape (Mycroft-era producers):
-#   start/complete: {"handler": "<fn name>"}        (+ "duration" on complete)
-#   error:          {"handler": "<fn name>", "traceback": "<str>"}
-#   (skill_id rode in Message.context, not data — see ovos_workshop/skills/ovos.py)
-# Spec shape (PIPELINE-1 §8): {"skill_id", "intent_name"}  (+ "exception" on error)
-#
-# LOSSY mapping (documented):
-#  - legacy ``handler`` (a handler **function** name) is mapped to/from spec
-#    ``intent_name`` BEST-EFFORT only: they are related but not identical
-#    (a handler fn name is not guaranteed to equal the intent name).
-#  - legacy→spec cannot recover ``skill_id`` from ``data`` (it lived in
-#    ``context``); it is omitted. The bus SHOULD lift it from ``context`` when
-#    wiring — out of scope for this pure-data transform.
-#  - ``complete``'s legacy ``duration`` has no spec field → DROPPED on
-#    legacy→spec; spec→legacy cannot synthesize it → OMITTED.
-#  - ``error``: legacy ``traceback`` ↔ spec ``exception`` are mapped to each
-#    other (both human-readable failure text).
-
-def _handler_legacy_to_spec(data: Dict[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    if "skill_id" in data:  # rarely present in data, but honour it if so
-        out["skill_id"] = data["skill_id"]
-    if "handler" in data:
-        out["intent_name"] = data["handler"]  # best-effort
-    # error: legacy ``traceback`` -> spec ``exception``
-    if "traceback" in data:
-        out["exception"] = data["traceback"]
-    elif "exception" in data:
-        out["exception"] = data["exception"]
-    # ``duration`` (complete) has no spec field -> dropped.
-    return out
-
-
-def _handler_spec_to_legacy(data: Dict[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    if "intent_name" in data:
-        out["handler"] = data["intent_name"]  # best-effort
-    if "skill_id" in data:
-        out["skill_id"] = data["skill_id"]  # harmless extra on legacy topic
-    # error: spec ``exception`` -> legacy ``traceback``
-    if "exception" in data:
-        out["traceback"] = data["exception"]
-    # spec has no ``duration`` to restore -> omitted.
-    return out
 
 
 # --- detach_intent ↔ ovos.intent.deregister (INTENT-4 §8.2) ---
@@ -434,19 +389,12 @@ def _toggle_spec_to_legacy(data: Dict[str, Any]) -> Dict[str, Any]:
 #:
 #: Lossy cases (each documented at the transform above):
 #:
-#: * **handler trio** — ``handler`` ↔ ``intent_name`` is best-effort (a handler
-#:   function name is not guaranteed to equal the intent name); ``skill_id`` is
-#:   not recoverable from legacy ``data``; ``duration`` (complete) is dropped;
-#:   ``traceback`` ↔ ``exception`` are mapped.
 #: * **detach_intent** — cleanly bidirectional on ``skill_id``/``intent_name``;
 #:   ``lang`` is not present in the legacy payload.
 #: * **enable/disable** — legacy carries neither ``skill_id`` nor ``lang``, so
 #:   legacy->spec omits both (a legacy-sourced toggle has no skill scope in
 #:   ``data``).
 MIGRATION_PAYLOAD_TRANSFORMS: Dict[str, Tuple[PayloadTransform, PayloadTransform]] = {
-    "mycroft.skill.handler.start": (_handler_legacy_to_spec, _handler_spec_to_legacy),
-    "mycroft.skill.handler.complete": (_handler_legacy_to_spec, _handler_spec_to_legacy),
-    "mycroft.skill.handler.error": (_handler_legacy_to_spec, _handler_spec_to_legacy),
     "detach_intent": (_detach_legacy_to_spec, _detach_spec_to_legacy),
     "mycroft.skill.enable_intent": (_toggle_legacy_to_spec, _toggle_spec_to_legacy),
     "mycroft.skill.disable_intent": (_toggle_legacy_to_spec, _toggle_spec_to_legacy),
