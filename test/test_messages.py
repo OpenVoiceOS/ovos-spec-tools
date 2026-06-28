@@ -162,11 +162,10 @@ class TestPayloadTransforms(unittest.TestCase):
                           f"{legacy} is not a known legacy topic")
 
     def test_only_shape_changing_topics_have_transforms(self):
-        # The 6 shape-changing entries: handler trio + detach + enable/disable.
+        # The 3 shape-changing entries: detach + enable/disable. The handler
+        # trio is orchestrator-owned and intentionally NOT migrated, so it has
+        # no transform (see MIGRATION_MAP).
         self.assertEqual(set(MIGRATION_PAYLOAD_TRANSFORMS), {
-            "mycroft.skill.handler.start",
-            "mycroft.skill.handler.complete",
-            "mycroft.skill.handler.error",
             "detach_intent",
             "mycroft.skill.enable_intent",
             "mycroft.skill.disable_intent",
@@ -210,39 +209,23 @@ class TestPayloadTransforms(unittest.TestCase):
             {"intent_name": "skill:a:b"})
         self.assertEqual(out, {"skill_id": "skill", "intent_name": "a:b"})
 
-    # --- handler trio: best-effort / lossy ---
-    def test_handler_complete_legacy_to_spec_drops_duration(self):
-        out = self.t.translate_payload(
-            "mycroft.skill.handler.complete", "ovos.intent.handler.complete",
-            {"handler": "play_music", "duration": 0.4})
-        # handler->intent_name best-effort; duration has no spec field.
-        self.assertEqual(out, {"intent_name": "play_music"})
-
-    def test_handler_error_maps_traceback_to_exception(self):
-        out = self.t.translate_payload(
-            "mycroft.skill.handler.error", "ovos.intent.handler.error",
-            {"handler": "play_music", "traceback": "RuntimeError: boom"})
-        self.assertEqual(out, {"intent_name": "play_music",
-                               "exception": "RuntimeError: boom"})
-
-    def test_handler_spec_to_legacy_maps_exception_to_traceback(self):
-        out = self.t.translate_payload(
-            "ovos.intent.handler.error", "mycroft.skill.handler.error",
-            {"skill_id": "music.skill", "intent_name": "play_music",
-             "exception": "RuntimeError: boom"})
-        self.assertEqual(out, {"handler": "play_music",
-                               "skill_id": "music.skill",
-                               "traceback": "RuntimeError: boom"})
-
-    def test_handler_best_effort_roundtrip(self):
-        # handler<->intent_name and traceback<->exception round-trip;
-        # skill_id is not recoverable from a legacy-only payload.
-        legacy = {"handler": "play_music", "traceback": "Err"}
-        spec = self.t.translate_payload(
-            "mycroft.skill.handler.error", "ovos.intent.handler.error", legacy)
-        back = self.t.translate_payload(
-            "ovos.intent.handler.error", "mycroft.skill.handler.error", spec)
-        self.assertEqual(back, {"handler": "play_music", "traceback": "Err"})
+    # --- handler trio: orchestrator-owned, intentionally NOT migrated ---
+    def test_handler_trio_is_not_migrated(self):
+        # PIPELINE-1 §8: the orchestrator emits the spec trio authoritatively;
+        # the skill framework keeps the legacy topics as a private done-signal.
+        # They must NOT bridge — bridging would double-emit and reshape a
+        # shape-changing event.
+        for legacy, spec in (
+            ("mycroft.skill.handler.start", "ovos.intent.handler.start"),
+            ("mycroft.skill.handler.complete", "ovos.intent.handler.complete"),
+            ("mycroft.skill.handler.error", "ovos.intent.handler.error"),
+        ):
+            self.assertNotIn(legacy, MIGRATION_MAP)
+            self.assertNotIn(legacy, MIGRATION_PAYLOAD_TRANSFORMS)
+            self.assertFalse(self.t.is_migrated(legacy))
+            self.assertFalse(self.t.is_migrated(spec))
+            self.assertFalse(self.t.counterpart_topics(legacy))
+            self.assertFalse(self.t.counterpart_topics(spec))
 
     # --- enable/disable: documented loss (no skill_id on legacy side) ---
     def test_toggle_spec_to_legacy_drops_skill_and_lang(self):
