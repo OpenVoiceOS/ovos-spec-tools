@@ -52,7 +52,7 @@ moves the bus onto those topics.
 | `SpecMessage.UTTERANCE` | OVOS-PIPELINE-1 | §9.1 |
 | `SpecMessage.SPEAK` | OVOS-PIPELINE-1 | §9.6 |
 | `SpecMessage.UTTERANCE_HANDLED` | OVOS-PIPELINE-1 | §9.5 |
-| `SpecMessage.UTTERANCE_CANCELLED` | OVOS-PIPELINE-1 | §6.4 |
+| `SpecMessage.UTTERANCE_CANCELLED` | OVOS-TRANSFORM-1 | §8.2 (defined here; PIPELINE-1 §6.4 references it) |
 | `SpecMessage.INTENT_MATCHED` | OVOS-PIPELINE-1 | §9.2 |
 | `SpecMessage.INTENT_UNMATCHED` | OVOS-PIPELINE-1 | §9.3 |
 | `SpecMessage.INTENT_HANDLER_START` / `_COMPLETE` / `_ERROR` | OVOS-PIPELINE-1 | §8.1 |
@@ -67,7 +67,26 @@ moves the bus onto those topics.
 | `SpecMessage.INTENT_DESCRIBE` / `_DESCRIBE_RESPONSE` | OVOS-INTENT-4 | §10.2 |
 | `SpecMessage.STOP_PING` / `STOP_PONG` | OVOS-STOP-1 | §4.2 |
 | `SpecMessage.STOP` | OVOS-STOP-1 | §5.3 |
-| `SpecMessage.MIC_LISTEN`, `LISTENER_*`, `AUDIO_OUTPUT_*` | OVOS-AUDIO-IN-1 | provisional (names settled, prose landing) |
+| `SpecMessage.LISTENER_RECORD_STARTED` / `_RECORD_ENDED` / `LISTENER_SLEEP` / `LISTENER_AWOKEN` | OVOS-AUDIO-IN-1 | §6.1 / §6.2 / §6.3 / §6.4 |
+| `SpecMessage.SPEAK_B64` | OVOS-AUDIO-1 | §3.4 |
+| `SpecMessage.AUDIO_SPEECH` | OVOS-AUDIO-1 | §4.3 |
+| `SpecMessage.AUDIO_QUEUE` / `AUDIO_PLAY_SOUND` | OVOS-AUDIO-1 | §4.1 / §4.2 |
+| `SpecMessage.AUDIO_STOP` | OVOS-AUDIO-1 | §6 |
+| `SpecMessage.AUDIO_IS_SPEAKING` | OVOS-AUDIO-1 | §5.3 |
+| `SpecMessage.AUDIO_OUTPUT_STARTED` / `_OUTPUT_ENDED` | OVOS-AUDIO-1 | §5.1 / §5.2 |
+| `SpecMessage.MIC_LISTEN` | OVOS-AUDIO-1 | §4.4 |
+| `SpecMessage.SESSION_SYNC` | OVOS-SESSION-2 | §2.7 (bus table §7) |
+| `SpecMessage.CONVERSE_ACTIVE_LIST` / `_ACTIVE_LIST_RESPONSE` | OVOS-CONVERSE-1 | §6.1 |
+| `SpecMessage.PERSONA_QUERY` / `_ANSWER` | OVOS-PERSONA-1 | §8.5 (§11 bus surface) |
+| `SpecMessage.PERSONA_LIST` / `_LIST_RESPONSE` | OVOS-PERSONA-1 | §8.7 (§11) |
+| `SpecMessage.PERSONA_REGISTER` / `_DEREGISTER` | OVOS-PERSONA-1 | §9 (§11) |
+| `SpecMessage.PERSONA_ACTIVATED` / `_DISMISSED` | OVOS-PERSONA-1 | §11 |
+| `SpecMessage.FALLBACK_REGISTER` / `_DEREGISTER` | OVOS-FALLBACK-1 | §3.1 / §3.2 (§9 bus surface) |
+| `SpecMessage.COMMON_QUERY_PING` / `_PONG` | OVOS-COMMON-QUERY-1 | §6.1 / §6.2 (§13 bus surface) |
+| `SpecMessage.TRANSFORMER_{AUDIO,UTTERANCE,METADATA,INTENT,DIALOG,TTS}_LIST` / `_LIST_RESPONSE` | OVOS-TRANSFORM-1 | §6 (six static query/response pairs) |
+| `SpecMessage.COMMON_PLAY_{PLAY,SEARCH}` | OVOS-OCP-1 | §4.2 |
+| `SpecMessage.COMMON_PLAY_{PAUSE,RESUME,STOP,NEXT,PREVIOUS,SEEK}` | OVOS-OCP-1 | §4.3 |
+| `SpecMessage.COMMON_PLAY_{PLAYER,MEDIA,TRACK}_STATE` | OVOS-OCP-1 | §4.4 |
 | `MIGRATION_MAP` | (bridge) | encodes the renames defined by PIPELINE-1 §8/§9, INTENT-4 §8, STOP-1 §4/§5, AUDIO-IN-1 |
 | `SPEC_TO_LEGACY` | (bridge) | reverse of `MIGRATION_MAP` |
 | `migration_counterpart` | (bridge) | symmetric counterpart lookup |
@@ -186,5 +205,13 @@ rows whose "spec" column is not a numbered OVOS spec clause are:
   `__version__`).
 
 Everything else is a direct reference implementation of a cited OVOS-MSG-1,
-OVOS-SESSION-1, OVOS-INTENT-1, OVOS-INTENT-2, OVOS-INTENT-4, OVOS-PIPELINE-1,
-OVOS-STOP-1, or OVOS-AUDIO-IN-1 clause.
+OVOS-SESSION-1, OVOS-SESSION-2, OVOS-INTENT-1, OVOS-INTENT-2, OVOS-INTENT-4,
+OVOS-PIPELINE-1, OVOS-STOP-1, OVOS-AUDIO-IN-1, OVOS-AUDIO-1, OVOS-CONVERSE-1,
+OVOS-PERSONA-1, OVOS-FALLBACK-1, OVOS-COMMON-QUERY-1, OVOS-TRANSFORM-1, or
+OVOS-OCP-1 clause.
+
+`SpecMessage` is the static `ovos.*` topic vocabulary: it carries one member
+per spec-defined fixed-string topic and deliberately omits runtime-templated
+topics (MSG-1 §2.1.1 — the `<skill_id>:…`, `<pipeline_id>…`, per-skill ping
+placeholders) and topics used by `ovos-bus-client` that no spec defines
+(`ovos.session.update_default`, `ovos.session.start`, `ovos.context.set`).

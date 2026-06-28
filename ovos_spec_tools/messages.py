@@ -18,6 +18,23 @@ is tied to its owning spec section in the per-member comments below:
 - **OVOS-AUDIO-IN-1** — listener lifecycle signals (``ovos.listener.*``).
   AUDIO-IN-1 §6.1–§6.4 mandates ``ovos.listener.record.started`` /
   ``.record.ended`` / ``ovos.listener.sleep`` / ``ovos.listener.awoken``;
+- **OVOS-SESSION-2** — the out-of-utterance session sync topic
+  (``ovos.session.sync`` §2.7);
+- **OVOS-CONVERSE-1** — the active-handler introspection pair
+  (``ovos.converse.active.list`` / ``.response`` §6.1);
+- **OVOS-PERSONA-1** — the §11 bus surface (``ovos.persona.{query,answer,list,
+  list.response,register,deregister,activated,dismissed}``);
+- **OVOS-FALLBACK-1** — fallback registry topics (``ovos.fallback.{register,
+  deregister}`` §3);
+- **OVOS-COMMON-QUERY-1** — the wants-to-answer poll
+  (``ovos.common_query.{ping,pong}`` §6);
+- **OVOS-TRANSFORM-1** — §6 introspection: six static query/response pairs
+  ``ovos.transformer.<chain>.list`` / ``.response`` (audio/utterance/metadata/
+  intent/dialog/tts), plus the cancellation terminal ``ovos.utterance.cancelled``
+  (§8.2, "defined here");
+- **OVOS-OCP-1** — the §4 Virtual Media Player bus surface under the reserved
+  ``ovos.common_play.*`` prefix (play/search, the transport controls, and the
+  player/media/track state reports);
 - **OVOS-AUDIO-1** — the audio **output** service bus surface (§7),
   mandated. Two rendering modes (``ovos.utterance.speak.b64``
   §3.4 → ``ovos.audio.speech`` §4.3 for remote clients); the playback model
@@ -80,8 +97,24 @@ Out of enum / map scope (OVOS-MSG-1 §2.1.1 runtime-assembled topics)
 Topics whose ``type`` is assembled at runtime from identifiers are neither
 enum members nor static-mappable: ``ovos.pipeline.<pipeline_id>.intents.list``
 (PIPELINE-1 §10), the ``<skill_id>:<intent_name>`` dispatch topic
-(PIPELINE-1 §7), and the per-skill ``<skill_id>.stop.ping`` / ``<skill_id>.stop``
-placeholders (STOP-1).
+(PIPELINE-1 §7), the per-skill ``<skill_id>.stop.ping`` / ``<skill_id>.stop``
+placeholders (STOP-1), the CONVERSE-1 §6.2/§6.3
+``<skill_id>.converse.{ping,pong}`` / ``<skill_id>:{converse,response}`` poll
+and dispatch, the FALLBACK-1 §6/§7 ``<skill_id>.fallback.{ping,pong}`` /
+``<skill_id>:fallback``, and the COMMON-QUERY-1 §7/§3
+``<skill_id>:common_query`` / ``<skill_id>.common_query.response`` /
+``<pipeline_id>:common_query``.
+
+Spec-referenced but NOT spec-defined (kept OUT of the enum)
+----------------------------------------------------------
+``ovos.session.update_default`` and ``ovos.session.start`` are used by
+``ovos-bus-client`` but no specification defines them — SESSION-2 §1 explicitly
+defers session-lifecycle observability topics — so they are implementation
+internals and legitimately remain bare strings in the bus client.
+``ovos.context.set`` / ``.unset`` / ``.clear`` appear only as a stray reference
+in OVOS-TRANSFORM-1 (mis-citing "OVOS-CONTEXT-1 §5"); OVOS-CONTEXT-1 §5 in fact
+defines exactly three mutation pathways and the bus one is ``ovos.session.sync``
+(§5.3), so no ``ovos.context.*`` topic is spec-defined.
 """
 import json as _json
 import time
@@ -118,7 +151,9 @@ class SpecMessage(str, Enum):
     SPEAK = "ovos.utterance.speak"
     #: §9.5 — universal end-marker, exactly one per entry Message.
     UTTERANCE_HANDLED = "ovos.utterance.handled"
-    #: §6.4 terminal event — utterance cancelled before a match was acted on.
+    #: OVOS-TRANSFORM-1 §8.2 — terminal event, utterance cancelled by a
+    #: transformer ("new; defined here"); MUST be followed by UTTERANCE_HANDLED.
+    #: PIPELINE-1 §6.4 references it as a terminal outcome but does not own it.
     UTTERANCE_CANCELLED = "ovos.utterance.cancelled"
     #: §9.2 — match notification (NOT a dispatch), broadcast.
     INTENT_MATCHED = "ovos.intent.matched"
@@ -203,6 +238,116 @@ class SpecMessage(str, Enum):
     LISTENER_SLEEP = "ovos.listener.sleep"
     #: §6.4 — left sleep mode (sleep→awake transition); audio-input → broadcast.
     LISTENER_AWOKEN = "ovos.listener.awoken"
+
+    # --- OVOS-SESSION-2 out-of-utterance session sync (§2.7, bus table §7) ---
+    #: SESSION-2 §2.7 — broadcast an explicit session update OUTSIDE the
+    #: utterance lifecycle; the updated snapshot rides in ``Message.data.session``
+    #: and the orchestrator MUST merge it. (``ovos.session.update_default`` and
+    #: ``ovos.session.start`` are NOT spec-defined — see module note — and stay
+    #: out of this enum; SESSION-2 §1 explicitly defers lifecycle topics.)
+    SESSION_SYNC = "ovos.session.sync"
+
+    # --- OVOS-CONVERSE-1 §6.1 active-handler introspection ---
+    # The §6.2 ``<skill_id>.converse.{ping,pong}`` poll and the §6.3
+    # ``<skill_id>:{converse,response}`` dispatches are runtime-templated
+    # (MSG-1 §2.1.1) and so are NOT static enum members.
+    #: §6.1 — observer→orchestrator: snapshot ``session.converse_handlers``.
+    CONVERSE_ACTIVE_LIST = "ovos.converse.active.list"
+    #: §6.1 — the ``.response`` reply carrying ``{converse_handlers}`` (MSG-1 §5.3).
+    CONVERSE_ACTIVE_LIST_RESPONSE = "ovos.converse.active.list.response"
+
+    # --- OVOS-PERSONA-1 §11 bus surface ---
+    #: §8.5 — out-of-band query to the active persona; any → persona.
+    PERSONA_QUERY = "ovos.persona.query"
+    #: §8.5 — the query response; persona → any component.
+    PERSONA_ANSWER = "ovos.persona.answer"
+    #: §8.7 — enumerate supported persona identities; any → persona.
+    PERSONA_LIST = "ovos.persona.list"
+    #: §8.7 — the ``.response`` supported-identity listing (MSG-1 §5.3).
+    PERSONA_LIST_RESPONSE = "ovos.persona.list.response"
+    #: §9 — register a persona at runtime; any → persona.
+    PERSONA_REGISTER = "ovos.persona.register"
+    #: §9 — deregister a persona at runtime; any → persona.
+    PERSONA_DEREGISTER = "ovos.persona.deregister"
+    #: §11 — a persona became active for a session (best-effort); persona → broadcast.
+    PERSONA_ACTIVATED = "ovos.persona.activated"
+    #: §11 — a persona was dismissed from a session (best-effort); persona → broadcast.
+    PERSONA_DISMISSED = "ovos.persona.dismissed"
+
+    # --- OVOS-FALLBACK-1 §9 bus surface ---
+    # The §6.1 ``<skill_id>.fallback.{ping,pong}`` poll and the §7
+    # ``<skill_id>:fallback`` dispatch are runtime-templated (MSG-1 §2.1.1)
+    # and so are NOT static enum members.
+    #: §3.1 — a skill registers itself as a fallback handler; skill → broadcast.
+    FALLBACK_REGISTER = "ovos.fallback.register"
+    #: §3.2 — a skill removes itself from the fallback registry; skill → broadcast.
+    FALLBACK_DEREGISTER = "ovos.fallback.deregister"
+
+    # --- OVOS-COMMON-QUERY-1 §13 bus surface ---
+    # The §7.1 ``<skill_id>:common_query`` / ``<skill_id>.common_query.response``
+    # and the §3/§10 ``<pipeline_id>:common_query`` dispatch are runtime-templated
+    # (MSG-1 §2.1.1) and so are NOT static enum members.
+    #: §6.1 — the wants-to-answer poll broadcast; plugin → all skills.
+    COMMON_QUERY_PING = "ovos.common_query.ping"
+    #: §6.2 — a skill claims it can answer, ``reply``-derived (MSG-1 §5.2);
+    #: skill → plugin.
+    COMMON_QUERY_PONG = "ovos.common_query.pong"
+
+    # --- OVOS-TRANSFORM-1 §6 introspection (broadcast query / scatter response) ---
+    # Six concrete static query/response pairs (one per §3 transformer chain);
+    # the spec enumerates them, it does NOT define a templated
+    # ``ovos.transformer.<type>.list`` pattern.
+    #: §6/§3.1 — list loaded audio transformers; any → broadcast.
+    TRANSFORMER_AUDIO_LIST = "ovos.transformer.audio.list"
+    #: §6/§3.1 — scatter ``.response`` of loaded audio transformers (MSG-1 §5.3).
+    TRANSFORMER_AUDIO_LIST_RESPONSE = "ovos.transformer.audio.list.response"
+    #: §6/§3.2 — list loaded utterance transformers; any → broadcast.
+    TRANSFORMER_UTTERANCE_LIST = "ovos.transformer.utterance.list"
+    #: §6/§3.2 — scatter ``.response`` of loaded utterance transformers.
+    TRANSFORMER_UTTERANCE_LIST_RESPONSE = "ovos.transformer.utterance.list.response"
+    #: §6/§3.3 — list loaded metadata transformers; any → broadcast.
+    TRANSFORMER_METADATA_LIST = "ovos.transformer.metadata.list"
+    #: §6/§3.3 — scatter ``.response`` of loaded metadata transformers.
+    TRANSFORMER_METADATA_LIST_RESPONSE = "ovos.transformer.metadata.list.response"
+    #: §6/§3.4 — list loaded intent transformers; any → broadcast.
+    TRANSFORMER_INTENT_LIST = "ovos.transformer.intent.list"
+    #: §6/§3.4 — scatter ``.response`` of loaded intent transformers.
+    TRANSFORMER_INTENT_LIST_RESPONSE = "ovos.transformer.intent.list.response"
+    #: §6/§3.5 — list loaded dialog transformers; any → broadcast.
+    TRANSFORMER_DIALOG_LIST = "ovos.transformer.dialog.list"
+    #: §6/§3.5 — scatter ``.response`` of loaded dialog transformers.
+    TRANSFORMER_DIALOG_LIST_RESPONSE = "ovos.transformer.dialog.list.response"
+    #: §6/§3.6 — list loaded TTS transformers; any → broadcast.
+    TRANSFORMER_TTS_LIST = "ovos.transformer.tts.list"
+    #: §6/§3.6 — scatter ``.response`` of loaded TTS transformers.
+    TRANSFORMER_TTS_LIST_RESPONSE = "ovos.transformer.tts.list.response"
+
+    # --- OVOS-OCP-1 §4 Virtual Media Player bus surface ---
+    # The ``ovos.common_play.*`` prefix is reserved by OCP-1 §4.1. The inline
+    # ``…search.start`` / ``…search.end`` brackets (§4.2 prose) are not given
+    # their own normative Message rows, so they are flagged, not enumerated.
+    #: §4.2 — begin playback of a resolved result / queue.
+    COMMON_PLAY_PLAY = "ovos.common_play.play"
+    #: §4.2 — acquire candidate media for a phrase (pipeline discovery step).
+    COMMON_PLAY_SEARCH = "ovos.common_play.search"
+    #: §4.3 — now-playing → PAUSED.
+    COMMON_PLAY_PAUSE = "ovos.common_play.pause"
+    #: §4.3 — now-playing → PLAYING.
+    COMMON_PLAY_RESUME = "ovos.common_play.resume"
+    #: §4.3 — now-playing → STOPPED (an OVOS-STOP-1 subscriber, §7).
+    COMMON_PLAY_STOP = "ovos.common_play.stop"
+    #: §4.3 — advance the queue.
+    COMMON_PLAY_NEXT = "ovos.common_play.next"
+    #: §4.3 — retreat the queue.
+    COMMON_PLAY_PREVIOUS = "ovos.common_play.previous"
+    #: §4.3 — move the position within now-playing.
+    COMMON_PLAY_SEEK = "ovos.common_play.seek"
+    #: §4.4 — announce the §3.1 player-state value; player → broadcast.
+    COMMON_PLAY_PLAYER_STATE = "ovos.common_play.player.state"
+    #: §4.4 — announce the §3.2 media-state value; player → broadcast.
+    COMMON_PLAY_MEDIA_STATE = "ovos.common_play.media.state"
+    #: §4.4 — announce now-playing track transitions; player → broadcast.
+    COMMON_PLAY_TRACK_STATE = "ovos.common_play.track.state"
 
 
 #: Legacy (Mycroft-era) topic -> the :class:`SpecMessage` that supersedes it.
