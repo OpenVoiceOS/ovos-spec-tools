@@ -118,6 +118,151 @@ class TestSpecMessage(unittest.TestCase):
             self.assertEqual(migration_counterpart(spec), legacy)
 
 
+#: The complete set of STATIC (non-templated) ``ovos.*`` topics the OVOS
+#: architecture specs normatively define, each mapped to its owning spec +
+#: section. This is the golden reference: ``SpecMessage`` MUST contain exactly
+#: this set — every spec topic has a member (completeness) and every member is a
+#: spec topic (spec-only-ness). Runtime-templated topics (MSG-1 §2.1.1:
+#: ``<skill_id>:…`` / ``<pipeline_id>…`` / per-skill ping placeholders) are
+#: deliberately excluded, as are bus-client internals no spec defines
+#: (``ovos.session.update_default``, ``ovos.session.start``, ``ovos.context.*``).
+SPEC_STATIC_TOPICS = {
+    # OVOS-PIPELINE-1 §8/§9 utterance + intent layer
+    "ovos.utterance.handle": "PIPELINE-1 §9.1",
+    "ovos.utterance.speak": "PIPELINE-1 §9.6",
+    "ovos.utterance.handled": "PIPELINE-1 §9.5",
+    "ovos.intent.matched": "PIPELINE-1 §9.2",
+    "ovos.intent.unmatched": "PIPELINE-1 §9.3",
+    "ovos.intent.handler.start": "PIPELINE-1 §8.1",
+    "ovos.intent.handler.complete": "PIPELINE-1 §8.1",
+    "ovos.intent.handler.error": "PIPELINE-1 §8.1",
+    # OVOS-TRANSFORM-1
+    "ovos.utterance.cancelled": "TRANSFORM-1 §8.2",
+    "ovos.transformer.audio.list": "TRANSFORM-1 §6",
+    "ovos.transformer.audio.list.response": "TRANSFORM-1 §6",
+    "ovos.transformer.utterance.list": "TRANSFORM-1 §6",
+    "ovos.transformer.utterance.list.response": "TRANSFORM-1 §6",
+    "ovos.transformer.metadata.list": "TRANSFORM-1 §6",
+    "ovos.transformer.metadata.list.response": "TRANSFORM-1 §6",
+    "ovos.transformer.intent.list": "TRANSFORM-1 §6",
+    "ovos.transformer.intent.list.response": "TRANSFORM-1 §6",
+    "ovos.transformer.dialog.list": "TRANSFORM-1 §6",
+    "ovos.transformer.dialog.list.response": "TRANSFORM-1 §6",
+    "ovos.transformer.tts.list": "TRANSFORM-1 §6",
+    "ovos.transformer.tts.list.response": "TRANSFORM-1 §6",
+    # OVOS-INTENT-4
+    "ovos.intent.register.keyword": "INTENT-4 §5",
+    "ovos.intent.register.template": "INTENT-4 §6",
+    "ovos.entity.register": "INTENT-4 §7",
+    "ovos.intent.deregister": "INTENT-4 §8.2",
+    "ovos.entity.deregister": "INTENT-4 §8.3",
+    "ovos.skill.deregister": "INTENT-4 §8.4",
+    "ovos.intent.enable": "INTENT-4 §8.5",
+    "ovos.intent.disable": "INTENT-4 §8.5",
+    "ovos.intent.list": "INTENT-4 §10.1",
+    "ovos.intent.list.response": "INTENT-4 §10.1",
+    "ovos.intent.describe": "INTENT-4 §10.2",
+    "ovos.intent.describe.response": "INTENT-4 §10.2",
+    # OVOS-STOP-1
+    "ovos.stop.ping": "STOP-1 §4.2",
+    "ovos.stop.pong": "STOP-1 §4.2",
+    "ovos.stop": "STOP-1 §5.3",
+    # OVOS-AUDIO-1 (audio output)
+    "ovos.utterance.speak.b64": "AUDIO-1 §3.4",
+    "ovos.audio.speech": "AUDIO-1 §4.3",
+    "ovos.audio.queue": "AUDIO-1 §4.1",
+    "ovos.audio.play_sound": "AUDIO-1 §4.2",
+    "ovos.audio.stop": "AUDIO-1 §6",
+    "ovos.audio.is_speaking": "AUDIO-1 §5.3",
+    "ovos.audio.output.started": "AUDIO-1 §5.1",
+    "ovos.audio.output.ended": "AUDIO-1 §5.2",
+    "ovos.mic.listen": "AUDIO-1 §4.4",
+    # OVOS-AUDIO-IN-1 (listener)
+    "ovos.listener.record.started": "AUDIO-IN-1 §6.1",
+    "ovos.listener.record.ended": "AUDIO-IN-1 §6.2",
+    "ovos.listener.sleep": "AUDIO-IN-1 §6.3",
+    "ovos.listener.awoken": "AUDIO-IN-1 §6.4",
+    # OVOS-SESSION-2
+    "ovos.session.sync": "SESSION-2 §2.7",
+    # OVOS-CONVERSE-1
+    "ovos.converse.active.list": "CONVERSE-1 §6.1",
+    "ovos.converse.active.list.response": "CONVERSE-1 §6.1",
+    # OVOS-PERSONA-1 §11 bus surface
+    "ovos.persona.query": "PERSONA-1 §8.5",
+    "ovos.persona.answer": "PERSONA-1 §8.5",
+    "ovos.persona.list": "PERSONA-1 §8.7",
+    "ovos.persona.list.response": "PERSONA-1 §8.7",
+    "ovos.persona.register": "PERSONA-1 §9",
+    "ovos.persona.deregister": "PERSONA-1 §9",
+    "ovos.persona.activated": "PERSONA-1 §11",
+    "ovos.persona.dismissed": "PERSONA-1 §11",
+    # OVOS-FALLBACK-1 §9 bus surface
+    "ovos.fallback.register": "FALLBACK-1 §3.1",
+    "ovos.fallback.deregister": "FALLBACK-1 §3.2",
+    # OVOS-COMMON-QUERY-1 §13 bus surface
+    "ovos.common_query.ping": "COMMON-QUERY-1 §6.1",
+    "ovos.common_query.pong": "COMMON-QUERY-1 §6.2",
+    # OVOS-OCP-1 §4 Virtual Media Player
+    "ovos.common_play.play": "OCP-1 §4.2",
+    "ovos.common_play.search": "OCP-1 §4.2",
+    "ovos.common_play.pause": "OCP-1 §4.3",
+    "ovos.common_play.resume": "OCP-1 §4.3",
+    "ovos.common_play.stop": "OCP-1 §4.3",
+    "ovos.common_play.next": "OCP-1 §4.3",
+    "ovos.common_play.previous": "OCP-1 §4.3",
+    "ovos.common_play.seek": "OCP-1 §4.3",
+    "ovos.common_play.player.state": "OCP-1 §4.4",
+    "ovos.common_play.media.state": "OCP-1 §4.4",
+    "ovos.common_play.track.state": "OCP-1 §4.4",
+}
+
+#: Topics ``ovos-bus-client`` uses that NO spec defines, so they MUST NOT be
+#: enum members (SESSION-2 §1 defers lifecycle topics; CONTEXT-1 §5 routes
+#: context mutations through ``ovos.session.sync``, not ``ovos.context.*``).
+NON_SPEC_BUS_CLIENT_TOPICS = {
+    "ovos.session.update_default",
+    "ovos.session.start",
+    "ovos.context.set",
+    "ovos.context.unset",
+    "ovos.context.clear",
+}
+
+
+class TestSpecCompleteness(unittest.TestCase):
+    """The enum is the single source of truth: spec-complete and spec-only."""
+
+    def test_enum_covers_every_spec_static_topic(self):
+        # Completeness: every normative static spec topic has an enum member.
+        members = {m.value for m in SpecMessage}
+        missing = set(SPEC_STATIC_TOPICS) - members
+        self.assertFalse(missing, f"spec topics with no enum member: {missing}")
+
+    def test_enum_is_spec_only(self):
+        # Spec-only-ness: every enum member is a normative spec topic.
+        members = {m.value for m in SpecMessage}
+        extra = members - set(SPEC_STATIC_TOPICS)
+        self.assertFalse(extra, f"enum members not traced to a spec: {extra}")
+
+    def test_enum_matches_spec_set_exactly(self):
+        self.assertEqual({m.value for m in SpecMessage},
+                         set(SPEC_STATIC_TOPICS))
+
+    def test_bus_client_internals_are_not_enum_members(self):
+        # session.sync IS spec (SESSION-2 §2.7); update_default/start/context.*
+        # are NOT and must stay out of the enum.
+        members = {m.value for m in SpecMessage}
+        for topic in NON_SPEC_BUS_CLIENT_TOPICS:
+            self.assertNotIn(topic, members,
+                             f"{topic} is not spec-defined; must not be a member")
+        self.assertIn("ovos.session.sync", members)  # SESSION-2 §2.7
+
+    def test_no_templated_topics_are_members(self):
+        # Runtime-assembled topics (MSG-1 §2.1.1) are never static members.
+        for m in SpecMessage:
+            self.assertNotIn("<", m.value, m.value)
+            self.assertNotIn(":", m.value, m.value)
+
+
 class TestMigrationMap(unittest.TestCase):
     def test_maps_legacy_to_specmessage(self):
         self.assertEqual(MIGRATION_MAP["speak"], SpecMessage.SPEAK)
