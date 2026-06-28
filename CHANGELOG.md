@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.1.0a1) (2026-06-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.0.0a1...1.1.0a1)
+
+**Merged pull requests:**
+
+- feat: complete SpecMessage with all spec-defined bus topics [\#65](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/65) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.0.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.0.0a1) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.18.0a1...1.0.0a1)
