@@ -26,12 +26,14 @@ class TestSessionManagerRegistry(unittest.TestCase):
         SessionManager.get(Message("x", context={"session": snap}))
         self.assertEqual([h["skill_id"] for h in held.active_handlers], ["k"])
 
-    def test_default_id_not_folded_from_messages(self):
+    def test_default_folds_like_any_session(self):
+        # the default session is a normal session per §4 — no owner-only
+        # reservation; a message carrying it folds onto the live default.
         d = SessionManager.get_default_session()
         SessionManager.get(Message("x", context={"session": {"session_id": "default",
                                                              "lang": "pt-PT"}}))
-        # default is owner-only; arbitrary messages don't mutate it
-        self.assertIsNot(d.lang, "pt-PT")
+        self.assertEqual(d.lang, "pt-PT")
+        self.assertIs(d, SessionManager.get_default_session())
 
 
 class TestForwardReplyStamping(unittest.TestCase):
