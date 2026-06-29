@@ -63,6 +63,27 @@ class TestForwardReplyStamping(unittest.TestCase):
         self.assertEqual(rep.context["source"], "B")
         self.assertEqual(rep.context["destination"], "A")
 
+    def test_reply_with_explicit_session_not_stamped(self):
+        # an author-supplied session via context= is honoured, not refreshed
+        live = SessionManager.update(Session("123"))
+        live.add_active_handler("live.skill")
+        orig = Message("ask", context={"session": {"session_id": "123"}})
+        rep = orig.reply("ask.response",
+                         context={"session": {"session_id": "123",
+                                              "lang": "explicit"}})
+        self.assertEqual(rep.context["session"], {"session_id": "123",
+                                                  "lang": "explicit"})
+
+    def test_reply_without_explicit_session_is_stamped(self):
+        live = SessionManager.update(Session("123"))
+        live.add_active_handler("live.skill")
+        orig = Message("ask", context={"session": {"session_id": "123"},
+                                       "source": "A"})
+        # context= overrides routing only -> session still refreshed
+        rep = orig.reply("ask.response", context={"destination": "X"})
+        ah = rep.context["session"]["active_handlers"]
+        self.assertEqual([h["skill_id"] for h in ah], ["live.skill"])
+
     def test_unowned_id_left_untouched(self):
         # a session id this process never folded is carried verbatim (§5)
         snap = {"session_id": "remote", "active_handlers": []}
