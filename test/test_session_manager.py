@@ -71,6 +71,12 @@ class TestForwardReplyStamping(unittest.TestCase):
         fwd = Message("u", context={}).forward("x")
         self.assertNotIn("session", fwd.context)
 
+    def test_idless_session_normalizes_to_default(self):
+        # §4.1/§4.3: a session that names no id IS the default session.
+        SessionManager.get_default_session().add_active_handler("d.skill")
+        fwd = Message("u", context={"session": {"lang": "en-US"}}).forward("x")
+        self.assertEqual(fwd.context["session"]["session_id"], "default")
+
     def test_stamp_is_noop_when_nothing_changed(self):
         # no intervening update -> stamp re-serializes the same state
         live = SessionManager.update(Session("123"))

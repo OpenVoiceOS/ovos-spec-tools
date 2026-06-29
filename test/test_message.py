@@ -221,11 +221,15 @@ class TestForward:
 
     def test_forward_context_is_deep_copied(self):
         """Mutating the source context after forward MUST NOT affect
-        the forwarded Message."""
-        m = Message("ovos.a", {}, {"source": "x", "session": {"id": "s1"}})
+        the forwarded Message. Uses a named id the registry never folded, so
+        the session is carried verbatim (a session without a session_id would
+        normalize to the default per §4.3)."""
+        m = Message("ovos.a", {}, {"source": "x",
+                                   "session": {"session_id": "relay-deepcopy",
+                                               "lang": "en-US"}})
         f = m.forward("ovos.b")
-        m.context["session"]["id"] = "MUTATED"
-        assert f.context["session"]["id"] == "s1"
+        m.context["session"]["lang"] = "MUTATED"
+        assert f.context["session"]["lang"] == "en-US"
 
     def test_forward_omits_data_defaults_to_empty(self):
         m = Message("ovos.a", {"k": "v"})

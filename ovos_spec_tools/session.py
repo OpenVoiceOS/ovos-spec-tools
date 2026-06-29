@@ -868,21 +868,23 @@ class SessionManager:
         """
         ctx = message.context
         snap = ctx.get("session")
+        if snap is None:
+            # §4.3: a Message without a session implies the default session —
+            # stamp it (also the emit inject-when-missing path).
+            ctx["session"] = cls._wire_dict(cls.get_default_session())
+            return message
         if isinstance(snap, dict):
-            # carry verbatim unless the message names an id this process owns:
-            # a session without a session_id, or for an id we never folded
-            # (e.g. a relay's remote session), is left exactly as received (§5).
-            sid = snap.get("session_id")
-            if sid:
+            # §4.1/§4.3: a session that names no id IS the default session, so
+            # resolve an absent session_id to the reserved default id and stamp
+            # it. A NAMED id this process never folded (e.g. a relay's remote
+            # session) is carried verbatim — we never overwrite one we don't own.
+            sid = snap.get("session_id") or DEFAULT_SESSION_ID
+            if sid == DEFAULT_SESSION_ID:
+                ctx["session"] = cls._wire_dict(cls.get_default_session())
+            else:
                 live = cls.sessions.get(sid)
                 if live is not None:
                     ctx["session"] = cls._wire_dict(live)
-        elif snap is None:
-            # no session at all: inject the caller's bound session (the emit
-            # inject-when-missing path; forward/reply never reach here).
-            live = cls.sessions.get(default_session_id)
-            ctx["session"] = cls._wire_dict(
-                live if live is not None else cls.get_default_session())
         return message
 
     @classmethod
