@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.2a1) (2026-06-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.1a1...1.2.2a1)
+
+**Merged pull requests:**
+
+- fix: default session folds like any session \(drop owner-only reservation\) [\#71](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/71) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.2.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.1a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.0a1...1.2.1a1)
