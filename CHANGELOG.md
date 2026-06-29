@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.0a1) (2026-06-29)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.1.0a1...1.2.0a1)
+
+**Merged pull requests:**
+
+- feat: SessionManager singleton registry + forward/reply session stamping [\#67](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/67) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.1.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.1.0a1) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.0.0a1...1.1.0a1)
