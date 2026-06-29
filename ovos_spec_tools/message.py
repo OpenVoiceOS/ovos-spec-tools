@@ -72,6 +72,30 @@ RoutingValue = Union[str, List[str], None]
 DEFAULT_SESSION_ID = "default"
 
 
+def _stamp_live_session(message: "Message") -> "Message":
+    """Refresh a derived message's ``session`` to the live value for its id.
+
+    ``forward`` / ``reply`` deep-copy the originating message's ``session``
+    snapshot (§5.1/§5.2). That snapshot may predate the current handler's
+    mutations, so this re-stamps the derived message with the live session for
+    its id via :meth:`SessionManager.sync_message_session` — see that class for
+    why this is always either a meaningful refresh or a no-op, never a discard.
+
+    Best-effort and non-invasive: a message with **no** session is left as-is
+    (§5 carries no session forward), and a session id the registry never folded
+    is left untouched — so this is transparent to pure spec usage that never
+    wires a registry (the session is carried over verbatim, as §5 mandates).
+    """
+    try:
+        ctx = getattr(message, "context", None) or {}
+        if not ctx.get("session"):
+            return message
+        from ovos_spec_tools.session import SessionManager
+        return SessionManager.sync_message_session(message)
+    except Exception:  # never let session bookkeeping break message derivation
+        return message
+
+
 def _freeze(value: Any) -> Any:
     """Recursively convert ``value`` into a deterministic, hashable form.
 
@@ -420,8 +444,9 @@ class Message:
             A new Message of ``self``'s runtime class (subclasses propagate,
             see :ref:`Subclassing`).
         """
-        return self.__class__(
+        derived = self.__class__(
             msg_type, data or {}, deepcopy(self.context))
+        return _stamp_live_session(derived)
 
     def reply(self, msg_type: str,
               data: Optional[Dict[str, Any]] = None,
@@ -475,7 +500,8 @@ class Message:
                 dst[0] if isinstance(dst, list) and dst else dst)
         if src is not None:
             new_context["destination"] = src
-        return self.__class__(msg_type, data or {}, new_context)
+        return _stamp_live_session(
+            self.__class__(msg_type, data or {}, new_context))
 
     def response(self, data: Optional[Dict[str, Any]] = None,
                  context: Optional[Dict[str, Any]] = None) -> Message:

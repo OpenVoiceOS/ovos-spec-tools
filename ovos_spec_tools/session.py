@@ -42,12 +42,14 @@ import json
 import logging
 import time
 from copy import deepcopy
+from threading import Lock
 from typing import Any, Dict, List, Optional, Union
 
 from ovos_spec_tools.message import DEFAULT_SESSION_ID, _freeze
 
 __all__ = [
     "Session",
+    "SessionManager",
     "MalformedSession",
     "DEFAULT_SESSION_ID",
     "DEFAULT_CONVERSE_HANDLERS_CAP",
@@ -653,6 +655,30 @@ class Session:
         overrides on a materialized default."""
         return cls(session_id=DEFAULT_SESSION_ID)
 
+    def update_from(self, other: "Session") -> "Session":
+        """Fold ``other``'s state onto this session in place, per §2 semantics.
+
+        Applied with full OVOS-SESSION-1 §2 deserialization rather than a raw
+        ``__dict__`` merge: the incoming state is round-tripped through
+        :meth:`serialize` / :meth:`deserialize`, so a key present on the wire
+        overrides this session's value (even when empty) and a null / omitted
+        key resolves to the spec default — exactly as a freshly received message
+        would parse. Round-tripping also rebuilds nested state, so the live
+        object never aliases ``other``'s mutable sub-objects.
+
+        ``deserialize`` is resolved through ``type(self)`` so a subclass (e.g.
+        the ovos-bus-client ``Session`` with its legacy projections) rebuilds as
+        itself. The ``session_id`` is preserved — it is the registry key under
+        the singleton :class:`SessionManager` and must not drift even if
+        ``other`` carries a different one.
+        """
+        if other is self:
+            return self
+        rebuilt = type(self).deserialize(other.serialize())
+        rebuilt.session_id = self.session_id
+        self.__dict__ = rebuilt.__dict__
+        return self
+
     # --- value semantics ----------------------------------------------------
 
     def __eq__(self, other: object) -> bool:
@@ -671,3 +697,200 @@ class Session:
 
     def __repr__(self) -> str:
         return f"Session({self.to_dict()!r})"
+
+
+class SessionManager:
+    """Process-wide registry of live :class:`Session` objects — one per id.
+
+    .. note::
+        ``SessionManager`` is an **implementation detail, not part of any
+        spec**. OVOS-SESSION-1 only mandates the *wire contract* (§4): every
+        Message carries a serialized session snapshot, and a derived Message
+        (``forward`` / ``reply`` / ``response``) carries the session of the
+        Message it was derived from. ``SessionManager`` is one powerful *way*
+        to honour that contract inside a single process; nothing on the wire
+        depends on it.
+
+    Why a singleton per id
+    ----------------------
+    The bus is value-passing: state travels as the serialized ``session`` on
+    each Message, and any component can hold a reference to "the session" while
+    a flow runs. If every ``get()`` rebuilt a fresh ``Session`` from the
+    incoming snapshot, a reference taken early would silently go stale the
+    moment a later message flipped a field. Keeping exactly **one live object
+    per ``session_id``** — and *folding* each incoming snapshot onto it
+    (:meth:`update` / :meth:`get`, last-writer-wins per §2) — means a held
+    reference always observes the latest state. That is the whole benefit.
+
+    Why stamping ``forward`` / ``reply`` is always correct (the key insight)
+    -----------------------------------------------------------------------
+    ``Message.forward`` / ``Message.reply`` deep-copy the *originating*
+    message's context, **including its ``session`` snapshot** (§5.1/§5.2 carry
+    the session over). But that snapshot was frozen when the originating
+    message was built — possibly *before* the current handler mutated the
+    session. So at derivation time the registry re-stamps the new Message with
+    the live session for its id (:meth:`sync_message_session`). This is sound,
+    by exhaustive cases:
+
+    1. **An intervening message updated this session** between handler-start
+       and the ``forward``. SESSION-1 §4 says that message carried the new
+       session, so a correct receiver folded it onto the singleton — the live
+       session *is* the update. Stamping propagates it. (Failing to propagate
+       it — shipping the stale pre-mutation copy — would be the implementation
+       bug; the spec predicts the update exists and must not be discarded.)
+    2. **No message arrived in that window.** The singleton equals what the
+       handler started with plus its own in-place mutations (which go through
+       the singleton). Stamping is then a **no-op** with respect to intent —
+       it re-serializes the same state.
+
+    Either way the derived Message leaves with the freshest session for its id;
+    the stamp is *either a meaningful refresh or a no-op, never a discard*.
+    This is what lets downstream consumers trust that the ``session`` on any
+    message they receive is current, without re-querying anything.
+
+    Canonical example
+    -----------------
+    The universal handler shape — read, mutate, derive, emit::
+
+        sess = SessionManager.get(message)   # fold incoming snapshot, get the singleton
+        sess.activate_skill("my.skill")      # mutate the one live object for this id
+        reply = message.forward("my.skill.activate")
+        #   forward() deep-copied message.context["session"] — the PRE-activation
+        #   snapshot. sync_message_session re-stamps reply with the live (now
+        #   skill-active) session, so the activation rides out on the wire.
+        bus.emit(reply)                      # consumers fold the fresh session back
+
+    Without the stamp, ``reply`` would carry a session with ``my.skill`` *not*
+    active; a consumer folding it would regress the singleton — the exact
+    desync this guards against.
+
+    Pluggability
+    ------------
+    ``session_cls`` lets a downstream layer (e.g. ovos-bus-client, whose
+    ``Session`` adds legacy projections) point the registry at a subclass so
+    folds/stamps build the richer object. Construction goes through
+    ``deserialize`` to stay agnostic of subclass ``__init__`` signatures.
+    """
+
+    #: Session class the registry builds; override downstream to a subclass.
+    session_cls = Session
+    #: the singleton for the reserved "default" id (lazily materialized).
+    default_session: Optional["Session"] = None
+    #: id -> the one live Session object for that id.
+    sessions: Dict[str, "Session"] = {}
+    _lock = Lock()
+
+    @classmethod
+    def _wire_dict(cls, sess: "Session") -> Dict[str, Any]:
+        """Return ``sess`` as a wire dict.
+
+        ``Session.serialize`` returns a JSON string here, but a subclass
+        (ovos-bus-client) overrides it to return a dict carrying extra legacy
+        projection keys. Normalise both to a dict so the richer shape, when
+        present, survives onto ``message.context["session"]``.
+        """
+        data = sess.serialize()
+        if isinstance(data, (str, bytes, bytearray)):
+            data = json.loads(data)
+        return data
+
+    @classmethod
+    def get_default_session(cls) -> "Session":
+        """Return (materializing once) the singleton for the reserved default id."""
+        if (cls.default_session is None
+                or cls.default_session.session_id != DEFAULT_SESSION_ID):
+            cls.default_session = cls.session_cls.deserialize(
+                {"session_id": DEFAULT_SESSION_ID})
+            cls.sessions[DEFAULT_SESSION_ID] = cls.default_session
+        return cls.default_session
+
+    @classmethod
+    def _store(cls, sess: "Session") -> "Session":
+        """Register ``sess`` and return the one live object for its id.
+
+        When the id is already known the incoming snapshot is *folded* onto the
+        existing instance (:meth:`Session.update_from`, §2 last-writer-wins) and
+        that object — never the snapshot — is returned, so object identity per
+        id is stable for the process lifetime.
+        """
+        with cls._lock:
+            existing = cls.sessions.get(sess.session_id)
+            if existing is not None and existing is not sess:
+                existing.update_from(sess)
+                sess = existing
+            cls.sessions[sess.session_id] = sess
+            if sess.session_id == DEFAULT_SESSION_ID:
+                cls.default_session = sess
+        return sess
+
+    @classmethod
+    def update(cls, sess: "Session") -> "Session":
+        """Fold ``sess`` onto the singleton for its id; return the live object."""
+        if not sess:
+            raise ValueError("Expected Session and got None")
+        return cls._store(sess)
+
+    @classmethod
+    def get(cls, message: Optional["object"] = None) -> "Session":
+        """Return the live singleton for ``message``'s session (folding its snapshot).
+
+        The inbound half of the contract: a received message's ``session``
+        snapshot is folded onto the singleton for its id and that live object is
+        returned. With no message (or no session on it) the default session is
+        returned. The reserved ``default`` id is not folded from arbitrary
+        messages — only its owner mutates it.
+        """
+        default = cls.get_default_session()
+        if message is None:
+            return default
+        ctx = getattr(message, "context", None) or {}
+        snap = ctx.get("session")
+        if snap is None:
+            return default
+        msg_sess = cls.session_cls.deserialize(snap)
+        if msg_sess.session_id and msg_sess.session_id != DEFAULT_SESSION_ID:
+            return cls._store(msg_sess)
+        return default
+
+    @classmethod
+    def sync_message_session(cls, message: "object",
+                             default_session_id: str = DEFAULT_SESSION_ID
+                             ) -> "object":
+        """Stamp an outgoing/derived message with the live session for its own id.
+
+        The outbound half of the contract (see the class docstring for *why*
+        this is always either a refresh or a no-op). Keyed off the message's
+        **own** ``session_id`` so a derived message addressed to a different
+        session is stamped from *that* session, not the caller's. A session id
+        this process does not hold is left untouched — we never overwrite a
+        session we never folded (e.g. a relay forwarding a remote one). A
+        message with no session at all gets the default-session stamp.
+        """
+        ctx = message.context
+        snap = ctx.get("session")
+        if snap is None:
+            # §4.3: a Message without a session implies the default session —
+            # stamp it (also the emit inject-when-missing path).
+            ctx["session"] = cls._wire_dict(cls.get_default_session())
+            return message
+        if isinstance(snap, dict):
+            # §4.1/§4.3: a session that names no id IS the default session, so
+            # resolve an absent session_id to the reserved default id and stamp
+            # it. A NAMED id this process never folded (e.g. a relay's remote
+            # session) is carried verbatim — we never overwrite one we don't own.
+            sid = snap.get("session_id") or DEFAULT_SESSION_ID
+            if sid == DEFAULT_SESSION_ID:
+                ctx["session"] = cls._wire_dict(cls.get_default_session())
+            else:
+                live = cls.sessions.get(sid)
+                if live is not None:
+                    ctx["session"] = cls._wire_dict(live)
+        return message
+
+    @classmethod
+    def reset_default_session(cls) -> "Session":
+        """Replace the default session with a fresh empty one and return it."""
+        with cls._lock:
+            sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+            cls.default_session = cls.sessions[DEFAULT_SESSION_ID] = sess
+        return sess
