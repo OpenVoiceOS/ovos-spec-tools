@@ -845,20 +845,20 @@ class SessionManager:
         The inbound half of the contract: a received message's ``session``
         snapshot is folded onto the singleton for its id and that live object is
         returned. With no message (or no session on it) the default session is
-        returned. The reserved ``default`` id is not folded from arbitrary
-        messages — only its owner mutates it.
+        returned. The default session is a normal session per §4 — it folds like
+        any other (there is no owner-only reservation; the wire is value-passing).
         """
-        default = cls.get_default_session()
         if message is None:
-            return default
+            return cls.get_default_session()
         ctx = getattr(message, "context", None) or {}
         snap = ctx.get("session")
         if snap is None:
-            return default
+            return cls.get_default_session()
         msg_sess = cls.session_cls.deserialize(snap)
-        if msg_sess.session_id and msg_sess.session_id != DEFAULT_SESSION_ID:
-            return cls._store(msg_sess)
-        return default
+        if not msg_sess.session_id:
+            # a session naming no id IS the default (§4.1/§4.3)
+            msg_sess.session_id = DEFAULT_SESSION_ID
+        return cls._store(msg_sess)
 
     @classmethod
     def sync_message_session(cls, message: "object",
