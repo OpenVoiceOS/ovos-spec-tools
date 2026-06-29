@@ -796,13 +796,21 @@ class SessionManager:
 
     @classmethod
     def get_default_session(cls) -> "Session":
-        """Return (materializing once) the singleton for the reserved default id."""
-        if (cls.default_session is None
-                or cls.default_session.session_id != DEFAULT_SESSION_ID):
-            cls.default_session = cls.session_cls.deserialize(
-                {"session_id": DEFAULT_SESSION_ID})
-            cls.sessions[DEFAULT_SESSION_ID] = cls.default_session
-        return cls.default_session
+        """Return (materializing once) the singleton for the reserved default id.
+
+        The shared ``sessions`` dict is the single source of truth — keyed off
+        ``sessions[DEFAULT_SESSION_ID]``, never a per-class ``default_session``
+        mirror. This matters when a subclass (ovos-bus-client) and this base
+        both reach the registry: a class-attribute mirror would shadow per class
+        and diverge, whereas the dict is one shared object. ``default_session``
+        is kept as a convenience mirror but is always re-synced from the dict.
+        """
+        sess = cls.sessions.get(DEFAULT_SESSION_ID)
+        if sess is None:
+            sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
+            cls.sessions[DEFAULT_SESSION_ID] = sess
+        cls.default_session = sess
+        return sess
 
     @classmethod
     def _store(cls, sess: "Session") -> "Session":
