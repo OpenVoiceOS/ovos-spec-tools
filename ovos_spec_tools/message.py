@@ -488,6 +488,10 @@ class Message:
             addressing information.
         """
         new_context = deepcopy(self.context)
+        # an explicit ``session`` in the caller-supplied ``context`` is an
+        # author's choice — honour it and skip the live-session refresh, so a
+        # deliberately-constructed session is never overwritten by the registry.
+        explicit_session = bool(context) and "session" in context
         if context:
             new_context.update(context)
         # §5.2 swap. Read both sides BEFORE writing to avoid clobbering.
@@ -500,8 +504,8 @@ class Message:
                 dst[0] if isinstance(dst, list) and dst else dst)
         if src is not None:
             new_context["destination"] = src
-        return _stamp_live_session(
-            self.__class__(msg_type, data or {}, new_context))
+        derived = self.__class__(msg_type, data or {}, new_context)
+        return derived if explicit_session else _stamp_live_session(derived)
 
     def response(self, data: Optional[Dict[str, Any]] = None,
                  context: Optional[Dict[str, Any]] = None) -> Message:
