@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.3.0a1) (2026-07-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.3a1...1.3.0a1)
+
+**Merged pull requests:**
+
+- feat: bridge per-skill `<skill_id>:stop` to legacy `<skill_id>.stop` [\#75](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/75) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.2.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.3a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.2a1...1.2.3a1)
