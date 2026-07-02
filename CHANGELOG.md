@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.4.0a1) (2026-07-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.3.0a1...1.4.0a1)
+
+**Merged pull requests:**
+
+- feat: OVOS-CONTEXT-1 gating & decay helpers \(shared\) [\#77](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/77) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.3.0a1) (2026-07-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.3a1...1.3.0a1)
