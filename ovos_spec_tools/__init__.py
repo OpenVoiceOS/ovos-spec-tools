@@ -76,6 +76,16 @@ from ovos_spec_tools.messages import (
     SpecMessage,
     migration_counterpart,
 )
+from ovos_spec_tools.context import (
+    gate_satisfied,
+    context_supplied_slots,
+    normalize_declaration,
+    resolve_key,
+    is_live,
+    prune,
+    decrement,
+    enforce_cap,
+)
 from ovos_spec_tools.prompt import PromptRenderer, render_prompt
 from ovos_spec_tools.session import (
     DEFAULT_CONVERSE_HANDLERS_CAP,
