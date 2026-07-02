@@ -294,6 +294,45 @@ class TestMigrationCounterpart(unittest.TestCase):
             self.assertEqual(migration_counterpart(spec), legacy)
 
 
+class TestStopDispatchPattern(unittest.TestCase):
+    """OVOS-STOP-1 §2: per-skill `<skill_id>:stop` bridges to `<skill_id>.stop`."""
+
+    def setUp(self):
+        self.t = NamespaceTranslator(modernize=True, emit_legacy=True)
+
+    def test_counterpart_of_stop_dispatch(self):
+        self.assertEqual(migration_counterpart("lights.skill:stop"),
+                         "lights.skill.stop")
+
+    def test_dotted_skill_id_preserved(self):
+        self.assertEqual(migration_counterpart("ovos.skill.foo:stop"),
+                         "ovos.skill.foo.stop")
+
+    def test_non_stop_intent_not_matched(self):
+        self.assertIsNone(migration_counterpart("lights.skill:turn_on"))
+
+    def test_global_stop_not_matched(self):
+        # `<pipeline_id>:global_stop` is the plugin's own self-dispatch, not a
+        # per-skill `:stop`, so it must not bridge.
+        self.assertIsNone(migration_counterpart("ovos-stop-pipeline-plugin:global_stop"))
+
+    def test_static_map_takes_precedence(self):
+        # `mycroft.stop` ends in `.stop` but is the global rename in the map.
+        self.assertEqual(migration_counterpart("mycroft.stop"), "ovos.stop")
+
+    def test_send_side_mirrors_legacy_stop(self):
+        self.assertEqual(self.t.counterpart_topics("lights.skill:stop"),
+                         ["lights.skill.stop"])
+
+    def test_emit_legacy_off_no_mirror(self):
+        t = NamespaceTranslator(modernize=True, emit_legacy=False)
+        self.assertEqual(t.counterpart_topics("lights.skill:stop"), [])
+
+    def test_is_migrated(self):
+        self.assertTrue(self.t.is_migrated("lights.skill:stop"))
+        self.assertFalse(self.t.is_migrated("lights.skill:turn_on"))
+
+
 class TestPayloadTransforms(unittest.TestCase):
     """Per-topic payload translation (MIGRATION_PAYLOAD_TRANSFORMS)."""
 
