@@ -117,6 +117,7 @@ defines exactly three mutation pathways and the bus one is ``ovos.session.sync``
 (§5.3), so no ``ovos.context.*`` topic is spec-defined.
 """
 import json as _json
+import re as _re
 import time
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -546,6 +547,24 @@ MIGRATION_PAYLOAD_TRANSFORMS: Dict[str, Tuple[PayloadTransform, PayloadTransform
 }
 
 
+#: OVOS-STOP-1 §2: a targeted stop is dispatched on the reserved intent_name
+#: ``stop`` (the PIPELINE-1 ``<skill_id>:stop`` topic). ``stop`` is reserved —
+#: no skill may register it (OVOS-INTENT-4 §5.3) — so ``<skill_id>:stop`` is
+#: unambiguously that dispatch and bridges to the legacy ``<skill_id>.stop`` a
+#: skill already honours. This is a *pattern* rename (per-skill), so it cannot
+#: live in the static :data:`MIGRATION_MAP`; the counterpart is computed. The
+#: bridge is one-directional (spec ``:stop`` → legacy ``.stop``): the reverse
+#: ``<x>.stop`` form is ambiguous (``mycroft.stop`` etc.) and is covered by the
+#: explicit :data:`MIGRATION_MAP` entries instead.
+_STOP_DISPATCH_RE = _re.compile(r"^(?P<skill_id>[^:]+):stop$")
+
+
+def _stop_dispatch_legacy(topic: str) -> Optional[str]:
+    """Legacy ``<skill_id>.stop`` counterpart of a spec ``<skill_id>:stop``, else None."""
+    m = _STOP_DISPATCH_RE.match(topic)
+    return f"{m.group('skill_id')}.stop" if m else None
+
+
 def migration_counterpart(topic: str) -> Optional[str]:
     """Return the other-namespace counterpart of a migrating topic, else ``None``.
 
@@ -565,7 +584,10 @@ def migration_counterpart(topic: str) -> Optional[str]:
     if topic in MIGRATION_MAP:
         # legacy -> spec; ``.value`` so the return is a plain str, not a member
         return MIGRATION_MAP[topic].value
-    return SPEC_TO_LEGACY.get(topic)  # spec -> legacy, or None when unmapped
+    legacy = SPEC_TO_LEGACY.get(topic)  # spec -> legacy, or None when unmapped
+    if legacy is not None:
+        return legacy
+    return _stop_dispatch_legacy(topic)  # spec <skill_id>:stop -> <skill_id>.stop
 
 
 class NamespaceTranslator:
@@ -640,6 +662,10 @@ class NamespaceTranslator:
             return [MIGRATION_MAP[msg_type].value]
         if self.emit_legacy and msg_type in SPEC_TO_LEGACY:
             return [SPEC_TO_LEGACY[msg_type]]
+        if self.emit_legacy:
+            legacy = _stop_dispatch_legacy(msg_type)  # <skill_id>:stop -> <skill_id>.stop
+            if legacy is not None:
+                return [legacy]
         return []
 
     def translate_payload(self, from_topic: str, to_topic: str,
@@ -706,7 +732,8 @@ class NamespaceTranslator:
             — i.e. it has a counterpart and a handler subscribed to both names
             should run it through :meth:`new_mirror_guard`.
         """
-        return topic in MIGRATION_MAP or topic in SPEC_TO_LEGACY
+        return (topic in MIGRATION_MAP or topic in SPEC_TO_LEGACY
+                or _stop_dispatch_legacy(topic) is not None)
 
     def new_mirror_guard(self,
                          clock: Optional[Callable[[], float]] = None
