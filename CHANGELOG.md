@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.4.1a1) (2026-07-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.4.0a1...1.4.1a1)
+
+**Merged pull requests:**
+
+- fix: recognize .blacklist paired with .entity/{slot} for slot-value exclusion [\#80](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/80) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.4.0a1) (2026-07-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.3.0a1...1.4.0a1)
