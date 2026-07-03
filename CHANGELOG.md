@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.0a1) (2026-07-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.4.1a1...1.5.0a1)
+
+**Merged pull requests:**
+
+- feat: context\_slot\_candidates — CONTEXT-1 §7 pre-match slot injection [\#79](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/79) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.4.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.4.1a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.4.0a1...1.4.1a1)
