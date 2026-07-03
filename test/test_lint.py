@@ -82,6 +82,43 @@ def test_legacy_extension_is_a_warning(tmp_path):
     assert any(".rx" in f.message for f in _warnings(findings))
 
 
+def test_blacklist_paired_with_intent_has_no_warning(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "bright.intent", "make it (bright|light)\n")
+    _write(locale / "en-US" / "bright.blacklist", "sunrise\n")
+    assert not any("blacklist" in f.message
+                   for f in _warnings(lint_locale(locale)))
+
+
+def test_blacklist_paired_with_entity_has_no_warning(tmp_path):
+    # §4.3 slot-value exclusion: a .blacklist pairs by base name with an
+    # .entity whose values it excludes from filling the slot.
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "ask.intent", "who is {person}\n")
+    _write(locale / "en-US" / "person.entity", "alice\nbob\n")
+    _write(locale / "en-US" / "person.blacklist", "he\nshe\nthey\n")
+    assert not any("blacklist" in f.message
+                   for f in _warnings(lint_locale(locale)))
+
+
+def test_blacklist_paired_with_inline_slot_has_no_warning(tmp_path):
+    # The excluded slot may be declared only as an inline `{slot}` in a
+    # template, with no sibling .entity (an open-vocabulary slot).
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "search.intent", "look up {query}\n")
+    _write(locale / "en-US" / "query.blacklist", "it\nthat\n")
+    assert not any("blacklist" in f.message
+                   for f in _warnings(lint_locale(locale)))
+
+
+def test_unpaired_blacklist_is_a_warning(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    _write(locale / "en-US" / "orphan.blacklist", "nope\n")
+    assert any("blacklist" in f.message
+               for f in _warnings(lint_locale(locale)))
+
+
 def test_file_outside_a_language_directory_is_a_warning(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "stray.intent", "hello world\n")

@@ -317,6 +317,16 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
     # Per-role spec-version gate (a role newer than the target is flagged),
     # plus the `.blacklist` pairing check (§4.3).
     intent_names = {stem for (ext, stem) in first_seen if ext == ".intent"}
+    # §4.3: a .blacklist pairs by base name with EITHER an .intent (match
+    # suppression) OR an .entity / vocabulary (slot-value exclusion). Slot
+    # names may also be declared inline as `{slot}` in an .intent template.
+    slot_names = {stem for (ext, stem) in first_seen if ext in (".entity", ".voc")}
+    for (ext, stem), path in first_seen.items():
+        if ext == ".intent":
+            try:
+                slot_names.update(declared_slots(read_resource_file(path)))
+            except (OSError, UnicodeError):
+                pass
     for path in role_files:
         since = _ROLE_SINCE.get(path.suffix)
         if since is not None and spec_version < since:
@@ -324,13 +334,16 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
                 WARNING, str(path),
                 f"the {path.suffix} role requires spec version {since}; a "
                 f"version-{spec_version} runtime ignores it"))
-        if path.suffix == ".blacklist" and path.stem not in intent_names:
-            # §4.3: a .blacklist "is paired by base name with exactly one
-            # .intent" whose match it suppresses; an unpaired one is inert.
+        if (path.suffix == ".blacklist"
+                and path.stem not in intent_names
+                and path.stem not in slot_names):
+            # §4.3: an unpaired .blacklist — matching neither an .intent to
+            # suppress nor an .entity/{slot}/vocabulary to exclude — is inert.
             findings.append(Finding(
                 WARNING, str(path),
-                f"blacklist {path.stem!r} has no matching "
-                f"{path.stem}.intent to suppress (OVOS-INTENT-2 §4.3)"))
+                f"blacklist {path.stem!r} has no matching {path.stem}.intent "
+                f"to suppress nor {path.stem}.entity/{{{path.stem}}} slot to "
+                f"exclude (OVOS-INTENT-2 §4.3)"))
 
     # Vocabularies, for resolving <name> references during expansion.
     vocabularies: Dict[str, List[str]] = {}
