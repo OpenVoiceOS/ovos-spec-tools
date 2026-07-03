@@ -196,6 +196,31 @@ def context_supplied_slots(intent_context: Dict[str, Any],
     return supplied
 
 
+def context_slot_candidates(intent_context: Dict[str, Any],
+                            requires: Optional[List[Union[str, Dict]]],
+                            slot_names: List[str],
+                            owner_id: Optional[str],
+                            now: Optional[float] = None) -> Dict[str, Any]:
+    """OVOS-CONTEXT-1 §7 — context slot candidates offered BEFORE matching.
+
+    For each ``requires_context`` key that also names a slot / vocabulary of
+    the intent definition and whose §3.1-selected entry has a live non-null
+    ``value``, return ``{key: value}``. The matcher offers each value as a
+    candidate for that slot before matching — a keyword engine treats it as the
+    keyword, a template engine as a slot hint — and a value the utterance itself
+    produces for the same slot replaces the candidate.
+
+    @param intent_context: the flat ``session.intent_context`` map.
+    @param requires: the intent's ``requires_context`` declarations.
+    @param slot_names: the slot / vocabulary names of the intent definition.
+    @param owner_id: the declaring intent's ``skill_id`` / ``pipeline_id``.
+    @param now: current Unix time; defaults to ``time.time()``.
+    @return: a mapping of slot-name -> candidate value (empty if none apply).
+    """
+    return context_supplied_slots(intent_context, requires, slot_names,
+                                  owner_id, filled_slots=None, now=now)
+
+
 # ---------------------------------------------------------------------------
 # §4 — decay lifecycle (stateless; operates on a passed-in intent_context map)
 # ---------------------------------------------------------------------------

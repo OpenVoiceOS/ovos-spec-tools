@@ -79,6 +79,7 @@ from ovos_spec_tools.messages import (
 from ovos_spec_tools.context import (
     gate_satisfied,
     context_supplied_slots,
+    context_slot_candidates,
     normalize_declaration,
     resolve_key,
     is_live,
