@@ -2,8 +2,8 @@ import time
 import unittest
 
 from ovos_spec_tools.context import (
-    gate_satisfied, context_supplied_slots, normalize_declaration,
-    resolve_key, is_live, prune, decrement, enforce_cap,
+    gate_satisfied, context_supplied_slots, context_slot_candidates,
+    normalize_declaration, resolve_key, is_live, prune, decrement, enforce_cap,
 )
 
 
@@ -100,3 +100,32 @@ class TestDecay(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSlotCandidates(unittest.TestCase):
+    def test_candidate_for_declared_slot(self):
+        ctx = {"x:room": {"value": "kitchen"}}
+        got = context_slot_candidates(ctx, ["room"], "x")
+        self.assertEqual(got, {"room": "kitchen"})
+
+    def test_no_candidate_for_slot_without_entry(self):
+        ctx = {"x:flag": {"value": "v"}}
+        self.assertEqual(context_slot_candidates(ctx, ["room"], "x"), {})
+
+    def test_no_candidate_for_flag_value(self):
+        ctx = {"x:room": {"value": None}}
+        self.assertEqual(context_slot_candidates(ctx, ["room"], "x"), {})
+
+    def test_dead_entry_not_a_candidate(self):
+        ctx = {"x:room": {"value": "kitchen", "turns_remaining": 0}}
+        self.assertEqual(context_slot_candidates(ctx, ["room"], "x"), {})
+
+    def test_shared_entry_resolved_without_declaration(self):
+        ctx = {"person": {"value": "Bob"}}
+        self.assertEqual(context_slot_candidates(ctx, ["person"], "bio.skill"),
+                         {"person": "Bob"})
+
+    def test_private_takes_precedence_over_shared(self):
+        ctx = {"bio.skill:person": {"value": "Alice"}, "person": {"value": "Bob"}}
+        self.assertEqual(context_slot_candidates(ctx, ["person"], "bio.skill"),
+                         {"person": "Alice"})
