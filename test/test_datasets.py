@@ -169,9 +169,27 @@ class TestExportToLocale:
             assert "Bob" in lines
 
     def test_round_trip_small(self):
-        """Load a single row, export, verify the intent file has the template."""
-        rows = load_dataset_templates("hassil-intents", lang="en", streaming=False)
-        # Only keep first 3 rows to make it fast
+        """Load rows through the real loader (Hub call stubbed), export, and
+        verify the intent file carries the template."""
+        raw_rows = [
+            {
+                "intent_id": "HassTurnOn:default",
+                "template": "<turn> on the {name}",
+                "slots": [{"name": "name", "examples": ["kitchen light"]}],
+                "expansions": [{"keyword": "turn", "values": ["turn", "switch"]}],
+            },
+            {
+                "intent_id": "HassTurnOff:default",
+                "template": "<turn> off the {name}",
+                "slots": [{"name": "name", "examples": ["kitchen light"]}],
+                "expansions": [{"keyword": "turn", "values": ["turn", "switch"]}],
+            },
+        ]
+
+        # stub the HuggingFace Hub call so the real load_dataset_templates
+        # normalization runs against an in-memory fixture (no network)
+        with patch("datasets.load_dataset", return_value=iter(raw_rows)):
+            rows = load_dataset_templates("hassil-intents", lang="en", streaming=False)
         first = [rows[0], rows[1]]
 
         with tempfile.TemporaryDirectory() as tmp:

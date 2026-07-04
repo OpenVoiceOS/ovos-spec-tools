@@ -33,6 +33,8 @@ datasets = [
 test = [
     "pytest",
     "langcodes",
+    # the dataset loader/export tests exercise the HF integration for real
+    "datasets",
 ]
 
 [project.scripts]
