@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
 
@@ -390,6 +391,24 @@ class Message:
         if not isinstance(obj, dict):
             raise MalformedMessage(
                 "Message payload must be a JSON object (§2)")
+        # TEMPORARY legacy-compat fold (NOT part of OVOS-MSG-1).
+        # The §2 wire key is ``type``; every conformant OVOS producer emits
+        # it. One non-conformant producer — the external pure-Rust bus
+        # (OscillateLabsLLC/ovos-rust-messagebus) — serializes its struct
+        # field name and greets clients with ``msg_type`` instead. Rejecting
+        # that greeting turns a cosmetic mismatch into a crash/reconnect loop
+        # in every listener (ovos-dinkum-listener#240). As a consumer we fold
+        # the well-known legacy alias ``msg_type`` -> ``type`` (Postel) rather
+        # than reject; ``serialize`` stays strict-``type``. Remove once the
+        # Rust bus emits ``type`` — tracked upstream.
+        if "msg_type" in obj and "type" not in obj:
+            warnings.warn(
+                "received a message keyed 'msg_type' (legacy/non-conformant "
+                "producer, e.g. ovos-rust-messagebus); OVOS-MSG-1 §2 wire key "
+                "is 'type'. Folding as a temporary compatibility measure.",
+                DeprecationWarning, stacklevel=2)
+            obj = dict(obj)
+            obj["type"] = obj.pop("msg_type")
         # §2: "Other top-level keys MUST NOT appear; consumers MUST
         # reject any Message with unknown top-level keys."
         unknown = set(obj.keys()) - {"type", "data", "context"}

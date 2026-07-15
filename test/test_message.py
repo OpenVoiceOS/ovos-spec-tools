@@ -78,6 +78,28 @@ class TestSerialization:
         with pytest.raises(MalformedMessage):
             Message.deserialize(payload)
 
+    def test_deserialize_folds_legacy_msg_type_alias(self):
+        """TEMPORARY compat: a non-conformant producer (the external
+        pure-Rust bus) greets with the legacy ``msg_type`` key instead of
+        the §2 wire key ``type``. As a consumer we fold it rather than
+        crash the listener (ovos-dinkum-listener#240)."""
+        payload = json.dumps({
+            "msg_type": "connected", "data": {},
+            "context": {"session": {"session_id": "default"}}})
+        with pytest.warns(DeprecationWarning):
+            m = Message.deserialize(payload)
+        assert m.msg_type == "connected"
+        assert m.context == {"session": {"session_id": "default"}}
+
+    def test_deserialize_msg_type_fold_does_not_shadow_real_type(self):
+        """When both ``type`` and ``msg_type`` are present we do NOT fold;
+        ``msg_type`` remains an unknown top-level key and is rejected (§2)."""
+        payload = json.dumps({
+            "type": "ovos.test", "msg_type": "spoof",
+            "data": {}, "context": {}})
+        with pytest.raises(MalformedMessage):
+            Message.deserialize(payload)
+
     def test_deserialize_rejects_missing_type(self):
         with pytest.raises(MalformedMessage):
             Message.deserialize(json.dumps({"data": {}, "context": {}}))
