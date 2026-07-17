@@ -42,7 +42,7 @@ import json
 import logging
 import time
 from copy import deepcopy
-from threading import Lock
+from threading import RLock
 from typing import Any, Dict, List, Optional, Union
 
 from ovos_spec_tools.message import DEFAULT_SESSION_ID, _freeze
@@ -778,7 +778,14 @@ class SessionManager:
     default_session: Optional["Session"] = None
     #: id -> the one live Session object for that id.
     sessions: Dict[str, "Session"] = {}
-    _lock = Lock()
+    # Reentrant: _store folds an incoming snapshot with update_from while
+    # holding this lock, and update_from runs full deserialization
+    # (Session.__init__ -> config load, subclass projections, and any
+    # finalizer that fires during that allocation) which can re-enter the
+    # registry on the same thread — e.g. a garbage-collected skill whose
+    # __del__ emits a deregister message that folds back through
+    # SessionManager.update. A non-reentrant lock self-deadlocks that thread.
+    _lock = RLock()
 
     @classmethod
     def _wire_dict(cls, sess: "Session") -> Dict[str, Any]:
