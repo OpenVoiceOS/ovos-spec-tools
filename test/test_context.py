@@ -87,15 +87,57 @@ class TestDecay(unittest.TestCase):
         self.assertNotIn("a", ctx)
         self.assertIn("b", ctx)
 
+    def test_prune_is_in_place_and_returns_map(self):
+        ctx = {"dead": {"value": "b", "turns_remaining": 0}}
+        out = prune(ctx)
+        self.assertIs(out, ctx)
+        self.assertEqual(ctx, {})
+
     def test_decrement(self):
         ctx = {"a": {"value": "v", "turns_remaining": 2}}
         decrement(ctx)
         self.assertEqual(ctx["a"]["turns_remaining"], 1)
 
+    def test_turns_one_lives_exactly_next_round(self):
+        # §4: turns_remaining 1 is live for the next match round, gone after
+        ctx = {"k": {"value": None, "turns_remaining": 1}}
+        prune(ctx)
+        self.assertIn("k", ctx)
+        decrement(ctx)
+        prune(ctx)
+        self.assertNotIn("k", ctx)
+
+    def test_decrement_only_keys_skips_midispatch(self):
+        # §4.1: an entry synced mid-dispatch is not decremented this turn
+        ctx = {"old": {"value": None, "turns_remaining": 1}}
+        pre = set(ctx.keys())
+        ctx["new"] = {"value": None, "turns_remaining": 1}
+        decrement(ctx, only_keys=pre)
+        self.assertEqual(ctx["old"]["turns_remaining"], 0)
+        self.assertEqual(ctx["new"]["turns_remaining"], 1)
+
+    def test_decrement_leaves_untimed_entries(self):
+        ctx = {"perm": {"value": "x"}}
+        decrement(ctx)
+        self.assertNotIn("turns_remaining", ctx["perm"])
+
     def test_enforce_cap(self):
         ctx = {f"k{i}": {"value": i} for i in range(10)}
         enforce_cap(ctx, max_entries=5)
         self.assertLessEqual(len(ctx), 5)
+
+    def test_cap_evicts_entry_closest_to_expiry(self):
+        ctx = {"near": {"value": "x", "turns_remaining": 1},
+               "far": {"value": "y", "turns_remaining": 99},
+               "perm": {"value": "z"}}
+        enforce_cap(ctx, max_entries=2)
+        self.assertEqual(len(ctx), 2)
+        self.assertNotIn("near", ctx)
+
+    def test_cap_noop_under_limit(self):
+        ctx = {"a": {"value": "1"}, "b": {"value": "2"}}
+        enforce_cap(ctx, max_entries=10)
+        self.assertEqual(set(ctx.keys()), {"a", "b"})
 
 
 if __name__ == "__main__":
