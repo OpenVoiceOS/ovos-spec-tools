@@ -6,7 +6,7 @@ the small, dependency-light primitives those specs describe, in one place, so
 OVOS components and third-party tools stop reimplementing them and drifting
 apart.
 
-It gives you five things:
+It gives you six things:
 
 - an **expander** — turns a sentence template into the set of sentences it
   stands for (OVOS-INTENT-1);
@@ -15,6 +15,9 @@ It gives you five things:
 - **language matching** — normalizes tags and finds the closest one;
 - a **bus message envelope** — the `type` / `data` / `context` JSON contract
   and its `forward` / `reply` / `response` derivations (OVOS-MSG-1);
+- a **dataset loader** — loads, expands, and exports OVOS templates from
+  HuggingFace datasets (compatible with `hass-intent-templates`,
+  `intents-for-eval`, `massive-templates`);
 
 plus **`ovos-spec-lint`**, a command-line linter for locale folders.
 
@@ -38,9 +41,11 @@ are the foundation everything else rests on.
 7. [Bus namespaces](bus-namespaces.md) — the spec topic vocabulary
    (`SpecMessage`), the legacy↔`ovos.*` `MIGRATION_MAP`, and the transparent
    dual-emit bridge with its migration window.
-8. [Linting](linting.md) — validating a locale folder, from the command line
+8. [HuggingFace datasets](datasets.md) — loading templates from HF, expanding
+   them, and exporting to a locale tree.
+9. [Linting](linting.md) — validating a locale folder, from the command line
    or in CI.
-9. [API reference](api-reference.md) — every public name, in brief.
+10. [API reference](api-reference.md) — every public name, in brief.
 
 ### Proving the scope
 

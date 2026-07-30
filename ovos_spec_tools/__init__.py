@@ -109,6 +109,19 @@ from ovos_spec_tools.resources import (
 )
 from ovos_spec_tools.version import __version__
 
+try:
+    from ovos_spec_tools.datasets import (
+        SUPPORTED_DATASETS,
+        expand_hf_template,
+        export_to_locale,
+        load_dataset_templates,
+    )
+except ImportError:
+    SUPPORTED_DATASETS = {}
+    expand_hf_template = None  # type: ignore[assignment]
+    export_to_locale = None  # type: ignore[assignment]
+    load_dataset_templates = None  # type: ignore[assignment]
+
 __all__ = [
     "Message",
     "MalformedMessage",
@@ -156,5 +169,9 @@ __all__ = [
     "SPEC_TO_LEGACY",
     "migration_counterpart",
     "NamespaceTranslator",
+    "load_dataset_templates",
+    "expand_hf_template",
+    "export_to_locale",
+    "SUPPORTED_DATASETS",
     "__version__",
 ]
