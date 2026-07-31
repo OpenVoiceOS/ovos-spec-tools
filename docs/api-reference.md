@@ -162,6 +162,37 @@ The reserved `"default"` value (OVOS-MSG-1 §4.1) — *the Message
 originates from the device itself*. An absent `session` on a Message is
 equivalent for every policy decision.
 
+## Intent dispatch topics — [bus namespaces](bus-namespaces.md)
+
+### `is_intent_topic(msg_type) -> bool`
+
+Whether `msg_type` is a `<skill_id>:<intent_name>` dispatch topic (OVOS-MSG-1
+§2.1.1) — a topic with a `:` and non-empty halves.
+
+### `canonical_intent_topic(msg_type) -> str`
+
+Strip a trailing legacy `.intent` suffix from the intent-name half (after the
+last colon). Idempotent; non-intent topics are returned unchanged.
+
+### `legacy_intent_topic(msg_type) -> str`
+
+The inverse: append the `.intent` suffix. Idempotent; non-intent topics are
+returned unchanged.
+
+### `IntentAliasRegistry()`
+
+Records which registered intents also answer to the legacy suffixed spelling.
+`register(msg_type)` returns the canonical topic and remembers the alias;
+`canonical`, `is_registered`, `has_legacy_alias`, `legacy_alias`, `aliases`,
+`deregister`, and `clear` query and maintain it.
+
+### `legacy_reemit_targets(msg_type, registry=None, blanket=False) -> list[str]`
+
+The extra topic an intent dispatch should also be emitted on, or `[]`. Returns
+the suffixed twin when `registry` recorded an alias, or — with `blanket=True`
+— for every intent topic. Blanket mode invents topics; see
+[bus namespaces](bus-namespaces.md).
+
 ## Linting — [chapter 7](linting.md)
 
 ### `lint_locale(path, spec_version=2) -> list[Finding]`

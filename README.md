@@ -19,6 +19,7 @@ depend on.
 | Prompt renderer | OVOS-INTENT-2 §4.4 |  `prompt.py`  |
 | Language-tag matching | OVOS-INTENT-2 §2.2 |  `language.py` |
 | Bus message envelope | OVOS-MSG-1 |  `message.py`  |
+| Intent dispatch topics | OVOS-MSG-1 §2.1.1 / OVOS-INTENT-4 |  `intent_topics.py`  |
 | `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 |  `lint.py`  |
 
 ## Install
