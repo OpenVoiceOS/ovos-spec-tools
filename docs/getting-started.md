@@ -2,8 +2,9 @@
 
 ## What this package is
 
-OVOS skills ship plain-text resource files — sentence templates, vocabularies,
-spoken-response phrases — grouped by language under a `locale/` folder. Several
+OVOS skills ship plain-text resource files: sentence templates,
+vocabularies, and spoken-response phrases, grouped by language under a
+`locale/` folder. Several
 OVOS components each grew their own code to parse and expand those files, and
 the copies drifted: the same template could expand differently depending on
 which copy ran.
@@ -19,7 +20,7 @@ pip install ovos-spec-tools[langcodes] # adds the smart language fallback
 ```
 
 The core package has **no dependencies**. The optional `langcodes` extra
-improves only one thing — how a missing language falls back to a near one
+improves only one thing: how a missing language falls back to a near one
 (see [Language matching](language-matching.md)); everything else works without
 it.
 
@@ -108,5 +109,8 @@ ovos-spec-lint my-skill/locale
 
 ## Where to next
 
-Continue with [Sentence templates](templates.md) — the grammar is the
+Continue with [Sentence templates](templates.md): the grammar is the
 foundation the resource loader and the dialog renderer both build on.
+
+---
+[Home](README.md) · [Sentence templates →](templates.md)
