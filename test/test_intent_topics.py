@@ -3,11 +3,9 @@ import unittest
 
 from ovos_spec_tools import (
     INTENT_FILE_SUFFIX,
-    IntentAliasRegistry,
     canonical_intent_topic,
     is_intent_topic,
     legacy_intent_topic,
-    legacy_reemit_targets,
 )
 
 
@@ -91,104 +89,6 @@ class TestLegacyIntentTopic(unittest.TestCase):
 
     def test_suffix_constant(self):
         self.assertEqual(INTENT_FILE_SUFFIX, ".intent")
-
-
-class TestIntentAliasRegistry(unittest.TestCase):
-    def setUp(self):
-        self.reg = IntentAliasRegistry()
-
-    def test_canonical_registration_records_no_alias(self):
-        self.assertEqual(self.reg.register("skill.foo:play"), "skill.foo:play")
-        self.assertTrue(self.reg.is_registered("skill.foo:play"))
-        self.assertFalse(self.reg.has_legacy_alias("skill.foo:play"))
-        self.assertIsNone(self.reg.legacy_alias("skill.foo:play"))
-
-    def test_legacy_registration_records_the_alias(self):
-        self.assertEqual(self.reg.register("skill.foo:play.intent"),
-                         "skill.foo:play")
-        self.assertTrue(self.reg.has_legacy_alias("skill.foo:play"))
-        self.assertEqual(self.reg.legacy_alias("skill.foo:play"),
-                         "skill.foo:play.intent")
-
-    def test_both_spellings_collapse_onto_one_key(self):
-        a = self.reg.register("skill.foo:play")
-        b = self.reg.register("skill.foo:play.intent")
-        self.assertEqual(a, b)
-        self.assertEqual(len(tuple(self.reg.aliases())), 1)
-        # queried by either spelling, the answer is the same
-        self.assertTrue(self.reg.is_registered("skill.foo:play.intent"))
-        self.assertTrue(self.reg.has_legacy_alias("skill.foo:play.intent"))
-
-    def test_unregistered_topic(self):
-        self.assertFalse(self.reg.is_registered("skill.foo:play"))
-        self.assertFalse(self.reg.has_legacy_alias("skill.foo:play"))
-
-    def test_deregister_by_either_spelling(self):
-        self.reg.register("skill.foo:play.intent")
-        self.reg.deregister("skill.foo:play")
-        self.assertFalse(self.reg.is_registered("skill.foo:play"))
-        self.assertFalse(self.reg.has_legacy_alias("skill.foo:play"))
-        # deregistering twice, or an unknown topic, is a no-op
-        self.reg.deregister("skill.foo:play")
-        self.reg.deregister("never.seen:x")
-
-    def test_non_intent_topics_are_not_recorded(self):
-        self.assertEqual(self.reg.register("speak"), "speak")
-        self.assertFalse(self.reg.is_registered("speak"))
-        self.assertEqual(tuple(self.reg.aliases()), ())
-
-    def test_canonical_query_needs_no_registration(self):
-        self.assertEqual(self.reg.canonical("skill.foo:play.intent"),
-                         "skill.foo:play")
-
-    def test_clear(self):
-        self.reg.register("skill.foo:play.intent")
-        self.reg.clear()
-        self.assertEqual(tuple(self.reg.aliases()), ())
-        self.assertFalse(self.reg.is_registered("skill.foo:play"))
-
-
-class TestLegacyReemitTargets(unittest.TestCase):
-    def setUp(self):
-        self.reg = IntentAliasRegistry()
-
-    def test_alias_driven_reemit(self):
-        self.reg.register("skill.foo:play.intent")
-        self.assertEqual(legacy_reemit_targets("skill.foo:play", self.reg),
-                         ["skill.foo:play.intent"])
-
-    def test_no_alias_no_reemit(self):
-        self.reg.register("skill.foo:play")
-        self.assertEqual(legacy_reemit_targets("skill.foo:play", self.reg), [])
-
-    def test_no_registry_no_reemit(self):
-        self.assertEqual(legacy_reemit_targets("skill.foo:play"), [])
-
-    def test_blanket_reemits_every_intent_topic(self):
-        self.assertEqual(
-            legacy_reemit_targets("skill.foo:play", blanket=True),
-            ["skill.foo:play.intent"])
-        self.assertEqual(
-            legacy_reemit_targets("skill.foo:play", self.reg, blanket=True),
-            ["skill.foo:play.intent"])
-
-    def test_blanket_still_ignores_non_intent_topics(self):
-        self.assertEqual(legacy_reemit_targets("speak", blanket=True), [])
-        self.assertEqual(
-            legacy_reemit_targets("ovos.intent.register.keyword", blanket=True),
-            [])
-
-    def test_the_mirror_never_cascades(self):
-        self.reg.register("skill.foo:play.intent")
-        self.assertEqual(
-            legacy_reemit_targets("skill.foo:play.intent", self.reg), [])
-        self.assertEqual(
-            legacy_reemit_targets("skill.foo:play.intent", blanket=True), [])
-
-    def test_at_most_one_target(self):
-        self.reg.register("skill.foo:play.intent")
-        self.assertEqual(len(legacy_reemit_targets("skill.foo:play", self.reg,
-                                                   blanket=True)), 1)
 
 
 if __name__ == "__main__":

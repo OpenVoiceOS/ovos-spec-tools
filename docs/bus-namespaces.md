@@ -226,9 +226,8 @@ suffixed topic over the real bus, so the two spellings must coexist for a
 while. `intent_topics` holds that compat, and nothing else does.
 
 ```python
-from ovos_spec_tools import (IntentAliasRegistry, canonical_intent_topic,
-                             is_intent_topic, legacy_intent_topic,
-                             legacy_reemit_targets)
+from ovos_spec_tools import (canonical_intent_topic, is_intent_topic,
+                             legacy_intent_topic)
 
 is_intent_topic("skill.foo:play")                    # True (":" rule)
 canonical_intent_topic("skill.foo:play.intent")      # 'skill.foo:play'
@@ -239,35 +238,20 @@ Both functions are idempotent, and both leave non-intent topics alone. Only
 the part after the **last** colon is touched, so a `skill_id` that itself ends
 in `.intent` survives.
 
-**Registration side.** `IntentAliasRegistry.register()` normalizes whatever
-spelling a consumer registered and remembers if it was the suffixed one. Both
-spellings collapse onto one canonical key, so a consumer that somehow binds
-both fires exactly once:
+A bus bridges the gap with two stateless rules:
 
-```python
-reg = IntentAliasRegistry()
-reg.register("skill.foo:play")           # -> 'skill.foo:play'
-reg.register("skill.foo:play.intent")    # -> 'skill.foo:play', alias recorded
-reg.has_legacy_alias("skill.foo:play")   # True
-```
+1. **Send.** For every canonical intent topic it emits, it also sends the
+   `legacy_intent_topic` twin, marked in `context` as a twin. The canonical
+   frame goes first.
+2. **Receive.** For every suffixed intent topic it receives *without* that
+   marker, it also dispatches the `canonical_intent_topic` form to local
+   handlers.
 
-**Send side.** `legacy_reemit_targets` is the intent-topic counterpart of
-`NamespaceTranslator.counterpart_topics`: it tells the bus which extra topic
-to mirror a dispatch onto.
-
-```python
-legacy_reemit_targets("skill.foo:play", reg)            # ['skill.foo:play.intent']
-legacy_reemit_targets("skill.foo:play")                 # [] — no alias, no mirror
-legacy_reemit_targets("skill.foo:play", blanket=True)   # ['skill.foo:play.intent']
-```
-
-The default is **alias-driven**: the mirror happens only for intents an old
-consumer really registered with the suffix, so no topic is invented. The
-`blanket=True` mode re-emits the suffixed twin of *every* intent dispatch, for
-pure-bus legacy listeners that subscribe without ever registering. It **does**
-invent topics: traffic doubles and any handler bound to both spellings needs
-receive-side dedup. It is off by default and should stay off unless such a
-listener is known to be present.
+The marker is the deduplication. A canonical frame and its marked twin fire
+the canonical handlers exactly once, because rule 2 skips marked frames.
+Suffixed traffic from a genuinely old emitter carries no marker, so rule 2
+modernizes it. No registry of who listens to what is needed: a twin nobody
+listens to costs a few ignored bytes.
 
 Neither the suffixed topic nor the re-emit is normative. The suffix is
 historical leakage; new producers and consumers use canonical topics only.
