@@ -1,7 +1,7 @@
 # Bus Messages
 
 The `Message` class is the on-the-wire envelope that OVOS components
-exchange — utterances coming in, intent matches going out, skills
+exchange: utterances coming in, intent matches going out, skills
 announcing handler outcomes, hosts dispatching to skills. The shape is
 defined by [OVOS-MSG-1][spec] and this module is the reference
 implementation.
@@ -14,7 +14,7 @@ Every Message is a JSON object with exactly three top-level fields:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `type` | string | The topic — `ovos.intent.matched`, `speak`, `<skill_id>:<intent_name>`, … |
+| `type` | string | The topic: `ovos.intent.matched`, `speak`, `<skill_id>:<intent_name>`, … |
 | `data` | object | Topic-specific payload; shape fixed by whichever spec defines `type` |
 | `context` | object | Routing keys, the session carrier, and any layer-2 metadata |
 
@@ -26,35 +26,35 @@ m = Message("speak", {"utterance": "hello"}, {"source": "skill.id"})
 
 The constructor rejects malformed input: an empty `type`, a non-string
 `type`, or a non-`dict` `data` / `context` raise
-`MalformedMessage`. Pass the dicts by reference — they are stored
+`MalformedMessage`. Pass the dicts by reference. They are stored
 as-is; if you need a detached copy use the derivations below.
 
 ## Routing keys
 
 Two `context` keys mark the OVOS/handler-code boundary:
 
-- `source` — opaque identifier of the producer;
-- `destination` — opaque identifier (or list of identifiers) of the
+- `source`: opaque identifier of the producer.
+- `destination`: opaque identifier (or list of identifiers) of the
   intended consumer(s). Absent or empty means **broadcast**.
 
-The envelope treats both as opaque strings — no parsing, no validation
+The envelope treats both as opaque strings, with no parsing and no validation
 beyond "is it there". How identifiers are minted is a deployment
 concern. Hivemind, for example, uses `source` / `destination` to thread
 remote peers through the bus without OVOS itself learning about them.
 
 ## The session carrier
 
-`context.session` is the carrier for one conversational session — the
+`context.session` is the carrier for one conversational session: the
 unit of "this wake-word interaction" or "this HiveMind client
 connection". OVOS-MSG-1 makes two of its keys normative:
 
-- `session.session_id` — string identifier; the value `"default"` is
+- `session.session_id`: string identifier. The value `"default"` is
   **reserved** and means *originates from the device itself* (used by
   `ovos-audio` to keep TTS local).
-- `session.lang` — BCP-47 tag for the user's preferred output language
+- `session.lang`: BCP-47 tag for the user's preferred output language
   (distinct from `data.lang` which describes the payload).
 
-The rest of `session`'s shape is opaque to this Message — full Session
+The rest of `session`'s shape is opaque to this Message. Full Session
 structure is the job of the consumer (typically `ovos-bus-client`'s
 `Session` class or a future session spec).
 
@@ -66,10 +66,10 @@ device-local messages.
 ## The three derivations
 
 Each derivation returns a new Message with the right routing/session
-fields for its role. The runtime class is preserved — subclasses of
+fields for its role. The runtime class is preserved: subclasses of
 `Message` get back instances of their own subclass.
 
-### `forward(type, data)` — relay under a new topic
+### `forward(type, data)`: relay under a new topic
 
 Keeps `context` (including `source`, `destination`, and `session`)
 exactly as it was. The forwarder does **not** become the new `source`;
@@ -80,14 +80,14 @@ ack = m.forward("ovos.utterance.handled", {"id": "u-7"})
 # ack.context == m.context  (deep-copied)
 ```
 
-### `reply(type, data, context=None)` — send back to the asker
+### `reply(type, data, context=None)`: send back to the asker
 
 Copies `context`, then swaps the routing keys so the new Message is
 addressed back to the original producer:
 
 - the new `destination` is the old `source`;
 - the new `source` is the old `destination` (the first entry if it was
-  an array — exact choice is implementation-defined).
+  an array; exact choice is implementation-defined).
 
 Other `context` keys, including `session`, pass through unchanged. The
 optional `context` argument is overlaid before the swap, matching
@@ -99,7 +99,7 @@ ack = m.reply("speak", {"utterance": "got it"})
 # ack.context["destination"] == m.context["source"]
 ```
 
-### `response(data, context=None)` — sugar for `.response`-suffixed reply
+### `response(data, context=None)`: sugar for `.response`-suffixed reply
 
 A response is a `reply` whose topic is the source topic with
 `.response` appended. Used by request/response chains so an observer
@@ -123,7 +123,7 @@ assert recovered == m
 
 Nested objects in `data` / `context` that expose a `.serialize()`
 method (the duck-typed protocol used by `ovos-bus-client.Session` and
-similar carriers) are converted before JSON encoding — `Message`
+similar carriers) are converted before JSON encoding. `Message`
 itself doesn't know about Session or any specific carrier type, but
 its `.serialize()` walks containers and calls the method when present.
 
@@ -145,13 +145,13 @@ There is **no** per-message identifier, no in-reply-to chain, no
 host-managed request/response bookkeeping. Messages on the bus are
 fully asynchronous. The `.response` suffix and the preserved `session`
 give you enough raw material to do your own correlation if you need
-it — match an incoming `<topic>.response` against an outstanding
+it: match an incoming `<topic>.response` against an outstanding
 request in the same `session_id`.
 
 Components that need per-conversation state track it themselves keyed
 on `session.session_id`. A Message on the bus is **self-contained**;
 any state a later consumer needs is either inside the Message or kept
-by some component out of band — never recovered by a hidden host-side
+by some component out of band. It is never recovered by a hidden host-side
 correlation index.
 
 ## What this module does not do
@@ -160,8 +160,8 @@ By design, no transport (websocket, queue, …), no encryption, no
 authentication, no delivery guarantees, no ordering guarantees, no
 session lifecycle, no identifier-assignment policy. Each of those is
 out of scope for the envelope and belongs in the layer that consumes
-it — `ovos-bus-client` for the websocket transport, layer-2 systems
-(HiveMind) for multi-tenant routing, individual subsystems for their
+it: `ovos-bus-client` for the websocket transport, layer-2 systems
+(HiveMind) for multi-tenant routing, and individual subsystems for their
 own per-session state.
 
 ## Subclassing
@@ -194,10 +194,10 @@ quick index.
 
 | API surface | OVOS-MSG-1 § | What it implements |
 |---|---|---|
-| `Message(type, data, context)` | §2, §2.1–§2.3 | the three-field envelope; constructor type checks |
-| `MalformedMessage` (constructor) | §2.1–§2.3 | reject non-string `type`, non-dict `data`/`context` |
+| `Message(type, data, context)` | §2, §2.1-§2.3 | the three-field envelope; constructor type checks |
+| `MalformedMessage` (constructor) | §2.1-§2.3 | reject non-string `type`, non-dict `data`/`context` |
 | `msg_type` / `data` / `context` | §2 | the wire fields `type` / `data` / `context` |
-| `context["source"]` / `["destination"]` | §3, §3.2–§3.4 | opaque routing keys, carried not parsed |
+| `context["source"]` / `["destination"]` | §3, §3.2-§3.4 | opaque routing keys, carried not parsed |
 | `context["session"]` | §4 | session carrier (inner shape owned by OVOS-SESSION-1) |
 | `DEFAULT_SESSION_ID` | §4.1 | the reserved `"default"` session id |
 | `forward(type, data)` | §5.1 | relay, context preserved unchanged (deep-copied) |
@@ -211,9 +211,12 @@ quick index.
 
 ## See also
 
-- [Bus namespaces](bus-namespaces.md) — `SpecMessage`, `MIGRATION_MAP`,
+- [Bus namespaces](bus-namespaces.md), `SpecMessage`, `MIGRATION_MAP`,
   and the transparent legacy↔`ovos.*` bridge that rides on top of these
   derivations (`forward` for the handler-lifecycle trio, `reply` for the
   stop pong, and so on).
-- [Spec traceability](spec-traceability.md) — every public symbol in
+- [Spec traceability](spec-traceability.md), every public symbol in
   `ovos-spec-tools` mapped to its authoritative spec section.
+
+---
+[← Language matching](language-matching.md) · [Home](README.md) · [Bus namespaces →](bus-namespaces.md)

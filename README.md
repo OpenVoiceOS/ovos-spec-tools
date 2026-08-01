@@ -1,12 +1,12 @@
 # ovos-spec-tools
 
 Reference implementation of the OVOS [formal
-specifications](https://github.com/OpenVoiceOS/architecture) — the
+specifications](https://github.com/OpenVoiceOS/architecture), the
 low-level, dependency-light primitives those specifications describe.
 
 OVOS components reimplement template expansion, resource loading, and language
 matching in several places, and the copies drift. This package is the single
-conformant implementation those components — and any third-party tool — can
+conformant implementation those components, and any third-party tool, can
 depend on.
 
 ## Status
@@ -17,6 +17,9 @@ depend on.
 | Locale resource loader | OVOS-INTENT-2 |  `resources.py`  |
 | Dialog renderer | OVOS-INTENT-2 §4.2 |  `dialog.py`  |
 | Prompt renderer | OVOS-INTENT-2 §4.4 |  `prompt.py`  |
+
+| Tool | Spec | Code |
+|------|------|-------|
 | Language-tag matching | OVOS-INTENT-2 §2.2 |  `language.py` |
 | Bus message envelope | OVOS-MSG-1 |  `message.py`  |
 | `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 |  `lint.py`  |
@@ -59,20 +62,21 @@ ovos-spec-lint my-skill/locale               # validate a locale folder
 
 A zero-to-hero guide lives in [`docs/`](docs/README.md):
 
-1. [Getting started](docs/getting-started.md) — install, and a first taste of
+1. [Getting started](docs/getting-started.md), install, and a first taste of
    every tool.
-2. [Sentence templates](docs/templates.md) — the grammar: alternatives,
+2. [Sentence templates](docs/templates.md), the grammar: alternatives,
    optionals, slots, vocabulary references, malformed forms.
-3. [Locale resources](docs/locale-resources.md) — the `locale/` folder, the
+3. [Locale resources](docs/locale-resources.md), the `locale/` folder, the
    six file roles, loading across languages, override precedence.
-4. [Dialog](docs/dialog.md) — choosing and filling a spoken response, and
+4. [Dialog](docs/dialog.md), choosing and filling a spoken response, and
    rendering language-model prompts.
-5. [Language matching](docs/language-matching.md) — tag standardization,
+
+5. [Language matching](docs/language-matching.md), tag standardization,
    distance, and closest-match resolution.
-6. [Bus messages](docs/message.md) — the on-the-wire envelope, the
+6. [Bus messages](docs/message.md), the on-the-wire envelope, the
    `forward` / `reply` / `response` derivations, and the session carrier.
-7. [Linting](docs/linting.md) — validating a locale folder, on the CLI or in CI.
-7. [API reference](docs/api-reference.md) — every public name, in brief.
+7. [Linting](docs/linting.md), validating a locale folder, on the CLI or in CI.
+8. [API reference](docs/api-reference.md), every public name, in brief.
 
 Runnable example scripts are in [`examples/`](examples/README.md).
 
