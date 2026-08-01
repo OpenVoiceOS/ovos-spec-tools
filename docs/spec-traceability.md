@@ -103,6 +103,25 @@ bridge deliberately does **not** map trace to OVOS-INTENT-4 §5 (N→1
 registration consolidation) and OVOS-MSG-1 §2.1.1 (runtime-assembled
 placeholder topics); see [Bus namespaces](bus-namespaces.md).
 
+### `intent_topics.py` — OVOS-MSG-1 §2.1.1 (runtime-assembled dispatch topic)
+
+The per-intent dispatch topic `<skill_id>:<intent_name>` is assembled at
+runtime, so `SpecMessage` cannot name it. These helpers own its shape and the
+transitional aliasing of the legacy `.intent`-suffixed spelling old
+`ovos-workshop` releases put on the wire.
+
+| Symbol | Spec | § |
+|---|---|---|
+| `is_intent_topic` | OVOS-MSG-1 | §2.1.1 (`:` is the structural separator) |
+| `canonical_intent_topic` | OVOS-MSG-1 | §2.1.1 (`<intent_name>`, not a filename) |
+| `legacy_intent_topic` | (migration) | inverse of the above; historical spelling |
+| `INTENT_FILE_SUFFIX` | OVOS-INTENT-2 | §3 (`.intent` is an authoring resource extension) |
+| `IntentAliasRegistry` | OVOS-INTENT-4 | §5 / §8 (alias collapse at registration) |
+| `legacy_reemit_targets` | (migration) | send-side mirror, `emit_legacy` gated |
+
+Like the namespace bridge, the aliasing is a migration *policy* of this
+tooling, not a spec-mandated mechanism: no spec defines the suffixed topic.
+
 ## Session domain: OVOS-SESSION-1
 
 `session.py` is the reference implementation of the §4 session carrier's
@@ -201,6 +220,9 @@ rows whose "spec" column is not a numbered OVOS spec clause are:
   `migration_counterpart`, `NamespaceTranslator` and its methods). These
   *carry* the bus onto spec topics rather than implementing one clause, and
   each entry/mapping is itself traced to the spec rename it encodes;
+- the **intent-topic aliasing** (`legacy_intent_topic`,
+  `legacy_reemit_targets`) — the same kind of migration carrier, tracing to
+  the OVOS-MSG-1 §2.1.1 topic shape it restores;
 - **tooling/packaging** surface (`Finding`, the `ovos-spec-lint` command,
   `__version__`).
 

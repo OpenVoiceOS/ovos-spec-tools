@@ -212,6 +212,66 @@ The skill wrote one modern emission. Legacy and modern consumers both got
 exactly one delivery. When the migration completes and `emit_legacy` is
 turned off, the legacy mirror simply stops, with no skill code changes.
 
+## Intent dispatch topics — the `.intent` suffix
+
+A second, smaller migration rides the same `emit_legacy` convention. The
+per-intent dispatch topic is `<skill_id>:<intent_name>` (OVOS-MSG-1 §2.1.1).
+Old `ovos-workshop` releases built that topic from the padatious resource
+**filename**, so a `food.order.intent` resource became the wire topic
+`<skill_id>:food.order.intent` — the authoring extension leaked onto the bus.
+Current workshop registers the canonical `<skill_id>:food.order`.
+
+Containerized skills built against an old workshop still subscribe to the
+suffixed topic over the real bus, so the two spellings must coexist for a
+while. `intent_topics` holds that compat, and nothing else does.
+
+```python
+from ovos_spec_tools import (IntentAliasRegistry, canonical_intent_topic,
+                             is_intent_topic, legacy_intent_topic,
+                             legacy_reemit_targets)
+
+is_intent_topic("skill.foo:play")                    # True (":" rule)
+canonical_intent_topic("skill.foo:play.intent")      # 'skill.foo:play'
+legacy_intent_topic("skill.foo:play")                # 'skill.foo:play.intent'
+```
+
+Both functions are idempotent, and both leave non-intent topics alone. Only
+the part after the **last** colon is touched, so a `skill_id` that itself ends
+in `.intent` survives.
+
+**Registration side.** `IntentAliasRegistry.register()` normalizes whatever
+spelling a consumer registered and remembers if it was the suffixed one. Both
+spellings collapse onto one canonical key, so a consumer that somehow binds
+both fires exactly once:
+
+```python
+reg = IntentAliasRegistry()
+reg.register("skill.foo:play")           # -> 'skill.foo:play'
+reg.register("skill.foo:play.intent")    # -> 'skill.foo:play', alias recorded
+reg.has_legacy_alias("skill.foo:play")   # True
+```
+
+**Send side.** `legacy_reemit_targets` is the intent-topic counterpart of
+`NamespaceTranslator.counterpart_topics`: it tells the bus which extra topic
+to mirror a dispatch onto.
+
+```python
+legacy_reemit_targets("skill.foo:play", reg)            # ['skill.foo:play.intent']
+legacy_reemit_targets("skill.foo:play")                 # [] — no alias, no mirror
+legacy_reemit_targets("skill.foo:play", blanket=True)   # ['skill.foo:play.intent']
+```
+
+The default is **alias-driven**: the mirror happens only for intents an old
+consumer really registered with the suffix, so no topic is invented. The
+`blanket=True` mode re-emits the suffixed twin of *every* intent dispatch, for
+pure-bus legacy listeners that subscribe without ever registering. It **does**
+invent topics: traffic doubles and any handler bound to both spellings needs
+receive-side dedup. It is off by default and should stay off unless such a
+listener is known to be present.
+
+Neither the suffixed topic nor the re-emit is normative. The suffix is
+historical leakage; new producers and consumers use canonical topics only.
+
 ## What this is *not*
 
 The bridge is a **topic rename**, not a payload translator and not a
@@ -223,6 +283,9 @@ the OVOS-MSG-1 §5 derivation rules implemented by [`Message`](message.md).
 
 - [Bus messages](message.md), the OVOS-MSG-1 envelope and the `forward` /
   `reply` / `response` derivations these topics ride on.
+- [Intent definitions](../README.md) — `IntentBuilder` / `Intent`, the
+  OVOS-INTENT-4 §5 registration payloads whose dispatch topics this page
+  normalizes.
 - [Spec traceability](spec-traceability.md), every public symbol mapped to
   its authoritative spec section.
 
