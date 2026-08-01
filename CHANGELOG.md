@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.0a2) (2026-08-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.6.0a1...1.6.0a2)
+
+**Merged pull requests:**
+
+- refactor: drop the intent alias registry, keep the two pure helpers [\#92](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/92) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.6.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.0a1) (2026-08-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.5.1a3...1.6.0a1)
