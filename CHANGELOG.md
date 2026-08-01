@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.1a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.1a3) (2026-08-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.5.1a2...1.5.1a3)
+
+**Merged pull requests:**
+
+- docs: rewrite README in Simplified Technical English [\#89](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/89) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.5.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.1a2) (2026-07-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.5.1a1...1.5.1a2)
