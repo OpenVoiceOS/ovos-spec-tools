@@ -180,20 +180,6 @@ last colon). Idempotent; non-intent topics are returned unchanged.
 The inverse: append the `.intent` suffix. Idempotent; non-intent topics are
 returned unchanged.
 
-### `IntentAliasRegistry()`
-
-Records which registered intents also answer to the legacy suffixed spelling.
-`register(msg_type)` returns the canonical topic and remembers the alias;
-`canonical`, `is_registered`, `has_legacy_alias`, `legacy_alias`, `aliases`,
-`deregister`, and `clear` query and maintain it.
-
-### `legacy_reemit_targets(msg_type, registry=None, blanket=False) -> list[str]`
-
-The extra topic an intent dispatch should also be emitted on, or `[]`. Returns
-the suffixed twin when `registry` recorded an alias, or — with `blanket=True`
-— for every intent topic. Blanket mode invents topics; see
-[bus namespaces](bus-namespaces.md).
-
 ## Linting — [chapter 7](linting.md)
 
 ### `lint_locale(path, spec_version=2) -> list[Finding]`

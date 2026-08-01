@@ -34,11 +34,10 @@ formal specifications describe:
   registration model, with :func:`~ovos_spec_tools.intent.open_intent_envelope`
   and the :func:`~ovos_spec_tools.intent.voc_match` ``.voc`` matching helper;
 - :func:`~ovos_spec_tools.intent_topics.canonical_intent_topic` /
-  :func:`~ovos_spec_tools.intent_topics.legacy_intent_topic` /
-  :class:`~ovos_spec_tools.intent_topics.IntentAliasRegistry` /
-  :func:`~ovos_spec_tools.intent_topics.legacy_reemit_targets` — canonical
+  :func:`~ovos_spec_tools.intent_topics.legacy_intent_topic` — canonical
   ``<skill_id>:<intent_name>`` dispatch topics (OVOS-MSG-1 §2.1.1) and the
-  transitional aliasing of the legacy ``.intent``-suffixed spelling;
+  transitional translation to and from the legacy ``.intent``-suffixed
+  spelling;
 - :func:`~ovos_spec_tools.lint.lint_locale` — a locale resource linter, also
   exposed as the ``ovos-spec-lint`` command.
 """
@@ -69,11 +68,9 @@ from ovos_spec_tools.intent import (
 )
 from ovos_spec_tools.intent_topics import (
     INTENT_FILE_SUFFIX,
-    IntentAliasRegistry,
     canonical_intent_topic,
     is_intent_topic,
     legacy_intent_topic,
-    legacy_reemit_targets,
 )
 from ovos_spec_tools.lint import (
     Finding,
@@ -137,11 +134,9 @@ __all__ = [
     "open_intent_envelope",
     "voc_match",
     "INTENT_FILE_SUFFIX",
-    "IntentAliasRegistry",
     "canonical_intent_topic",
     "is_intent_topic",
     "legacy_intent_topic",
-    "legacy_reemit_targets",
     "expand",
     "inline_keywords",
     "MalformedTemplate",
