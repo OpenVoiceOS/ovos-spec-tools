@@ -2,7 +2,7 @@
 
 `ovos-spec-tools` exists for one reason: to be the **reference
 implementation of the OVOS formal specifications**. Every public symbol in
-the package implements a specific clause of a specific spec — there is no
+the package implements a specific clause of a specific spec. There is no
 "general-purpose" code here. This page is the proof: every name exported
 from `ovos_spec_tools`, mapped to its authoritative spec section.
 
@@ -19,13 +19,13 @@ spec-annotated; its module and per-symbol docstrings cite OVOS-MSG-1 inline.
 See [Bus messages](message.md) and [Bus namespaces](bus-namespaces.md) for
 the prose.
 
-### `message.py` — OVOS-MSG-1 (Bus Message)
+### `message.py`: OVOS-MSG-1 (Bus Message)
 
 | Symbol | Spec | § |
 |---|---|---|
 | `Message` | OVOS-MSG-1 | §2 (envelope) |
 | `Message.msg_type` / `.data` / `.context` | OVOS-MSG-1 | §2.1 / §2.2 / §2.3 |
-| `Message.__init__` (type checks) | OVOS-MSG-1 | §2.1–§2.3, §7 |
+| `Message.__init__` (type checks) | OVOS-MSG-1 | §2.1-§2.3, §7 |
 | `Message.forward` | OVOS-MSG-1 | §5.1 |
 | `Message.reply` | OVOS-MSG-1 | §5.2 |
 | `Message.response` | OVOS-MSG-1 | §5.3 |
@@ -41,7 +41,7 @@ session carrier (`context.session`, §4) are carried by `Message` but their
 *inner* semantics are owned elsewhere: §3 by MSG-1 itself (opaque), §4's
 inner shape by **OVOS-SESSION-1**.
 
-### `messages.py` — the spec topic vocabulary and the migration bridge
+### `messages.py`: the spec topic vocabulary and the migration bridge
 
 `SpecMessage` members each name a topic owned by another spec; the bridge
 (`MIGRATION_MAP` / `NamespaceTranslator`) is the cross-cutting machinery that
@@ -95,7 +95,7 @@ moves the bus onto those topics.
 | `NamespaceTranslator.is_migrated` | (bridge) | participation pre-check |
 | `NamespaceTranslator.new_mirror_guard` | (bridge) | receive-side mirror-window dedup |
 
-The bridge symbols are not owned by one numbered spec clause — they are the
+The bridge symbols are not owned by one numbered spec clause. They are the
 *mechanism* that carries the bus from the legacy topic names to the `ovos.*`
 topics the specs above define, while honouring OVOS-MSG-1 §6 (payload key
 order is not significant, used in the dedup fingerprint). The two topics the
@@ -122,7 +122,7 @@ transitional aliasing of the legacy `.intent`-suffixed spelling old
 Like the namespace bridge, the aliasing is a migration *policy* of this
 tooling, not a spec-mandated mechanism: no spec defines the suffixed topic.
 
-## Session domain — OVOS-SESSION-1
+## Session domain: OVOS-SESSION-1
 
 `session.py` is the reference implementation of the §4 session carrier's
 *inner* shape (which OVOS-MSG-1 §4 defers to OVOS-SESSION-1), plus the
@@ -141,7 +141,7 @@ symbols it exports as imported by the package `__init__`.)
 
 ## Intent template / locale domain
 
-### `expansion.py` — OVOS-INTENT-1 (Sentence Template Grammar)
+### `expansion.py`: OVOS-INTENT-1 (Sentence Template Grammar)
 
 | Symbol | Spec | § |
 |---|---|---|
@@ -149,7 +149,7 @@ symbols it exports as imported by the package `__init__`.)
 | `inline_keywords` | OVOS-INTENT-1 | §3.7 (`<name>` inline vocabulary references) |
 | `MalformedTemplate` | OVOS-INTENT-1 | §3.6 (malformed templates) |
 
-### `resources.py` — OVOS-INTENT-2 (Locale Resource Formats)
+### `resources.py`: OVOS-INTENT-2 (Locale Resource Formats)
 
 | Symbol | Spec | § |
 |---|---|---|
@@ -164,7 +164,7 @@ symbols it exports as imported by the package `__init__`.)
 | `strip_samples` | OVOS-INTENT-2 | §4.3 (keyword removal) |
 | `MalformedResource` | OVOS-INTENT-2 | §3, §4 (malformed file / layout) |
 
-### `dialog.py` — OVOS-INTENT-2 §4.2 (Dialog)
+### `dialog.py`: OVOS-INTENT-2 §4.2 (Dialog)
 
 | Symbol | Spec | § |
 |---|---|---|
@@ -173,14 +173,14 @@ symbols it exports as imported by the package `__init__`.)
 | `UnfilledSlot` | OVOS-INTENT-2 | §4.2 (a chosen phrase has an unfilled slot) |
 | `verify_slot_consistency` | OVOS-INTENT-1 | §7 + §5.5 (Dialog renderer MUST verify all phrases declare the same slot set) |
 
-### `prompt.py` — OVOS-INTENT-2 §4.4 (`.prompt`)
+### `prompt.py`: OVOS-INTENT-2 §4.4 (`.prompt`)
 
 | Symbol | Spec | § |
 |---|---|---|
 | `render_prompt` | OVOS-INTENT-2 | §4.4 (conservative `{name}` substitution) |
 | `PromptRenderer` | OVOS-INTENT-2 | §4.4 (stateful, multilingual prompt renderer) |
 
-## Language matching — shared OVOS-INTENT-2 §2.2 primitive
+## Language matching: shared OVOS-INTENT-2 §2.2 primitive
 
 `language.py` is the single implementation of "closest available language",
 the smart-fallback logic OVOS-INTENT-2 §2.2 relies on for resource
@@ -193,7 +193,7 @@ resolution (and which TTS/STT plugins reuse).
 | `lang_matches` | OVOS-INTENT-2 | §2.2 (match predicate) |
 | `closest_lang` | OVOS-INTENT-2 | §2.2 (closest-match resolution) |
 
-## Linting — OVOS-INTENT-1 / OVOS-INTENT-2
+## Linting: OVOS-INTENT-1 / OVOS-INTENT-2
 
 `lint.py` validates resource *syntax* (INTENT-1) and *naming/layout*
 (INTENT-2); the `--spec-version` switch flags features newer than a target
@@ -217,7 +217,7 @@ Every name in `ovos_spec_tools.__all__` appears in a table above. The only
 rows whose "spec" column is not a numbered OVOS spec clause are:
 
 - the **bridge** machinery (`MIGRATION_MAP`, `SPEC_TO_LEGACY`,
-  `migration_counterpart`, `NamespaceTranslator` and its methods) — these
+  `migration_counterpart`, `NamespaceTranslator` and its methods). These
   *carry* the bus onto spec topics rather than implementing one clause, and
   each entry/mapping is itself traced to the spec rename it encodes;
 - the **intent-topic aliasing** (`legacy_intent_topic`,
@@ -234,6 +234,9 @@ OVOS-OCP-1 clause.
 
 `SpecMessage` is the static `ovos.*` topic vocabulary: it carries one member
 per spec-defined fixed-string topic and deliberately omits runtime-templated
-topics (MSG-1 §2.1.1 — the `<skill_id>:…`, `<pipeline_id>…`, per-skill ping
+topics (MSG-1 §2.1.1: the `<skill_id>:…`, `<pipeline_id>…`, per-skill ping
 placeholders) and topics used by `ovos-bus-client` that no spec defines
 (`ovos.session.update_default`, `ovos.session.start`, `ovos.context.set`).
+
+---
+[Home](README.md)

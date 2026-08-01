@@ -1,6 +1,6 @@
 # 2. Sentence templates
 
-> **Spec coverage.** This chapter is the reference for **OVOS-INTENT-1 — the
+> **Spec coverage.** This chapter is the reference for **OVOS-INTENT-1: the
 > Sentence Template Grammar** (`expansion.py`). `expand()` is the *Expander*
 > conformance role of OVOS-INTENT-1 §7: it implements the token set of §3, the
 > enumeration algorithm of §4.1, and the malformed-form rejection of §3.6.
@@ -16,7 +16,7 @@ renders them.
 from ovos_spec_tools import expand, MalformedTemplate
 ```
 
-`expand(template)` returns the **sample set** — the finite list of sentences
+`expand(template)` returns the **sample set**, the finite list of sentences
 the template denotes.
 
 ## The four tokens
@@ -32,7 +32,7 @@ expand("turn on the lights")
 # ['turn on the lights']
 ```
 
-### Alternatives — `(a|b|c)`
+### Alternatives: `(a|b|c)`
 
 Parentheses hold branches separated by `|`; each combination takes one branch:
 
@@ -41,16 +41,16 @@ expand("(turn on|switch on|enable) it")
 # ['turn on it', 'switch on it', 'enable it']
 ```
 
-A branch may be empty — `(please|)` means "please, or nothing":
+A branch may be empty: `(please|)` means "please, or nothing":
 
 ```python
 expand("(please|) help me")
 # ['please help me', 'help me']
 ```
 
-### Optionals — `[x]`
+### Optionals: `[x]`
 
-`[x]` is exactly `(x|)` — the segment is included or omitted:
+`[x]` is exactly `(x|)`: the segment is included or omitted:
 
 ```python
 expand("turn on [the] lights")
@@ -65,10 +65,10 @@ expand("turn on [(all|every) ]light[s]")
 #  'turn on all light', 'turn on light', 'turn on every light']
 ```
 
-### Named slots — `{name}`
+### Named slots: `{name}`
 
-A `{name}` slot is a placeholder for a value that varies — a song title, a
-city. It is **opaque**: expansion carries it through untouched and never
+A `{name}` slot is a placeholder for a value that varies, such as a song
+title or a city. It is **opaque**: expansion carries it through untouched and never
 enumerates it.
 
 ```python
@@ -80,10 +80,10 @@ Who fills a slot, and when, depends on the file role: an intent engine fills it
 from speech; a skill fills a dialog slot before the phrase is spoken. Expansion
 itself never does.
 
-### Vocabulary references — `<name>`
+### Vocabulary references: `<name>`
 
-`<name>` (OVOS-INTENT-1 §3.7) pulls in a named **vocabulary** — a reusable set
-of phrasings — and expands it in place. Pass the vocabularies as a dict:
+`<name>` (OVOS-INTENT-1 §3.7) pulls in a named **vocabulary**, a reusable set
+of phrasings, and expands it in place. Pass the vocabularies as a dict:
 
 ```python
 expand("<greeting> [there]", {"greeting": ["hello", "hi", "hey"]})
@@ -93,23 +93,23 @@ expand("<greeting> [there]", {"greeting": ["hello", "hi", "hey"]})
 This is how you avoid repeating the same `(hello|hi|hey)` group across many
 templates: define it once as a vocabulary, reference it as `<greeting>`. A
 vocabulary may itself contain `<name>` references; they resolve recursively
-(§4.1 step 1). A reference must resolve to a **slot-free** set — a vocabulary
-may not introduce a `{slot}` — and a single-member vocabulary substitutes its
+(§4.1 step 1). A reference must resolve to a **slot-free** set, a vocabulary
+may not introduce a `{slot}`, and a single-member vocabulary substitutes its
 bare member rather than a one-branch group.
 
-## How expansion works — the §4.1 algorithm
+## How expansion works: the §4.1 algorithm
 
 `expand()` follows OVOS-INTENT-1 §4.1 exactly, in order:
 
 1. **Resolve `<name>` references** to alternative groups (recursively).
-2. **Rewrite `[x]` as `(x|)`** — an optional is sugar for an empty branch.
+2. **Rewrite `[x]` as `(x|)`**: an optional is sugar for an empty branch.
 3. **Cartesian product** of the innermost `(...)` groups, repeated until no
    parenthesis remains.
-4. **Normalize whitespace** — collapse runs of spaces, strip the ends (this is
+4. **Normalize whitespace**: collapse runs of spaces, strip the ends (this is
    what removes the double space an empty branch leaves behind).
 5. **De-duplicate**, preserving first-seen order.
 
-Worked through on `(turn|switch) [the] (light|fan)` — three 2-branch groups
+Worked through on `(turn|switch) [the] (light|fan)`: three 2-branch groups
 once `[the]` becomes `(the|)`, so `2×2×2 = 8` combinations collapse (after
 whitespace normalization) to the 8-sentence sample set of §4.2:
 
@@ -119,22 +119,22 @@ expand("(turn|switch) [the] (light|fan)")
 #  'turn the fan', 'switch the fan', 'turn fan', 'switch fan']
 ```
 
-The **sample set is a set** — §4 defines its membership, not an ordering — so
-the eight sentences are exactly those of §4.2; the sequence above is just the
+The **sample set is a set**: §4 defines its membership, not an ordering. So
+the eight sentences are exactly those of §4.2, the sequence above is just the
 order `expand()` happens to emit them in. Throughout, `{name}` slots are
-**opaque** — carried through and never enumerated (§4.1 final note).
+**opaque**: carried through and never enumerated (§4.1 final note).
 
 ## The input model
 
 The grammar is built for **voice**. Templates and the utterances matched
 against them are assumed already *ASR-normalized*: lowercase, alphanumeric
 words, single spaces, no punctuation. This package **expands; it does not
-normalize** — normalization happens upstream.
+normalize**. Normalization happens upstream.
 
 One consequence: the metacharacters `( ) [ ] { } < > |` never occur as literal
 spoken text, so there is no escaping mechanism and none is needed.
 
-(`.dialog` phrases are the exception — they are spoken *output*, so they may
+(`.dialog` phrases are the exception: they are spoken *output*, so they may
 carry mixed case and punctuation. See [Dialog](dialog.md).)
 
 ## Malformed templates
@@ -168,13 +168,16 @@ produces an empty sentence.
 
 ## Templates as training data
 
-Expansion produces the *shape of the training data* a template contributes —
+Expansion produces the *shape of the training data* a template contributes,
 nothing more. A capable intent engine **generalizes beyond** the sample set: it
 recognizes phrasings that were never enumerated. So keep templates focused and
-readable; you are not obliged to spell out every wording. Matching and
+readable. You are not obliged to spell out every wording. Matching and
 generalization are the engine's job and are out of scope here.
 
 ## Next
 
-[Locale resources](locale-resources.md) — where templates live on disk, and
+[Locale resources](locale-resources.md), where templates live on disk, and
 how to load them.
+
+---
+[← Getting started](getting-started.md) · [Home](README.md) · [Locale resources →](locale-resources.md)
