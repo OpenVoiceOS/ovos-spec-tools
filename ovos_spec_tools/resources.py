@@ -22,6 +22,7 @@ serves every language the skill ships.
 """
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
@@ -428,7 +429,8 @@ class LocaleResources:
                  core_locale: Optional[str] = None,
                  user_locale: Optional[str] = None,
                  lang_resolver: Optional[LanguageResolver] = None,
-                 max_language_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE):
+                 max_language_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE,
+                 expanded_cache_size: int = 0):
         """
         Args:
             skill_locale: path to the skill's ``locale/`` directory.
@@ -441,6 +443,9 @@ class LocaleResources:
             max_language_distance: passed to the resolver — the fallback
                 accepts a language whose tag distance is **below** this
                 (default 10, §2.2). ``0`` disables the fallback.
+            expanded_cache_size: maximum number of expanded intent, entity,
+                vocabulary, and blacklist results retained by this instance.
+                ``0`` (the default) keeps live user overrides uncached.
         """
         # Highest precedence first (§2.1): user, skill, core.
         self._sources: List[Path] = [
@@ -450,6 +455,24 @@ class LocaleResources:
         self._lang_resolver: LanguageResolver = (
             lang_resolver if lang_resolver is not None else closest_lang)
         self.max_language_distance = max_language_distance
+        if (not isinstance(expanded_cache_size, int)
+                or isinstance(expanded_cache_size, bool)
+                or expanded_cache_size < 0):
+            raise ValueError("expanded_cache_size must be a non-negative integer")
+        self.expanded_cache_size = expanded_cache_size
+        expanded_loader = self._load_expanded_uncached
+        if expanded_cache_size:
+            expanded_loader = lru_cache(maxsize=expanded_cache_size)(
+                expanded_loader
+            )
+            self._clear_expanded_cache = expanded_loader.cache_clear
+        else:
+            self._clear_expanded_cache = self._noop_clear_cache
+        self._expanded_loader = expanded_loader
+
+    @staticmethod
+    def _noop_clear_cache() -> None:
+        """No-op invalidator used when expanded-resource caching is off."""
 
     def _lang_dir(self, source: Path, lang: str) -> Optional[Path]:
         """The ``<lang>/`` directory for ``lang`` under one source.
@@ -614,9 +637,9 @@ class LocaleResources:
             return utterance
         return strip_samples(utterance, samples)
 
-    def _load_expanded(self, base_name: str, extension: str,
-                       lang: str) -> List[str]:
-        """Load a resource and expand it to its sample set."""
+    def _load_expanded_uncached(self, base_name: str, extension: str,
+                                lang: str) -> Tuple[str, ...]:
+        """Load and expand one resource into an immutable cache value."""
         path = self.find(base_name, extension, lang)
         if path is None:
             raise FileNotFoundError(
@@ -638,7 +661,16 @@ class LocaleResources:
                         f"template {template!r} contains a named slot")
                 if sample not in samples:
                     samples.append(sample)
-        return samples
+        return tuple(samples)
+
+    def _load_expanded(self, base_name: str, extension: str,
+                       lang: str) -> List[str]:
+        """Load a resource and return an independently mutable sample list."""
+        return list(self._expanded_loader(base_name, extension, lang))
+
+    def clear_cache(self) -> None:
+        """Invalidate this instance's opt-in expanded-resource cache."""
+        self._clear_expanded_cache()
 
     def load_intent(self, base_name: str, lang: str) -> List[str]:
         """Load an ``.intent`` as its sample set, named slots intact (§4.1)."""
