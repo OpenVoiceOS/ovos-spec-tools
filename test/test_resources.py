@@ -81,6 +81,51 @@ def test_load_entity_and_blacklist(tmp_path):
     assert res.load_blacklist("play", "en-US") == ["trailer"]
 
 
+def test_expanded_resource_cache_is_opt_in_and_clearable(tmp_path, monkeypatch):
+    locale = tmp_path / "locale"
+    resource = locale / "en-US" / "stop.voc"
+    _write(resource, "stop\n")
+    reads = 0
+
+    from ovos_spec_tools import resources
+    original_reader = resources.read_resource_file
+
+    def counted_reader(path):
+        nonlocal reads
+        if path == resource:
+            reads += 1
+        return original_reader(path)
+
+    monkeypatch.setattr(resources, "read_resource_file", counted_reader)
+    cached = LocaleResources(str(locale), expanded_cache_size=4)
+
+    first = cached.load_vocabulary("stop", "en-US")
+    first.append("mutated by caller")
+    assert cached.load_vocabulary("stop", "en-US") == ["stop"]
+    assert reads == 2  # resource plus the vocabulary-reference scan
+
+    cached.clear_cache()
+    assert cached.load_vocabulary("stop", "en-US") == ["stop"]
+    assert reads == 4
+
+
+def test_expanded_resource_cache_defaults_to_live_reads(tmp_path):
+    locale = tmp_path / "locale"
+    resource = locale / "en-US" / "stop.voc"
+    _write(resource, "stop\n")
+    resources = LocaleResources(str(locale))
+
+    assert resources.load_vocabulary("stop", "en-US") == ["stop"]
+    _write(resource, "cancel\n")
+    assert resources.load_vocabulary("stop", "en-US") == ["cancel"]
+
+
+@pytest.mark.parametrize("cache_size", [-1, 1.5, True])
+def test_expanded_resource_cache_rejects_invalid_sizes(tmp_path, cache_size):
+    with pytest.raises(ValueError):
+        LocaleResources(str(tmp_path), expanded_cache_size=cache_size)
+
+
 def test_slot_free_role_rejects_a_named_slot(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "bad.voc", "a slot {here}\n")
