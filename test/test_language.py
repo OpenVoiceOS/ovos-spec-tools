@@ -146,3 +146,48 @@ def test_lang_matches_exact_only_when_max_distance_zero():
     from ovos_spec_tools import lang_matches as lm
     assert lm("en-US", "en-US", max_distance=0) is True
     assert lm("en-US", "en-GB", max_distance=0) is False
+
+
+# --- the distance-10 boundary ------------------------------------------------
+
+MACROLANGUAGE_PAIRS = [("arz", "ar"), ("wuu", "zh")]
+REGIONAL_PAIRS = [("ar-SA", "ar", 4), ("en-AU", "en-GB", 3), ("pt-BR", "pt-PT", 5)]
+UNRELATED_PAIRS = [("en", "zh", 134), ("es", "fr", 84),
+                   ("fr-CH", "de-CH", 80), ("af", "nl", 24)]
+
+
+@pytest.mark.parametrize("member,macro", MACROLANGUAGE_PAIRS)
+def test_macrolanguage_distance_is_exactly_ten(member, macro):
+    pytest.importorskip("langcodes")
+    assert lang_distance(member, macro) == 10
+
+
+@pytest.mark.parametrize("member,macro", MACROLANGUAGE_PAIRS)
+def test_macrolanguage_resolves_at_the_default_threshold(member, macro):
+    pytest.importorskip("langcodes")
+    assert lang_matches(member, macro) is True
+    assert closest_lang(member, [macro]) == macro
+
+
+@pytest.mark.parametrize("desired,supported,distance", REGIONAL_PAIRS)
+def test_regional_pair_resolves(desired, supported, distance):
+    pytest.importorskip("langcodes")
+    assert lang_distance(desired, supported) == distance
+    assert lang_matches(desired, supported) is True
+    assert closest_lang(desired, [supported]) == supported
+
+
+@pytest.mark.parametrize("desired,supported,distance", UNRELATED_PAIRS)
+def test_unrelated_pair_never_resolves(desired, supported, distance):
+    pytest.importorskip("langcodes")
+    assert lang_distance(desired, supported) == distance
+    assert lang_matches(desired, supported) is False
+    assert closest_lang(desired, [supported]) is None
+
+
+def test_threshold_is_inclusive_on_both_sides():
+    """A distance equal to the bound resolves; one above it does not."""
+    assert lang_matches("en-US", "en-GB", max_distance=5) is True
+    assert lang_matches("en-US", "en-GB", max_distance=4) is False
+    assert closest_lang("en-US", ["en-GB"], max_distance=5) == "en-GB"
+    assert closest_lang("en-US", ["en-GB"], max_distance=4) is None
