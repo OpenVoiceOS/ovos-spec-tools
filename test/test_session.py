@@ -45,19 +45,22 @@ class TestWireShape(unittest.TestCase):
         self.assertNotIn("active_handlers", s.to_dict())
         self.assertNotIn("response_mode", s.to_dict())
 
-    def test_unknown_field_passes_through(self):
-        # §2.4 unknown-field tolerance + §4 propagation
+    def test_unknown_field_is_not_rejected(self):
+        # §2.4 unknown-field tolerance: constructing/parsing does not raise.
+        # This class does not model unknown fields (no catch-all attribute);
+        # real §4 propagation of them happens at the Message level via
+        # Message.forward/reply deep-copying the raw wire context, not
+        # through Session.from_dict/to_dict.
         s = Session.from_dict({"session_id": "abc",
                                "novel_future_field": 42})
-        self.assertEqual(s.extras["novel_future_field"], 42)
-        self.assertEqual(s.to_dict()["novel_future_field"], 42)
+        self.assertEqual(s.session_id, "abc")
+        self.assertNotIn("novel_future_field", s.to_dict())
 
     def test_registered_other_spec_field_is_first_class(self):
         # §3 — `pipeline` is registered (owner OVOS-PIPELINE-1), so it
-        # lands as a first-class attribute, not in `extras`.
+        # lands as a first-class attribute.
         s = Session.from_dict({"pipeline": ["padatious_high"]})
         self.assertEqual(s.pipeline, ["padatious_high"])
-        self.assertNotIn("pipeline", s.extras)
         self.assertEqual(s.to_dict()["pipeline"], ["padatious_high"])
 
     def test_non_dict_payload_is_malformed(self):
@@ -166,11 +169,10 @@ class TestPersonaId(unittest.TestCase):
         self.assertIn("persona_id", SESSION1_REGISTERED_FIELDS)
         self.assertNotIn("persona_id", SESSION1_OWNED_FIELDS)
 
-    def test_persona_id_is_first_class_not_extra(self):
-        # Registered ⇒ lands as a first-class attribute, not in `extras`.
+    def test_persona_id_is_first_class(self):
+        # Registered ⇒ lands as a first-class attribute.
         s = Session.from_dict({"persona_id": "assistant"})
         self.assertEqual(s.persona_id, "assistant")
-        self.assertNotIn("persona_id", s.extras)
 
     def test_empty_persona_id_rejected(self):
         with self.assertRaises(MalformedSession):
@@ -213,11 +215,10 @@ class TestFallbackHandlers(unittest.TestCase):
         self.assertIn("fallback_handlers", SESSION1_REGISTERED_FIELDS)
         self.assertNotIn("fallback_handlers", SESSION1_OWNED_FIELDS)
 
-    def test_fallback_handlers_is_first_class_not_extra(self):
-        # Registered ⇒ lands as a first-class attribute, not in `extras`.
+    def test_fallback_handlers_is_first_class(self):
+        # Registered ⇒ lands as a first-class attribute.
         s = Session.from_dict({"fallback_handlers": ["skill-x"]})
         self.assertEqual(s.fallback_handlers, ["skill-x"])
-        self.assertNotIn("fallback_handlers", s.extras)
 
     def test_explicit_null_fallback_handlers_treated_as_omitted(self):
         # §2.1: explicit null on a registered field ⇒ omitted, not error.
@@ -273,12 +274,13 @@ class TestOverrideFields(unittest.TestCase):
         self.assertEqual(s.to_dict()["intent_context"],
                          {"frame_stack": [["x", 1.0]]})
 
-    def test_context_key_is_not_registered_passes_through_as_extra(self):
+    def test_context_key_is_not_registered_is_dropped_not_rejected(self):
         # The spec field is `intent_context`, not `context`; a stray
-        # `context` key is unknown and rides in `extras` (§2.4).
+        # `context` key is unknown. §2.4 forbids rejecting it, which
+        # from_dict honours (no raise); this class does not model it,
+        # so it does not resurface from to_dict().
         s = Session.from_dict({"context": {"k": "v"}})
-        self.assertEqual(s.extras["context"], {"k": "v"})
-        self.assertEqual(s.to_dict()["context"], {"k": "v"})
+        self.assertEqual(s.to_dict(), {})
 
 
 # --- OVOS-PIPELINE-1 §7.1 active_handlers ----------------------------------
@@ -498,11 +500,16 @@ class TestPropagation(unittest.TestCase):
         copy.active_handlers[0]["activated_at"] = 999.0
         self.assertEqual(s.active_handlers[0]["activated_at"], 1.0)
 
-    def test_unknown_field_survives_propagation(self):
+    def test_unknown_field_is_not_carried_by_session_propagate(self):
+        # This class does not model unknown fields, so Session.propagate()
+        # (a from_dict(to_dict()) round-trip) does not carry them. Real §4
+        # propagation of unknown session keys happens at the Message level:
+        # Message.forward/reply deep-copy the raw wire context instead of
+        # reconstructing it through Session, so unknown keys DO survive
+        # there (see test_message.py / test_messages.py for that path).
         s = Session.from_dict({"session_id": "abc",
                                "novel_future_field": [1, 2, 3]})
-        self.assertEqual(s.propagate().to_dict()["novel_future_field"],
-                         [1, 2, 3])
+        self.assertNotIn("novel_future_field", s.propagate().to_dict())
 
     def test_materialize_default_sets_only_session_id(self):
         # §4.1
@@ -520,8 +527,10 @@ class TestSerialization(unittest.TestCase):
         self.assertEqual(Session.deserialize(wire), s)
 
     def test_serialize_rejects_nan(self):
-        # §5 + OVOS-MSG-1 §6 — numbers MUST be finite
-        s = Session(extras={"weird": float("nan")})
+        # §5 + OVOS-MSG-1 §6 — numbers MUST be finite. `intent_context` is
+        # an opaque object-valued override field, a convenient carrier for
+        # a non-finite number reaching serialize().
+        s = Session(intent_context={"weird": float("nan")})
         with self.assertRaises(ValueError):
             s.serialize()
 
