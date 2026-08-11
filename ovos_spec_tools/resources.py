@@ -22,7 +22,6 @@ serves every language the skill ships.
 """
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
@@ -161,12 +160,11 @@ def find_lang_dir(base_path: Union[str, Path], lang: str,
     """Resolve the best ``<base_path>/<lang>/`` subdirectory for *lang*.
 
     The immediate subdirectories of ``base_path`` are taken as the set of
-    available languages; the resolver (default :func:`closest_lang`)
-    picks the closest match within ``max_distance`` (OVOS-INTENT-2 §2.2
-    smart fallback). Case-mismatch (``en-US`` vs ``en-us``) and
-    minor regional fallback (``en-AU`` to ``en-US``) both resolve
-    through :func:`closest_lang` — no separate exact-match short-circuit
-    is needed.
+    available languages. A standardized exact match wins first; otherwise the
+    resolver (default :func:`closest_lang`) picks the closest match within
+    ``max_distance`` (OVOS-INTENT-2 §2.2 smart fallback). This preserves a
+    regional directory such as ``eu-ES`` when a macro-language ``eu`` tree is
+    also installed.
 
     Returns the resolved :class:`Path`, or ``None`` if ``base_path`` is
     not a directory or no available subdir is close enough.
@@ -182,6 +180,11 @@ def find_lang_dir(base_path: Union[str, Path], lang: str,
     if not base.is_dir():
         return None
     names = [c.name for c in base.iterdir() if c.is_dir()]
+    if lang_resolver is None:
+        target = standardize_lang(lang)
+        for name in names:
+            if standardize_lang(name) == target:
+                return base / name
     resolver = lang_resolver if lang_resolver is not None else closest_lang
     match = resolver(lang, names, max_distance)
     if match is None:
@@ -332,8 +335,12 @@ def utterance_contains(utterance: str, samples: Sequence[str],
     """
     if not utterance or not samples:
         return False
-    norm = lambda s: normalize_for_match(
-        s, strip_diacritics=strip_diacritics, strip_punct=strip_punct)
+    def norm(value: str) -> str:
+        return normalize_for_match(
+            value,
+            strip_diacritics=strip_diacritics,
+            strip_punct=strip_punct,
+        )
     utt = norm(utterance)
     norm_samples = [norm(s) for s in samples]
     if exact:
@@ -417,11 +424,19 @@ class LocaleResources:
     overrides, then skill resources, then core resources — searching each
     source's ``<lang>/`` directory and all its subdirectories recursively.
 
+    Skill and core resources are installed with their owning packages and are
+    therefore snapshotted at construction. Their file contents, resource
+    index, dialogs, prompts, and valid expanded results remain in memory for
+    the lifetime of this instance. An optional user resource tree stays live:
+    it is searched and read on every call so creating, editing, or removing a
+    user override takes effect without restarting the process.
+
     When the requested language has no directory, a **smart language fallback**
     (OVOS-INTENT-2 §2.2, non-normative) selects the nearest available language.
     Resolution is done by :func:`ovos_spec_tools.language.closest_lang` and is
-    re-run on every load, so one instance serves different languages — and
-    different fallbacks. The fallback needs the optional ``langcodes``
+    cached per static source and requested language, so one instance serves
+    different languages — and different fallbacks — without repeating static
+    directory discovery. The fallback needs the optional ``langcodes``
     dependency; without it, only exact tags resolve.
     """
 
@@ -429,8 +444,7 @@ class LocaleResources:
                  core_locale: Optional[str] = None,
                  user_locale: Optional[str] = None,
                  lang_resolver: Optional[LanguageResolver] = None,
-                 max_language_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE,
-                 expanded_cache_size: int = 0):
+                 max_language_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE):
         """
         Args:
             skill_locale: path to the skill's ``locale/`` directory.
@@ -443,36 +457,170 @@ class LocaleResources:
             max_language_distance: passed to the resolver — the fallback
                 accepts a language whose tag distance is **below** this
                 (default 10, §2.2). ``0`` disables the fallback.
-            expanded_cache_size: maximum number of expanded intent, entity,
-                vocabulary, and blacklist results retained by this instance.
-                ``0`` (the default) keeps live user overrides uncached.
         """
-        # Highest precedence first (§2.1): user, skill, core.
-        self._sources: List[Path] = [
-            Path(p) for p in (user_locale, skill_locale, core_locale)
-            if p is not None
+        self._user_source = Path(user_locale) if user_locale is not None else None
+        # Highest static precedence first (§2.1): skill, core.
+        self._static_sources: List[Path] = [
+            Path(p) for p in (skill_locale, core_locale) if p is not None
         ]
+        # Retained for the source-ordered keyword iterators: user, skill, core.
+        self._sources: List[Path] = ([self._user_source]
+                                     if self._user_source is not None else [])
+        self._sources.extend(self._static_sources)
+        self._uses_default_lang_resolver = lang_resolver is None
         self._lang_resolver: LanguageResolver = (
             lang_resolver if lang_resolver is not None else closest_lang)
         self.max_language_distance = max_language_distance
-        if (not isinstance(expanded_cache_size, int)
-                or isinstance(expanded_cache_size, bool)
-                or expanded_cache_size < 0):
-            raise ValueError("expanded_cache_size must be a non-negative integer")
-        self.expanded_cache_size = expanded_cache_size
-        expanded_loader = self._load_expanded_uncached
-        if expanded_cache_size:
-            expanded_loader = lru_cache(maxsize=expanded_cache_size)(
-                expanded_loader
-            )
-            self._clear_expanded_cache = expanded_loader.cache_clear
-        else:
-            self._clear_expanded_cache = self._noop_clear_cache
-        self._expanded_loader = expanded_loader
 
-    @staticmethod
-    def _noop_clear_cache() -> None:
-        """No-op invalidator used when expanded-resource caching is off."""
+        # source -> original language directory name ->
+        # (base name, extension) -> every matching path. Multiple paths are
+        # retained so the duplicate-resource error remains local to access.
+        self._static_index: Dict[
+            Path, Dict[str, Dict[Tuple[str, str], Tuple[Path, ...]]]
+        ] = {}
+        self._static_lines: Dict[Path, Tuple[str, ...]] = {}
+        self._static_prompts: Dict[Path, str] = {}
+        self._static_language_cache: Dict[
+            Tuple[Path, str], Optional[str]
+        ] = {}
+        self._expanded_resources: Dict[
+            Tuple[str, str, str], Tuple[str, ...]
+        ] = {}
+        self._snapshot_static_sources()
+        if self._user_source is None:
+            self._preload_expanded_resources()
+
+    def _snapshot_static_sources(self) -> None:
+        """Read and index installed skill/core resource files once."""
+        line_roles = set(SLOT_BEARING_ROLES + SLOT_FREE_ROLES)
+        lines_by_target: Dict[Path, Tuple[str, ...]] = {}
+        prompts_by_target: Dict[Path, str] = {}
+        for source in self._static_sources:
+            language_index: Dict[
+                str, Dict[Tuple[str, str], Tuple[Path, ...]]
+            ] = {}
+            indexes_by_target: Dict[
+                Path, Dict[Tuple[str, str], Tuple[Path, ...]]
+            ] = {}
+            if source.is_dir():
+                for lang_dir in sorted(source.iterdir()):
+                    if not lang_dir.is_dir():
+                        continue
+                    lang_target = lang_dir.resolve()
+                    if lang_target in indexes_by_target:
+                        language_index[lang_dir.name] = indexes_by_target[
+                            lang_target
+                        ]
+                        continue
+                    mutable: Dict[Tuple[str, str], List[Path]] = {}
+                    for path in sorted(lang_target.rglob("*")):
+                        if not path.is_file():
+                            continue
+                        key = (path.stem, path.suffix)
+                        mutable.setdefault(key, []).append(path)
+                        if path.suffix in line_roles:
+                            target = path.resolve()
+                            if target not in lines_by_target:
+                                lines_by_target[target] = tuple(
+                                    read_resource_file(path)
+                                )
+                            self._static_lines[path] = lines_by_target[target]
+                        elif path.suffix == PROMPT_ROLE:
+                            target = path.resolve()
+                            if target not in prompts_by_target:
+                                prompts_by_target[target] = read_prompt_file(path)
+                            self._static_prompts[path] = prompts_by_target[target]
+                    resource_index = {
+                        key: tuple(paths) for key, paths in mutable.items()
+                    }
+                    indexes_by_target[lang_target] = resource_index
+                    language_index[lang_dir.name] = resource_index
+            self._static_index[source] = language_index
+
+    def _preload_expanded_resources(self) -> None:
+        """Expand valid installed resources without making unused faults fatal."""
+        requests = set()
+        expanded_roles = {".intent", ".entity", ".voc", ".blacklist"}
+        for language_index in self._static_index.values():
+            for lang, resources in language_index.items():
+                for base_name, extension in resources:
+                    if extension in expanded_roles:
+                        requests.add((base_name, extension, lang))
+        for base_name, extension, lang in sorted(requests):
+            try:
+                self._load_expanded(base_name, extension, lang)
+            except (FileNotFoundError, ValueError):
+                # Construction must not turn an unused malformed locale into a
+                # process-wide startup failure. Access still raises the fault.
+                continue
+
+    def _static_lang_name(self, source: Path, lang: str) -> Optional[str]:
+        """Resolve a requested language against one immutable source index."""
+        cache_key = (source, lang)
+        if cache_key in self._static_language_cache:
+            return self._static_language_cache[cache_key]
+        names = list(self._static_index[source])
+        resolved = None
+        if self._uses_default_lang_resolver:
+            target = standardize_lang(lang)
+            for name in names:
+                if standardize_lang(name) == target:
+                    resolved = name
+                    break
+        if resolved is None:
+            match = self._lang_resolver(
+                lang, names, self.max_language_distance
+            )
+            if match is not None:
+                if match in names:
+                    resolved = match
+                else:
+                    match = standardize_lang(match)
+                    for name in names:
+                        if standardize_lang(name) == match:
+                            resolved = name
+                            break
+        self._static_language_cache[cache_key] = resolved
+        return resolved
+
+    def _static_paths(self, source: Path, base_name: str, extension: str,
+                      lang: str) -> Tuple[Path, ...]:
+        """Return snapshotted paths for one resource lookup."""
+        lang_name = self._static_lang_name(source, lang)
+        if lang_name is None:
+            return ()
+        return self._static_index[source][lang_name].get(
+            (base_name, extension), ()
+        )
+
+    def _iter_source_paths(self, source: Path, extension: str,
+                           lang: str) -> Iterator[Path]:
+        """Yield role paths from a live user source or a static snapshot."""
+        if self._user_source is not None and source == self._user_source:
+            lang_dir = self._lang_dir(source, lang)
+            if lang_dir is not None:
+                yield from (path for path in sorted(lang_dir.rglob(
+                    f"*{extension}")) if path.is_file())
+            return
+        lang_name = self._static_lang_name(source, lang)
+        if lang_name is None:
+            return
+        resources = self._static_index[source][lang_name]
+        for (_, resource_extension), paths in resources.items():
+            if resource_extension == extension:
+                yield from paths
+
+    def _resource_lines(self, path: Path) -> Tuple[str, ...]:
+        """Return cached static lines or freshly read user-override lines."""
+        if path in self._static_lines:
+            return self._static_lines[path]
+        return tuple(read_resource_file(path))
+
+    def _prompt_text(self, path: Path) -> str:
+        """Return cached static prompt text or a live user override."""
+        if path in self._static_prompts:
+            return self._static_prompts[path]
+        return read_prompt_file(path)
 
     def _lang_dir(self, source: Path, lang: str) -> Optional[Path]:
         """The ``<lang>/`` directory for ``lang`` under one source.
@@ -480,17 +628,19 @@ class LocaleResources:
         The language is resolved against the available subdirectories by the
         ``lang_resolver`` — an exact tag, or the smart fallback of §2.2.
         """
+        resolver = (None if self._uses_default_lang_resolver
+                    else self._lang_resolver)
         return find_lang_dir(source, lang,
-                             lang_resolver=self._lang_resolver,
+                             lang_resolver=resolver,
                              max_distance=self.max_language_distance)
 
     def find(self, base_name: str, extension: str,
              lang: str) -> Optional[Path]:
         """Locate a resource file by ``(base name, extension)`` in ``lang``.
 
-        Walks the override precedence (§2.1) — user, then skill, then core —
-        and inside each source's ``<lang>/`` directory descends recursively
-        looking for ``<base_name><extension>``. The first match wins.
+        Walks the override precedence (§2.1) — live user tree, then the skill
+        and core snapshots — looking for ``<base_name><extension>``. The first
+        match wins.
 
         ``lang`` is resolved against each source's available subdirectories
         via the language resolver, so a request for ``en`` matches an
@@ -503,15 +653,25 @@ class LocaleResources:
         Returns the resolved path, or ``None`` if no source has it.
         """
         filename = base_name + extension
-        for source in self._sources:
-            lang_dir = self._lang_dir(source, lang)
-            if lang_dir is None:
-                continue
-            matches = sorted(p for p in lang_dir.rglob(filename) if p.is_file())
+        if self._user_source is not None:
+            lang_dir = self._lang_dir(self._user_source, lang)
+            matches = (sorted(p for p in lang_dir.rglob(filename)
+                              if p.is_file()) if lang_dir is not None else [])
             if len(matches) > 1:
                 raise MalformedResource(
                     f"duplicate resource {filename!r} within {lang_dir} — "
                     f"a (role, base name) must be unique per language tree")
+            if matches:
+                return matches[0]
+        for source in self._static_sources:
+            matches = self._static_paths(source, base_name, extension, lang)
+            if len(matches) > 1:
+                lang_name = self._static_lang_name(source, lang)
+                raise MalformedResource(
+                    f"duplicate resource {filename!r} within "
+                    f"{source / (lang_name or lang)} — a (role, base name) "
+                    "must be "
+                    "unique per language tree")
             if matches:
                 return matches[0]
         return None
@@ -522,12 +682,8 @@ class LocaleResources:
         vocs: Dict[str, List[str]] = {}
         # Lowest precedence first, so a higher-precedence file overrides.
         for source in reversed(self._sources):
-            lang_dir = self._lang_dir(source, lang)
-            if lang_dir is None:
-                continue
-            for path in lang_dir.rglob("*.voc"):
-                if path.is_file():
-                    vocs[path.stem] = read_resource_file(path)
+            for path in self._iter_source_paths(source, ".voc", lang):
+                vocs[path.stem] = list(self._resource_lines(path))
         return vocs
 
     def entities(self, lang: str) -> Dict[str, List[str]]:
@@ -535,12 +691,8 @@ class LocaleResources:
         each value set expanded, with override precedence applied."""
         names = set()
         for source in self._sources:
-            lang_dir = self._lang_dir(source, lang)
-            if lang_dir is None:
-                continue
-            for path in lang_dir.rglob("*.entity"):
-                if path.is_file():
-                    names.add(path.stem)
+            for path in self._iter_source_paths(source, ".entity", lang):
+                names.add(path.stem)
         return {name: self.load_entity(name, lang) for name in sorted(names)}
 
     def _keywords_for(self, extension: str, lang: str
@@ -552,13 +704,8 @@ class LocaleResources:
         :func:`keyword_form`."""
         vocabularies = self.vocabularies(lang)
         for source in self._sources:
-            lang_dir = self._lang_dir(source, lang)
-            if lang_dir is None:
-                continue
-            for path in sorted(lang_dir.rglob(f"*{extension}")):
-                if not path.is_file():
-                    continue
-                for template in read_resource_file(path):
+            for path in self._iter_source_paths(source, extension, lang):
+                for template in self._resource_lines(path):
                     entity, aliases = keyword_form(template, vocabularies)
                     if entity:
                         yield path.stem, entity, aliases
@@ -639,13 +786,13 @@ class LocaleResources:
 
     def _load_expanded_uncached(self, base_name: str, extension: str,
                                 lang: str) -> Tuple[str, ...]:
-        """Load and expand one resource into an immutable cache value."""
+        """Load and expand one resource into an immutable snapshot value."""
         path = self.find(base_name, extension, lang)
         if path is None:
             raise FileNotFoundError(
                 f"no {extension} resource named {base_name!r} for "
                 f"language {lang!r}")
-        templates = read_resource_file(path)
+        templates = self._resource_lines(path)
         if not templates:
             raise MalformedResource(
                 f"empty resource file {path} — every file must contribute at "
@@ -665,12 +812,17 @@ class LocaleResources:
 
     def _load_expanded(self, base_name: str, extension: str,
                        lang: str) -> List[str]:
-        """Load a resource and return an independently mutable sample list."""
-        return list(self._expanded_loader(base_name, extension, lang))
-
-    def clear_cache(self) -> None:
-        """Invalidate this instance's opt-in expanded-resource cache."""
-        self._clear_expanded_cache()
+        """Return a mutable copy of static or live expanded resource data."""
+        if self._user_source is not None:
+            return list(self._load_expanded_uncached(
+                base_name, extension, lang
+            ))
+        cache_key = (base_name, extension, standardize_lang(lang))
+        if cache_key not in self._expanded_resources:
+            self._expanded_resources[cache_key] = self._load_expanded_uncached(
+                base_name, extension, lang
+            )
+        return list(self._expanded_resources[cache_key])
 
     def load_intent(self, base_name: str, lang: str) -> List[str]:
         """Load an ``.intent`` as its sample set, named slots intact (§4.1)."""
@@ -700,12 +852,12 @@ class LocaleResources:
             raise FileNotFoundError(
                 f"no .dialog resource named {base_name!r} for "
                 f"language {lang!r}")
-        phrases = read_resource_file(path)
+        phrases = self._resource_lines(path)
         if not phrases:
             raise MalformedResource(
                 f"empty resource file {path} — every file must contribute at "
                 f"least one template (§5)")
-        return phrases
+        return list(phrases)
 
     def load_prompt(self, base_name: str, lang: str) -> str:
         """Load a ``.prompt`` as its whole-file string (§4.4).
@@ -723,7 +875,7 @@ class LocaleResources:
             raise FileNotFoundError(
                 f"no .prompt resource named {base_name!r} for "
                 f"language {lang!r}")
-        text = read_prompt_file(path)
+        text = self._prompt_text(path)
         if not text.strip():
             raise MalformedResource(
                 f"empty resource file {path} — every file must contribute "
