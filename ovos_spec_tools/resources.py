@@ -426,10 +426,13 @@ class LocaleResources:
 
     Skill and core resources are installed with their owning packages and are
     therefore snapshotted at construction. Their file contents, resource
-    index, dialogs, prompts, and valid expanded results remain in memory for
-    the lifetime of this instance. An optional user resource tree stays live:
-    it is searched and read on every call so creating, editing, or removing a
-    user override takes effect without restarting the process.
+    index, dialogs, and prompts remain in memory for the lifetime of this
+    instance. Valid expanded results are also precomputed when no user tree is
+    configured. With a user tree, expansion is repeated against its live files
+    on each call. Recreate the instance after changing installed resources;
+    package-owned data intentionally has no refresh operation. An optional
+    user resource tree stays live, so creating, editing, or removing a user
+    override takes effect without restarting the process.
 
     When the requested language has no directory, a **smart language fallback**
     (OVOS-INTENT-2 §2.2, non-normative) selects the nearest available language.
@@ -491,7 +494,12 @@ class LocaleResources:
             self._preload_expanded_resources()
 
     def _snapshot_static_sources(self) -> None:
-        """Read and index installed skill/core resource files once."""
+        """Eagerly read and index installed skill/core resource files once.
+
+        Installed locale trees are package-owned and static for the instance
+        lifetime. Keeping their small contents in memory removes filesystem
+        reads from later intent matching; the live user tree is excluded.
+        """
         line_roles = set(SLOT_BEARING_ROLES + SLOT_FREE_ROLES)
         lines_by_target: Dict[Path, Tuple[str, ...]] = {}
         prompts_by_target: Dict[Path, str] = {}
