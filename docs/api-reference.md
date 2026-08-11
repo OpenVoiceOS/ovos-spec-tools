@@ -28,7 +28,8 @@ Loads a skill's locale resource files. The three `*_locale` arguments are paths
 to `locale/` directories, in ascending override precedence. `lang_resolver` is
 a `(target, available, max_distance) -> str | None` callable (default
 `closest_lang`). `max_language_distance` caps the smart fallback (`0` disables
-it).
+it). Installed skill/core resources are snapshotted at construction; an
+optional user resource tree remains live and is checked on every call.
 
 Methods, each takes a resource base name and a BCP-47 `lang`:
 
