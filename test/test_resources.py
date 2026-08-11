@@ -134,21 +134,22 @@ def test_static_resources_are_read_once_and_return_defensive_copies(
     _write(resource, "stop\n")
     reads = 0
 
-    from ovos_spec_tools import resources
-    original_reader = resources.read_resource_file
+    from ovos_spec_tools import resources as resources_module
+    original_reader = resources_module.read_resource_file
+    resource_target = resource.resolve()
 
     def counted_reader(path):
         nonlocal reads
-        if path == resource:
+        if path.resolve() == resource_target:
             reads += 1
         return original_reader(path)
 
-    monkeypatch.setattr(resources, "read_resource_file", counted_reader)
-    resources = LocaleResources(str(locale))
+    monkeypatch.setattr(resources_module, "read_resource_file", counted_reader)
+    loader = LocaleResources(str(locale))
 
-    first = resources.load_vocabulary("stop", "en-US")
+    first = loader.load_vocabulary("stop", "en-US")
     first.append("mutated by caller")
-    assert resources.load_vocabulary("stop", "en-US") == ["stop"]
+    assert loader.load_vocabulary("stop", "en-US") == ["stop"]
     assert reads == 1
 
 
