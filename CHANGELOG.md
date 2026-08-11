@@ -6,6 +6,7 @@
 
 **Merged pull requests:**
 
+- fix: remove Session.extras \(unreviewed, zero consumers, not in SESSION-1\) [\#97](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/97) ([JarbasAl](https://github.com/JarbasAl))
 - fix: accept a language distance equal to the threshold [\#96](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/96) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.6.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.0a2) (2026-08-01)
