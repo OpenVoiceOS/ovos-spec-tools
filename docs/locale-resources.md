@@ -85,14 +85,20 @@ res.load_intent("play", "pt-PT")     # same instance
 
 Installed **skill** and **core** resources are immutable for the lifetime of
 the owning process. `LocaleResources` reads and indexes those trees at
-construction, retains dialogs and prompts in memory, and pre-expands valid
-intent, entity, vocabulary, and blacklist resources. This avoids filesystem
-discovery and parsing in the runtime intent path.
+construction and retains their raw lines, dialogs, and prompts in memory. When
+no user resource tree is configured, it also pre-expands valid intent, entity,
+vocabulary, and blacklist resources. This avoids filesystem discovery and
+parsing in the runtime intent path. Recreate the instance after installing or
+editing skill/core resources; there is intentionally no refresh operation for
+package-owned data.
 
 The optional **user** resource tree is deliberately different. It remains
 live and is checked on every call, so a user override can be created, edited,
 or removed without rebuilding the installed-resource snapshot. A live user
-`.voc` override also re-expands a static intent that references it.
+`.voc` override also re-expands a static intent that references it. When a user
+tree is configured, expanded results are therefore computed per call against
+the in-memory static snapshot and the current user files instead of being
+retained.
 
 The load methods:
 
