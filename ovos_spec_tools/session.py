@@ -119,8 +119,14 @@ _STRING_OVERRIDE_FIELDS = ("persona_id",)
 
 #: The full closed set of fields OVOS-SESSION-1 §3 recognizes in this
 #: version. A consumer that recognizes any of these interprets it per
-#: its owner specification; everything else is unknown-field passthrough
-#: (§2.4) carried opaquely in :attr:`Session.extras`.
+#: its owner specification; everything else is an unknown field. Per
+#: §2.4 a consumer MUST NOT reject an unknown key: :meth:`Session.from_dict`
+#: silently drops it from the in-process object (this module carries no
+#: catch-all attribute for it), while §4 propagation is satisfied at the
+#: Message level — ``Message.forward`` / ``Message.reply`` deep-copy the
+#: raw wire ``context`` (including any unknown session keys) rather than
+#: reconstructing it from a ``Session`` object, so an unknown key rides
+#: through untouched on the wire even though this class does not model it.
 SESSION1_REGISTERED_FIELDS = frozenset(SESSION1_OWNED_FIELDS).union(
     _LIST_OVERRIDE_FIELDS, _OBJECT_OVERRIDE_FIELDS, _HANDLER_FIELDS,
     _STRING_OVERRIDE_FIELDS)
@@ -152,7 +158,9 @@ class Session:
     :meth:`to_dict` honour the omissible-but-never-nullable rule: a
     field whose value is ``None`` / empty is **absent** from the
     serialized object, never emitted as ``null`` (§2.1, §3.4). Unknown
-    fields supplied via ``extras`` round-trip unchanged (§2.4).
+    fields are not rejected (§2.4) but are not modelled by this class
+    either — see :data:`SESSION1_REGISTERED_FIELDS` for how §4
+    propagation still holds without a catch-all attribute.
 
     The Python-level default for ``session_id`` is ``None`` (omitted on
     the wire). :meth:`resolved_session_id` returns the value a consumer
@@ -200,9 +208,6 @@ class Session:
         bound to this session. Registered as a session field by
         OVOS-PERSONA-1 (recognized here per the OVOS-SESSION-1 §2.2 field
         registry); ``None`` ⇒ omitted on the wire (§2.1).
-    :param extras: passthrough mapping for fields claimed by future
-        specifications (anything outside :data:`SESSION1_REGISTERED_FIELDS`).
-        Treated opaquely per §2.4.
     """
 
     def __init__(self,
@@ -235,8 +240,7 @@ class Session:
                  active_handlers: Optional[List[Dict[str, Any]]] = None,
                  converse_handlers: Optional[List[Dict[str, Any]]] = None,
                  response_mode: Optional[Dict[str, Any]] = None,
-                 persona_id: Optional[str] = None,
-                 extras: Optional[Dict[str, Any]] = None):
+                 persona_id: Optional[str] = None):
         if session_id is not None and (not isinstance(session_id, str)
                                        or not session_id):
             # §6 producer: non-empty string when set.
@@ -278,9 +282,6 @@ class Session:
             if lang is not None and lang in seen:
                 raise MalformedSession(
                     "secondary_langs MUST NOT contain `lang` (§3.2.2)")
-        if extras is not None and not isinstance(extras, dict):
-            raise MalformedSession("extras must be a dict")
-
         # --- §3.1 / §3.2 / §3.3 owned scalars and lists ---------------------
         self.session_id = session_id
         self.lang = lang
@@ -331,9 +332,6 @@ class Session:
             converse_handlers)
         self.response_mode: Optional[Dict[str, Any]] = self._coerce_response_mode(
             response_mode)
-
-        # --- §2.4 unknown-field passthrough --------------------------------
-        self.extras: Dict[str, Any] = dict(extras) if extras else {}
 
     # --- helpers ------------------------------------------------------------
 
@@ -520,8 +518,12 @@ class Session:
 
         Fields whose Python value is ``None`` / empty are **omitted**,
         never emitted as ``null`` (§2.1). An empty list-valued override
-        is wire-equivalent to omission and is dropped (§3.4). ``extras``
-        are merged in last and round-trip unchanged (§2.4)."""
+        is wire-equivalent to omission and is dropped (§3.4). Unknown
+        fields are not modelled by this class (see
+        :data:`SESSION1_REGISTERED_FIELDS`) so they are not re-emitted
+        here; §4 propagation of unknown keys instead relies on
+        ``Message.forward`` / ``Message.reply`` deep-copying the raw wire
+        ``context`` rather than reconstructing it through this method."""
         out: Dict[str, Any] = {}
 
         # §3.1 / §3.2 / §3.3 owned scalars
@@ -566,13 +568,6 @@ class Session:
         if self.response_mode:
             out["response_mode"] = dict(self.response_mode)
 
-        # §2.4 unknown-field tolerance — passthrough.
-        for k, v in self.extras.items():
-            if k in out:
-                # An owned field set both ways is a programming error;
-                # owned wins (single source of truth).
-                continue
-            out[k] = deepcopy(v)
         return out
 
     def serialize(self) -> str:
@@ -588,10 +583,14 @@ class Session:
 
         Tolerant of the §2.1 deferral surface: an explicit ``null`` on
         any registered field is logged and treated as omitted, not as a
-        rejection. Unknown fields are preserved verbatim in
-        :attr:`extras` (§2.4). Passing ``None`` (no ``session`` key in
-        ``context``) yields the same well-formed empty session as ``{}``
-        (§2.1)."""
+        rejection. Unknown fields are silently dropped from the
+        in-process object — this class does not reject them (§2.4) but
+        also does not model them; §4 propagation of unknown keys is
+        instead handled at the Message level (``Message.forward`` /
+        ``Message.reply`` deep-copy the raw wire ``context`` rather than
+        reconstructing it through this method). Passing ``None`` (no
+        ``session`` key in ``context``) yields the same well-formed empty
+        session as ``{}`` (§2.1)."""
         if payload is None:
             return cls()
         if not isinstance(payload, dict):
@@ -599,10 +598,9 @@ class Session:
                 "session must be a JSON object (§2 / §5)")
 
         kwargs: Dict[str, Any] = {}
-        extras: Dict[str, Any] = {}
         for key, value in payload.items():
             if key not in SESSION1_REGISTERED_FIELDS:
-                extras[key] = value
+                # §2.4: unknown fields are not rejected, just not modelled.
                 continue
             if value is None:
                 # §2.1: explicit null is malformed — log, treat as omitted.
@@ -611,8 +609,6 @@ class Session:
                     "malformed; treating as omitted", key)
                 continue
             kwargs[key] = value
-        if extras:
-            kwargs["extras"] = extras
         return cls(**kwargs)
 
     @classmethod
@@ -642,8 +638,12 @@ class Session:
 
     def propagate(self) -> "Session":
         """Return a deep copy suitable for attaching to a derived
-        Message (§4). Every field — known and unknown — rides along
-        unchanged."""
+        Message (§4). Every field this class models rides along
+        unchanged. Unknown wire keys are not carried by this method (this
+        class does not model them); when a derived Message is built via
+        ``Message.forward`` / ``Message.reply`` the raw wire ``context``
+        is deep-copied instead, which does preserve unknown session keys
+        verbatim — that is the path real §4 propagation takes."""
         return Session.from_dict(self.to_dict())
 
     @classmethod
