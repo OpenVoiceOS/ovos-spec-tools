@@ -261,9 +261,13 @@ def normalize_for_match(text: str, *,
     - ``strip_diacritics=True`` (default) decomposes combining marks (NFD)
       and drops them — ``"olá"`` becomes ``"ola"``, ``"über"`` becomes
       ``"uber"`` — so the comparison is accent-insensitive.
-    - ``strip_punct=True`` (default) removes ASCII punctuation. Curly
-      braces ``{`` and ``}`` are preserved so slot markers survive a
-      pre-render pass.
+    - ``strip_punct=True`` (default) removes ASCII punctuation outside
+      ``{slot}`` spans. A whole ``{...}`` span, including its interior, is
+      preserved verbatim so a slot marker survives a pre-render pass intact.
+      This matters because the slot-name charset (OVOS-INTENT-1 §3.4,
+      ``[a-z][a-z0-9_]*``) includes ``_``, which is itself ASCII punctuation
+      (in ``string.punctuation``) — stripping it out of ``{requested_color}``
+      would silently rename the slot to ``requestedcolor``.
 
     Set either flag to ``False`` for languages where the distinction is
     semantic (e.g. French ``ou``/``où``).
@@ -271,28 +275,43 @@ def normalize_for_match(text: str, *,
     This is a *match-time* normalization the resource consumers apply, distinct
     from the upstream ASR normalization OVOS-INTENT-1 §2 presumes; it exists
     because real utterances and authored ``.voc`` lines drift in accent and
-    punctuation. ``{``/``}`` are preserved so a slot marker survives a
-    pre-render pass.
+    punctuation. ``{...}`` spans are preserved whole so a slot marker survives
+    a pre-render pass.
 
     Args:
         text: the string to normalize.
         strip_diacritics: fold combining marks via NFD decomposition.
-        strip_punct: drop ASCII punctuation except ``{`` and ``}``.
+        strip_punct: drop ASCII punctuation outside ``{...}`` spans.
 
     Returns:
         The normalized, lowercased, whitespace-trimmed string.
     """
+    import re
     import unicodedata
     text = text.strip().lower()
     if strip_diacritics:
+        # Shield {...} spans from diacritic folding too, for consistency with
+        # strip_punct below — a slot name is ASCII-only per §3.4 so this is a
+        # no-op for well-formed templates, but keeps both folding steps using
+        # the same "spans are opaque" rule rather than diverging behaviors.
+        parts = re.split(r"(\{[^{}]*\})", text)
         text = "".join(
-            c for c in unicodedata.normalize("NFD", text)
-            if not unicodedata.combining(c)
+            part if part.startswith("{") and part.endswith("}") else
+            "".join(
+                c for c in unicodedata.normalize("NFD", part)
+                if not unicodedata.combining(c)
+            )
+            for part in parts
         )
     if strip_punct:
         import string
-        rm_chars = set(c for c in string.punctuation if c not in ("{", "}"))
-        text = "".join(c for c in text if c not in rm_chars)
+        rm_chars = set(string.punctuation)
+        parts = re.split(r"(\{[^{}]*\})", text)
+        text = "".join(
+            part if part.startswith("{") and part.endswith("}") else
+            "".join(c for c in part if c not in rm_chars)
+            for part in parts
+        )
     return text
 
 

@@ -515,6 +515,37 @@ def test_normalize_for_match_preserves_slot_markers():
     assert normalize_for_match("play {song}") == "play {song}"
 
 
+def test_normalize_for_match_preserves_underscored_slot_name():
+    """A slot name may contain ``_`` per OVOS-INTENT-1 §3.4
+    (``[a-z][a-z0-9_]*``). ``_`` is itself ASCII punctuation, so a naive
+    strip-punct pass mangles ``{requested_color}`` into ``{requestedcolor}``,
+    silently renaming the entity key every downstream matcher returns."""
+    from ovos_spec_tools import normalize_for_match
+    assert (normalize_for_match("i want {requested_color} now")
+            == "i want {requested_color} now")
+    assert normalize_for_match("{hex_code}") == "{hex_code}"
+
+
+def test_normalize_for_match_preserves_multiple_underscored_slots():
+    from ovos_spec_tools import normalize_for_match
+    assert (normalize_for_match("set {requested_color} to {hex_code}")
+            == "set {requested_color} to {hex_code}")
+
+
+def test_normalize_for_match_preserves_slot_adjacent_to_punctuation():
+    from ovos_spec_tools import normalize_for_match
+    assert (normalize_for_match("i want {requested_color}, please!")
+            == "i want {requested_color} please")
+    assert normalize_for_match("({requested_color})") == "{requested_color}"
+
+
+def test_normalize_for_match_still_strips_non_slot_underscore():
+    """An underscore outside a ``{...}`` span is ordinary punctuation and
+    still folds away — only the slot-name interior is shielded."""
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("look_alike text") == "lookalike text"
+
+
 def test_normalize_for_match_keeps_punct_when_disabled():
     from ovos_spec_tools import normalize_for_match
     assert normalize_for_match("yes, please!", strip_punct=False) == "yes, please!"
