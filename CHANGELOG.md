@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.3a1) (2026-08-12)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.6.2a1...1.6.3a1)
+
+**Merged pull requests:**
+
+- fix: normalize\_for\_match shields whole {slot} spans from punctuation/diacritic folding [\#100](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/100) ([JarbasAl](https://github.com/JarbasAl))
+
+## [1.6.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.2a1) (2026-08-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.6.1a1...1.6.2a1)
+
 ## [1.6.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.1a1) (2026-08-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.6.0a2...1.6.1a1)
@@ -147,19 +159,19 @@
 
 ## [0.17.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.2a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.2a1)
 
 **Merged pull requests:**
 
 - fix: reject malformed keyword intents at build/emit \(INTENT-3 §4.2\) [\#54](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/54) ([JarbasAl](https://github.com/JarbasAl))
 
-## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.0a1)
-
 ## [0.17.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.1a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.1a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.1a1)
+
+## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.0a1)
 
 **Merged pull requests:**
 
