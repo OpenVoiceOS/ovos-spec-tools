@@ -121,6 +121,7 @@ import re as _re
 import time
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from ovos_spec_tools.intent_topics import intent_topic_counterpart
 
 
 class SpecMessage(str, Enum):
@@ -590,6 +591,37 @@ def migration_counterpart(topic: str) -> Optional[str]:
     return _stop_dispatch_legacy(topic)  # spec <skill_id>:stop -> <skill_id>.stop
 
 
+def mirror_counterpart(topic: str) -> Optional[str]:
+    """Counterpart of ``topic`` for the receive-side mirror guard.
+
+    A dual-emit pair reaches a subscriber on two topics, and the guard drops
+    the second one. Two independent bridges produce such pairs:
+
+    - the **namespace** bridge (legacy ↔ ``ovos.*``), whose pairing is
+      :func:`migration_counterpart` — a static
+      :data:`MIGRATION_MAP` lookup plus the computed ``<skill_id>:stop``
+      pattern;
+    - the **intent-topic** compat bridge (canonical ↔ ``.intent``-suffixed),
+      whose pairing is
+      :func:`~ovos_spec_tools.intent_topics.intent_topic_counterpart`.
+
+    Intent dispatch topics are assembled at runtime from a ``skill_id`` and an
+    ``intent_name``, so they cannot live in :data:`MIGRATION_MAP` — the pairing
+    has to be computed. This function is the union, and the guard's single
+    question.
+
+    Args:
+        topic: a bus topic string.
+
+    Returns:
+        The counterpart topic, or ``None`` when ``topic`` is in neither bridge.
+    """
+    counterpart = migration_counterpart(topic)
+    if counterpart is not None:
+        return counterpart
+    return intent_topic_counterpart(topic)
+
+
 class NamespaceTranslator:
     """Shared legacy↔``ovos.*`` bus-namespace migration logic (OVOS bus bridge).
 
@@ -620,8 +652,9 @@ class NamespaceTranslator:
       :data:`MIGRATION_PAYLOAD_TRANSFORMS`).
     - **receive side** — :meth:`new_mirror_guard` lets a handler subscribed to
       *both* names run exactly once, by recognising the mirror re-delivery and
-      dropping it. :meth:`is_migrated` is the cheap pre-check ("does this topic
-      participate at all?").
+      dropping it. :meth:`has_mirror` is the cheap pre-check ("does this topic
+      participate in *any* dual-emit bridge at all?"); :meth:`is_migrated`
+      answers the narrower question of the **namespace** bridge only.
 
     Args:
         modernize: when ``True``, emitting a **legacy** topic also emits its
@@ -722,18 +755,55 @@ class NamespaceTranslator:
         return transform[direction](data)
 
     def is_migrated(self, topic: str) -> bool:
-        """Whether ``topic`` participates in the migration (so needs dedup).
+        """Whether ``topic`` participates in the **namespace** bridge.
+
+        This is deliberately narrow: it covers ONLY the static legacy↔``ovos.*``
+        namespace map (:data:`MIGRATION_MAP` / :data:`SPEC_TO_LEGACY`) plus the
+        computed ``<skill_id>:stop`` dispatch pattern. It does **not** know
+        about intent-topic pairs (canonical ↔ ``.intent``-suffixed), which are
+        assembled at runtime and cannot live in a static map.
+
+        Use it only when the narrow question is the one you mean — e.g. a bus
+        keying a **per-handler** guard, which is the correct scope for the
+        namespace bridge and the wrong scope for intent pairs (those need a
+        per-topic-pair guard; see ``ovos-bus-client``'s ``_mirror_guard_for``).
+        For the general "does this topic need :meth:`new_mirror_guard` at all?"
+        question, use :meth:`has_mirror`.
 
         Args:
             topic: a bus topic string (legacy or ``ovos.*``).
 
         Returns:
             ``True`` if ``topic`` appears on either side of :data:`MIGRATION_MAP`
-            — i.e. it has a counterpart and a handler subscribed to both names
-            should run it through :meth:`new_mirror_guard`.
+            — i.e. it has a namespace counterpart and a handler subscribed to
+            both names should run it through :meth:`new_mirror_guard`.
         """
         return (topic in MIGRATION_MAP or topic in SPEC_TO_LEGACY
                 or _stop_dispatch_legacy(topic) is not None)
+
+    def has_mirror(self, topic: str) -> bool:
+        """Whether ``topic`` participates in **any** dual-emit bridge.
+
+        This is the general-purpose pre-check for :meth:`new_mirror_guard`: it
+        is ``True`` exactly when :func:`mirror_counterpart` finds a counterpart,
+        so it covers both bridges — the static **namespace** map
+        (:meth:`is_migrated`) *and* the runtime **intent-topic** pairing
+        (:func:`~ovos_spec_tools.intent_topics.intent_topic_counterpart`).
+
+        A consumer that gates guard creation on :meth:`is_migrated` never
+        engages the guard for a pure intent-topic pair, and a handler
+        subscribed to both spellings runs twice. Gate on this method instead —
+        but note the guard SCOPE differs per bridge (per-handler for the
+        namespace bridge, per-topic-pair for intent topics), so a bus that
+        keys guards must still branch on which bridge matched.
+
+        Args:
+            topic: a bus topic string.
+
+        Returns:
+            ``True`` if ``topic`` has a counterpart in either bridge.
+        """
+        return mirror_counterpart(topic) is not None
 
     def new_mirror_guard(self,
                          clock: Optional[Callable[[], float]] = None
@@ -757,7 +827,7 @@ class NamespaceTranslator:
 
         - A Message is a **mirror** iff a previously-seen Message had the same
           payload+context fingerprint, a **different** ``msg_type``, and that
-          earlier type's :func:`migration_counterpart` equals this one — i.e.
+          earlier type's :func:`mirror_counterpart` equals this one — i.e.
           it is the same event re-delivered on the counterpart topic. Mirrors
           return ``True`` (drop).
         - Two genuine events on the **same** topic are never suppressed
@@ -802,7 +872,7 @@ class NamespaceTranslator:
             # Mirror iff same payload, DIFFERENT topic, and the topics are
             # registered counterparts of each other (a true dual-emit pair).
             if prev is not None and prev[0] != mtype \
-                    and migration_counterpart(prev[0]) == mtype:
+                    and mirror_counterpart(prev[0]) == mtype:
                 return True
             seen[fingerprint] = (mtype, now)
             return False

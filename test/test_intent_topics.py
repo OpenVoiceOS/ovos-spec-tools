@@ -4,6 +4,7 @@ import unittest
 from ovos_spec_tools import (
     INTENT_FILE_SUFFIX,
     canonical_intent_topic,
+    intent_topic_counterpart,
     is_intent_topic,
     legacy_intent_topic,
 )
@@ -93,3 +94,110 @@ class TestLegacyIntentTopic(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestIsIntentTopicNarrowness(unittest.TestCase):
+    """The predicate must not claim subsystem topics (bus-client#271, F2/C3)."""
+
+    #: Every one of these carries a colon and none is a per-intent dispatch.
+    NOT_INTENT_TOPICS = [
+        "recognizer_loop:utterance",
+        "recognizer_loop:record_begin",
+        "recognizer_loop:record_end",
+        "recognizer_loop:audio_output_start",
+        "recognizer_loop:audio_output_end",
+        "recognizer_loop:wakeword",
+        "question:query",
+        "question:action",
+        "question:query.response",
+        "padatious:register_intent",
+        "padatious:register_entity",
+        "stop:global",
+        "speak:b64_audio",
+        "skill-fake.jarbas:stop",
+        "skill-fake.jarbas:converse",
+        "skill-fake.jarbas:common_query",
+        "play:query",
+        "play:query.response",
+        "play:status.query",
+        "mycroft:something",
+        "ovos:something",
+        "gui:page_gained_focus",
+    ]
+
+    def test_subsystem_and_reserved_topics_are_not_intent_topics(self):
+        for topic in self.NOT_INTENT_TOPICS:
+            with self.subTest(topic=topic):
+                self.assertFalse(is_intent_topic(topic))
+
+    def test_suffixed_subsystem_topics_are_not_intent_topics_either(self):
+        # a twin must never be manufactured for these, in either direction
+        for topic in self.NOT_INTENT_TOPICS:
+            with self.subTest(topic=topic):
+                self.assertFalse(is_intent_topic(topic + ".intent"))
+
+    def test_migrating_topics_belong_to_the_namespace_bridge(self):
+        from ovos_spec_tools.messages import MIGRATION_MAP, SPEC_TO_LEGACY
+        colon_topics = [t for t in list(MIGRATION_MAP) + list(SPEC_TO_LEGACY)
+                        if ":" in t]
+        self.assertTrue(colon_topics, "expected colon-bearing migrating topics")
+        for topic in colon_topics:
+            with self.subTest(topic=topic):
+                self.assertFalse(is_intent_topic(topic))
+
+    def test_ping_and_pong_are_not_reserved(self):
+        # a skill may ship a ``ping.intent`` resource; excluding the name would
+        # silently deny it the compat twin. No colon ``<skill_id>:ping`` topic
+        # exists in the ecosystem -- the CommonQuery ones are dotted
+        # (``ovos.common_query.ping``) and never reach this predicate.
+        self.assertTrue(is_intent_topic("skill-fake.jarbas:ping"))
+        self.assertTrue(is_intent_topic("skill-fake.jarbas:pong"))
+        self.assertEqual(intent_topic_counterpart("skill-fake.jarbas:ping"),
+                         "skill-fake.jarbas:ping.intent")
+
+    def test_real_intent_dispatch_topics(self):
+        for topic in ["skill-food.jarbas:food.order",
+                      "skill-x:handle_thing",
+                      "skill-x:Some Thing",
+                      "skill-x:handle.some.thing.v2",
+                      "ovos-skill-hello-world.openvoiceos:HelloWorldIntent"]:
+            with self.subTest(topic=topic):
+                self.assertTrue(is_intent_topic(topic))
+                self.assertTrue(is_intent_topic(topic + ".intent"))
+
+    def test_a_skill_id_starting_with_a_namespace_word_is_still_a_skill(self):
+        # the guard is on the exact leading segment, not a prefix match
+        self.assertTrue(is_intent_topic("questionnaire.jarbas:answer"))
+        self.assertTrue(is_intent_topic("ovos-skill-stop.jarbas:halt"))
+
+    def test_halves_must_be_non_empty(self):
+        self.assertFalse(is_intent_topic(":foo"))
+        self.assertFalse(is_intent_topic("skill:"))
+        self.assertFalse(is_intent_topic("nocolon"))
+        self.assertFalse(is_intent_topic(""))
+
+
+class TestIntentTopicCounterpart(unittest.TestCase):
+
+    def test_canonical_maps_to_suffixed(self):
+        self.assertEqual(
+            intent_topic_counterpart("skill-food.jarbas:food.order"),
+            "skill-food.jarbas:food.order.intent")
+
+    def test_suffixed_maps_back_to_canonical(self):
+        self.assertEqual(
+            intent_topic_counterpart("skill-food.jarbas:food.order.intent"),
+            "skill-food.jarbas:food.order")
+
+    def test_pairing_is_an_involution(self):
+        topic = "skill-x:handle_thing"
+        twin = intent_topic_counterpart(topic)
+        self.assertEqual(intent_topic_counterpart(twin), topic)
+
+    def test_non_intent_topics_have_no_counterpart(self):
+        for topic in TestIsIntentTopicNarrowness.NOT_INTENT_TOPICS + ["nocolon", ""]:
+            with self.subTest(topic=topic):
+                self.assertIsNone(intent_topic_counterpart(topic))
+
+    def test_a_bare_dot_intent_name_has_no_distinct_counterpart(self):
+        self.assertIsNone(intent_topic_counterpart("skill-x:.intent"))
