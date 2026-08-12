@@ -68,7 +68,10 @@ from ovos_spec_tools.intent import (
 )
 from ovos_spec_tools.intent_topics import (
     INTENT_FILE_SUFFIX,
+    NON_SKILL_NAMESPACES,
+    RESERVED_INTENT_NAMES,
     canonical_intent_topic,
+    intent_topic_counterpart,
     is_intent_topic,
     legacy_intent_topic,
 )
@@ -86,6 +89,7 @@ from ovos_spec_tools.messages import (
     NamespaceTranslator,
     SpecMessage,
     migration_counterpart,
+    mirror_counterpart,
 )
 from ovos_spec_tools.context import (
     gate_satisfied,
@@ -170,6 +174,10 @@ __all__ = [
     "MIGRATION_PAYLOAD_TRANSFORMS",
     "SPEC_TO_LEGACY",
     "migration_counterpart",
+    "mirror_counterpart",
+    "intent_topic_counterpart",
+    "NON_SKILL_NAMESPACES",
+    "RESERVED_INTENT_NAMES",
     "NamespaceTranslator",
     "__version__",
 ]

@@ -121,6 +121,7 @@ import re as _re
 import time
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from ovos_spec_tools.intent_topics import intent_topic_counterpart
 
 
 class SpecMessage(str, Enum):
@@ -590,6 +591,37 @@ def migration_counterpart(topic: str) -> Optional[str]:
     return _stop_dispatch_legacy(topic)  # spec <skill_id>:stop -> <skill_id>.stop
 
 
+def mirror_counterpart(topic: str) -> Optional[str]:
+    """Counterpart of ``topic`` for the receive-side mirror guard.
+
+    A dual-emit pair reaches a subscriber on two topics, and the guard drops
+    the second one. Two independent bridges produce such pairs:
+
+    - the **namespace** bridge (legacy ↔ ``ovos.*``), whose pairing is
+      :func:`migration_counterpart` — a static
+      :data:`MIGRATION_MAP` lookup plus the computed ``<skill_id>:stop``
+      pattern;
+    - the **intent-topic** compat bridge (canonical ↔ ``.intent``-suffixed),
+      whose pairing is
+      :func:`~ovos_spec_tools.intent_topics.intent_topic_counterpart`.
+
+    Intent dispatch topics are assembled at runtime from a ``skill_id`` and an
+    ``intent_name``, so they cannot live in :data:`MIGRATION_MAP` — the pairing
+    has to be computed. This function is the union, and the guard's single
+    question.
+
+    Args:
+        topic: a bus topic string.
+
+    Returns:
+        The counterpart topic, or ``None`` when ``topic`` is in neither bridge.
+    """
+    counterpart = migration_counterpart(topic)
+    if counterpart is not None:
+        return counterpart
+    return intent_topic_counterpart(topic)
+
+
 class NamespaceTranslator:
     """Shared legacy↔``ovos.*`` bus-namespace migration logic (OVOS bus bridge).
 
@@ -757,7 +789,7 @@ class NamespaceTranslator:
 
         - A Message is a **mirror** iff a previously-seen Message had the same
           payload+context fingerprint, a **different** ``msg_type``, and that
-          earlier type's :func:`migration_counterpart` equals this one — i.e.
+          earlier type's :func:`mirror_counterpart` equals this one — i.e.
           it is the same event re-delivered on the counterpart topic. Mirrors
           return ``True`` (drop).
         - Two genuine events on the **same** topic are never suppressed
@@ -802,7 +834,7 @@ class NamespaceTranslator:
             # Mirror iff same payload, DIFFERENT topic, and the topics are
             # registered counterparts of each other (a true dual-emit pair).
             if prev is not None and prev[0] != mtype \
-                    and migration_counterpart(prev[0]) == mtype:
+                    and mirror_counterpart(prev[0]) == mtype:
                 return True
             seen[fingerprint] = (mtype, now)
             return False
