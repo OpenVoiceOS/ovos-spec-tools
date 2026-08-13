@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.7.0a1) (2026-08-13)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.6.3a1...1.7.0a1)
+
+**Merged pull requests:**
+
+- feat: intent-topic pair support for the namespace mirror guard [\#102](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/102) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.6.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.3a1) (2026-08-12)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.6.2a1...1.6.3a1)
