@@ -8,6 +8,7 @@ from ovos_spec_tools import (
     NamespaceTranslator,
     SpecMessage,
     migration_counterpart,
+    mirror_counterpart,
 )
 
 
@@ -477,3 +478,68 @@ class TestTranslatePayload(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMirrorCounterpart(unittest.TestCase):
+    """The guard pairs BOTH bridges: namespace renames and intent twins."""
+
+    def test_namespace_pairs_are_unchanged(self):
+        self.assertEqual(mirror_counterpart("speak"),
+                         migration_counterpart("speak"))
+        self.assertEqual(mirror_counterpart("skill-x:stop"), "skill-x.stop")
+
+    def test_intent_pairs_are_added(self):
+        self.assertEqual(mirror_counterpart("skill-x:food.order"),
+                         "skill-x:food.order.intent")
+        self.assertEqual(mirror_counterpart("skill-x:food.order.intent"),
+                         "skill-x:food.order")
+
+    def test_unrelated_topics_pair_with_nothing(self):
+        self.assertIsNone(mirror_counterpart("recognizer_loop:utterance.intent"))
+        self.assertIsNone(mirror_counterpart("some.private.topic"))
+
+
+class TestMirrorGuardIntentPairs(unittest.TestCase):
+    """bus-client#271: one delivered dispatch, one handler run."""
+
+    def test_canonical_then_twin_is_suppressed(self):
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"utterance": ["order food"]}
+        self.assertFalse(guard(_Msg("skill-food.jarbas:food.order", data)))
+        self.assertTrue(guard(_Msg("skill-food.jarbas:food.order.intent", data)))
+
+    def test_twin_then_canonical_is_suppressed(self):
+        # old core sends the suffixed frame; the client modernizes it after
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"utterance": ["order food"]}
+        self.assertFalse(guard(_Msg("skill-food.jarbas:food.order.intent", data)))
+        self.assertTrue(guard(_Msg("skill-food.jarbas:food.order", data)))
+
+    def test_same_topic_repeats_are_never_suppressed(self):
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"utterance": ["order food"]}
+        for _ in range(3):
+            self.assertFalse(guard(_Msg("skill-food.jarbas:food.order", data)))
+        guard = NamespaceTranslator().new_mirror_guard()
+        for _ in range(3):
+            self.assertFalse(guard(_Msg("skill-food.jarbas:food.order.intent", data)))
+
+    def test_different_skills_do_not_cross_suppress(self):
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"utterance": ["order food"]}
+        self.assertFalse(guard(_Msg("skill-a:food.order", data)))
+        self.assertFalse(guard(_Msg("skill-b:food.order.intent", data)))
+
+    def test_reserved_dispatch_names_are_not_paired(self):
+        guard = NamespaceTranslator().new_mirror_guard()
+        data = {"skill_id": "skill-x"}
+        self.assertFalse(guard(_Msg("skill-x:common_query", data)))
+        self.assertFalse(guard(_Msg("skill-x:common_query.intent", data)))
+
+    def test_window_expiry_applies_to_intent_pairs(self):
+        clk = {"t": 0.0}
+        guard = NamespaceTranslator(window=1.0).new_mirror_guard(clock=lambda: clk["t"])
+        data = {"utterance": ["order food"]}
+        self.assertFalse(guard(_Msg("skill-x:food.order", data)))
+        clk["t"] = 2.0
+        self.assertFalse(guard(_Msg("skill-x:food.order.intent", data)))
