@@ -92,7 +92,8 @@ moves the bus onto those topics.
 | `migration_counterpart` | (bridge) | symmetric counterpart lookup |
 | `NamespaceTranslator` | (bridge) | dual-emit + receive-dedup; mirrors `ovos-bus-client` / `FakeBus` |
 | `NamespaceTranslator.counterpart_topics` | (bridge) | send-side dual-emit |
-| `NamespaceTranslator.is_migrated` | (bridge) | participation pre-check |
+| `NamespaceTranslator.is_migrated` | (bridge) | namespace-bridge participation check (static map only) |
+| `NamespaceTranslator.has_mirror` | (bridge) | general dual-emit participation pre-check (both bridges) |
 | `NamespaceTranslator.new_mirror_guard` | (bridge) | receive-side mirror-window dedup |
 
 The bridge symbols are not owned by one numbered spec clause. They are the
