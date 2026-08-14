@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.0a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.7.0a3) (2026-08-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.7.0a2...1.7.0a3)
+
+**Merged pull requests:**
+
+- docs: add prerelease-quirks changelog \(no stable release yet\) [\#106](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/106) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.7.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.7.0a2) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.7.0a1...1.7.0a2)
