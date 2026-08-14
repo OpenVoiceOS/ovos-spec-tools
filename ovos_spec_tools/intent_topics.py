@@ -61,6 +61,12 @@ INTENT_FILE_SUFFIX = ".intent"
 #: and ``play:query.response`` fans out one frame per responding skill, so
 #: twinning it doubles a burst. A topic under one of these prefixes is never
 #: twinned.
+#: Each of ``recognizer_loop``, ``question``, ``padatious``, ``play``,
+#: ``speak``, ``stop``, and ``converse`` is a verified real topic-prefix
+#: collision (e.g. ``recognizer_loop:utterance``, ``play:query.response``,
+#: ``stop:global``, ``converse:skill`` are live bus topics today).
+#: ``mycroft``, ``ovos``, and ``gui`` have no confirmed colon-form topic on
+#: the current bus; they are listed defensively in case one ever appears.
 NON_SKILL_NAMESPACES = frozenset({
     "recognizer_loop",
     "question",
@@ -103,18 +109,6 @@ def is_intent_topic(msg_type: str) -> bool:
     :data:`~ovos_spec_tools.messages.MIGRATION_MAP`. Treating every colon as an
     intent dispatch would twin the hottest topics on the bus and break the
     one-emit-one-frame invariant, so the test is deliberately narrow.
-
-    A topic is an intent dispatch candidate only when **all** hold:
-
-    - it contains ``:`` and both halves are non-empty — ``":foo"`` and
-      ``"skill:"`` name no skill or no intent;
-    - it is not a migrating topic (neither side of
-      :data:`~ovos_spec_tools.messages.MIGRATION_MAP`), whose counterpart is
-      the namespace bridge's business, not this one;
-    - its leading segment is not one of :data:`NON_SKILL_NAMESPACES`;
-    - its intent name (after the LAST colon, matching
-      :func:`canonical_intent_topic`) is not one of
-      :data:`RESERVED_INTENT_NAMES`.
 
     Args:
         msg_type: a bus topic string.
