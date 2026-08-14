@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.7.0a2) (2026-08-14)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.7.0a1...1.7.0a2)
+
+**Merged pull requests:**
+
+- chore: comments for humans in intent\_topics.py [\#104](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/104) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.7.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.7.0a1) (2026-08-13)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.6.3a1...1.7.0a1)
