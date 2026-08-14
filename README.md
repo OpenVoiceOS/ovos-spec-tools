@@ -81,6 +81,10 @@ A zero-to-hero guide lives in [`docs/`](docs/README.md):
 
 Runnable example scripts are in [`examples/`](examples/README.md).
 
+See [docs/prerelease-quirks.md](docs/prerelease-quirks.md) for what changed
+since the last stable release (there has not been one yet, so it covers
+everything since the first alpha).
+
 ---
 
 ## Credits

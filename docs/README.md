@@ -43,6 +43,9 @@ are the foundation everything else rests on.
 8. [Linting](linting.md), validating a locale folder, from the command line
    or in CI.
 9. [API reference](api-reference.md), every public name, in brief.
+10. [Prerelease quirks](prerelease-quirks.md), user-visible changes since the
+    last stable release (none has shipped yet, so this covers everything
+    since the first alpha).
 
 ### Proving the scope
 
