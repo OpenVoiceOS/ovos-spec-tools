@@ -5,6 +5,16 @@ far is an alpha (`0.0.1a2` through the current `1.7.0a2`). This page covers
 every user-visible change since the first release, newest first, and will
 reset to empty the first time a stable version ships.
 
+## 1.7.1a1
+
+- New `iter_expand`: lazily yields exactly the samples `expand` returns, in
+  the same order, without materializing the Cartesian product — consumers
+  that bound their sample count (`itertools.islice`) pay for what they take.
+  `expand` is unchanged (now delegates to the generator); engines that cap
+  retained samples should switch to `iter_expand` so combinatorial
+  templates stop costing gigabytes of transient memory and minutes of CPU
+  at registration time.
+
 ## Breaking changes
 
 - **`Session.extras` removed (#97).** It was added early as a catch-all

@@ -47,7 +47,8 @@ from ovos_spec_tools.dialog import (
     render,
     verify_slot_consistency,
 )
-from ovos_spec_tools.expansion import MalformedTemplate, expand, inline_keywords
+from ovos_spec_tools.expansion import (MalformedTemplate, expand,
+                                       inline_keywords, iter_expand)
 from ovos_spec_tools.message import (
     DEFAULT_SESSION_ID,
     MalformedMessage,
