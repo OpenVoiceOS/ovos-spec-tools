@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.8.0a1) (2026-08-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.7.0a3...1.8.0a1)
+
+**Merged pull requests:**
+
+- feat: lazy iter\_expand for bounded template consumers [\#108](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/108) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.7.0a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.7.0a3) (2026-08-14)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.7.0a2...1.7.0a3)
@@ -183,19 +191,19 @@
 
 ## [0.17.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.2a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.2a1)
 
 **Merged pull requests:**
 
 - fix: reject malformed keyword intents at build/emit \(INTENT-3 §4.2\) [\#54](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/54) ([JarbasAl](https://github.com/JarbasAl))
 
-## [0.17.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.1a1) (2026-06-27)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.1a1)
-
 ## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.0a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.0a1)
+
+## [0.17.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.1a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.1a1)
 
 **Merged pull requests:**
 
