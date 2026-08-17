@@ -26,7 +26,7 @@ Malformed templates (OVOS-INTENT-1 §3.6) raise :class:`MalformedTemplate`.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Iterator, Dict, List, Optional, Sequence, Tuple
 
 __all__ = ["expand", "fold_double_braces", "MalformedTemplate"]
 
@@ -103,19 +103,47 @@ def _expand(template: str,
             f"slot-only template {template!r}: a template must carry at least "
             f"one literal word")
 
+    return list(_iter_expand(template, vocabularies, stack))
+
+
+def iter_expand(template: str,
+                vocabularies: Optional[Dict[str, Sequence[str]]] = None
+                ) -> Iterator[str]:
+    """Lazily expand a template to its sample set (OVOS-INTENT-1 §4).
+
+    Yields exactly the samples ``expand`` returns, in the same first-seen
+    order, WITHOUT materializing the Cartesian product: a consumer that
+    needs only the first N samples of a combinatorially large template
+    (``itertools.islice``) pays for N, not for the full product. Validation
+    behaves as in ``expand``: template-level malformedness raises before the
+    first yield; per-sample checks raise when the offending sample is
+    reached.
+    """
+    yield from _iter_expand(template, dict(vocabularies or {}), ())
+
+
+def _iter_expand(template: str,
+                 vocabularies: Dict[str, Sequence[str]],
+                 stack: Tuple[str, ...]) -> Iterator[str]:
+    if not isinstance(template, str):
+        raise MalformedTemplate(f"template must be a string, got {type(template)!r}")
+    template = fold_double_braces(template)
+    _check_balanced(template)
+    _check_names(template)
+    if _SLOT_TOKEN_RE.fullmatch(template.strip()):
+        raise MalformedTemplate(
+            f"slot-only template {template!r}: a template must carry at least "
+            f"one literal word")
     resolved = _resolve_references(template, vocabularies, stack)
     converted = _convert_optionals(resolved)
-    raw = _expand_groups(converted)
-
-    samples: List[str] = []
-    for sentence in raw:
+    seen = set()
+    for sentence in _iter_groups(converted):
         sentence = " ".join(sentence.split())  # normalize whitespace (§4.1)
-        if sentence not in samples:  # remove duplicates (§4.1)
-            samples.append(sentence)
-
-    for sentence in samples:
+        if sentence in seen:  # remove duplicates (§4.1)
+            continue
+        seen.add(sentence)
         _check_sample(sentence, template)
-    return samples
+        yield sentence
 
 
 def fold_double_braces(template: str) -> str:
@@ -221,6 +249,25 @@ def _convert_optionals(template: str) -> str:
         template = (template[:open_idx] + "(" + inner + "|)"
                     + template[close_idx + 1:])
     return template
+
+
+def _iter_groups(template: str) -> Iterator[str]:
+    """Yield every ``(...)`` group combination lazily, product order."""
+    open_idx = template.rfind("(")
+    if open_idx == -1:
+        yield template
+        return
+    close_idx = template.find(")", open_idx)
+    inner = template[open_idx + 1:close_idx]
+    branches = inner.split("|")
+    if len(branches) == 1:
+        raise MalformedTemplate(
+            f"single-branch group ({inner}): a group must offer a choice "
+            f"between at least two branches")
+    prefix = template[:open_idx]
+    suffix = template[close_idx + 1:]
+    for branch in branches:
+        yield from _iter_groups(prefix + branch + suffix)
 
 
 def _expand_groups(template: str) -> List[str]:
