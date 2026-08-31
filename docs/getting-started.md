@@ -24,7 +24,7 @@ improves only one thing: how a missing language falls back to a near one
 (see [Language matching](language-matching.md)); everything else works without
 it.
 
-Requires Python 3.8 or newer.
+Requires Python 3.10 or newer.
 
 ## A first taste
 

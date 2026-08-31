@@ -6,14 +6,26 @@ and the `ovos.*` namespace the specifications define
 (`ovos.utterance.speak`, `ovos.utterance.handle`,
 `ovos.intent.handler.start`, …).
 
-`ovos-spec-tools` owns the **vocabulary** of the mapping between them and
-the **transparent bridge** that lets a deployment cross from one to the
-other without a flag day. Two things implement it, both in
-`ovos_spec_tools/messages.py`:
+`ovos-spec-tools` owns the **vocabulary** of the mapping between them:
 
 - `SpecMessage`: the enum of spec-defined `ovos.*` topics.
 - `MIGRATION_MAP` + `NamespaceTranslator`: the rename map and the
-  dual-emit/dedup bridge the bus runs on top of it.
+  dual-emit/dedup bridge logic, both in `ovos_spec_tools/messages.py`.
+
+> **The wire bridge is live.** `ovos-bus-client` runs `NamespaceTranslator`
+> on the receive path so a deployment can cross from legacy to `ovos.*`
+> topics without a flag day. Both directions — legacy → `ovos.*` and
+> `ovos.*` → legacy — translate by default; the `emit_legacy` /
+> `modernize` / `intent_reemit_blanket` flags are live and in effect on
+> `dev`. `NamespaceTranslator` and `MIGRATION_MAP`, defined here in
+> `ovos_spec_tools/messages.py`, are the implementation `ovos-bus-client`
+> imports and runs.
+>
+> Removal of this bridge is scheduled, not done. The kill-switch is
+> tracked in the still-open
+> [`ovos-bus-client` PR #272](https://github.com/OpenVoiceOS/ovos-bus-client/pull/272)
+> and will land only once the fleet has upgraded — it has **not**
+> happened yet.
 
 Everything here references the spec that *owns* each topic, so a reader can
 always answer "which document made this a topic?" See the
@@ -122,13 +134,13 @@ intentionally *not* mapped:
 ## The transparent bridge: `NamespaceTranslator`
 
 `NamespaceTranslator` is the reference implementation of the **dual-emit
-bus bridge**. `ovos-bus-client`'s `MessageBusClient` and `ovos_utils`'
-`FakeBus` both delegate to it, so the real websocket bus and the
-test/satellite double behave identically.
-
-It is pure logic, with no I/O and no
-config, so `ovos-spec-tools` stays dependency-free. The caller reads
-env/config and passes the two direction flags in.
+bus bridge**. `ovos-bus-client`'s `MessageBusClient` delegates to it on
+the receive path today, so a shipped bus client runs this bridge by
+default (see the note above). The class lives in
+`ovos_spec_tools/messages.py`; `ovos-bus-client` imports it rather than
+reimplementing the mapping, and the same class also serves tooling that
+needs to reason about the legacy/spec topic pairing (linters, migration
+scripts).
 
 ```python
 from ovos_spec_tools import NamespaceTranslator
