@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.8.0a2) (2026-08-31)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.8.0a1...1.8.0a2)
+
+**Merged pull requests:**
+
+- docs: cross-link the technical manual [\#94](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/94) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.8.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.8.0a1) (2026-08-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.7.0a3...1.8.0a1)
