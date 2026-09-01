@@ -249,6 +249,17 @@ SPEC_STATIC_TOPICS = {
     "ovos.common_play.player.state": "OCP-1 §4.4",
     "ovos.common_play.media.state": "OCP-1 §4.4",
     "ovos.common_play.track.state": "OCP-1 §4.4",
+    # OVOS-SCHEDULER-1 §4 event-scheduling bus surface
+    "ovos.scheduler.schedule": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.schedule.response": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.cancel": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.cancel.response": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.get": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.get.response": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.list": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.list.response": "SCHEDULER-1 §4.1",
+    "ovos.scheduler.ready": "SCHEDULER-1 §5.4",
+    "ovos.scheduler.missed": "SCHEDULER-1 §4.3",
 }
 
 #: Topics ``ovos-bus-client`` uses that NO spec defines, so they MUST NOT be
