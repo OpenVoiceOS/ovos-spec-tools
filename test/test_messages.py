@@ -222,6 +222,8 @@ SPEC_STATIC_TOPICS = {
     # OVOS-CONVERSE-1
     "ovos.converse.active.list": "CONVERSE-1 §6.1",
     "ovos.converse.active.list.response": "CONVERSE-1 §6.1",
+    "ovos.converse.ping": "CONVERSE-1 §6.2",
+    "ovos.converse.pong": "CONVERSE-1 §6.2",
     # OVOS-PERSONA-1 §11 bus surface
     "ovos.persona.query": "PERSONA-1 §8.5",
     "ovos.persona.answer": "PERSONA-1 §8.5",
@@ -234,6 +236,8 @@ SPEC_STATIC_TOPICS = {
     # OVOS-FALLBACK-1 §9 bus surface
     "ovos.fallback.register": "FALLBACK-1 §3.1",
     "ovos.fallback.deregister": "FALLBACK-1 §3.2",
+    "ovos.fallback.ping": "FALLBACK-1 §6.1",
+    "ovos.fallback.pong": "FALLBACK-1 §6.1",
     # OVOS-COMMON-QUERY-1 §13 bus surface
     "ovos.common_query.ping": "COMMON-QUERY-1 §6.1",
     "ovos.common_query.pong": "COMMON-QUERY-1 §6.2",
