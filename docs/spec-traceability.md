@@ -134,6 +134,8 @@ handler-list helpers that PIPELINE-1 and CONVERSE-1 keep in the session.
 | `SESSION1_OWNED_FIELDS` | OVOS-SESSION-1 | §3 (fields SESSION-1 itself owns) |
 | `DEFAULT_CONVERSE_HANDLERS_CAP` | OVOS-CONVERSE-1 | §2.1 (handler-list cap) |
 | `MalformedSession` | OVOS-SESSION-1 | §3 (malformed wire shape) |
+| `Session.merge_from` | OVOS-SESSION-2 | §5.1 (default-session store write) |
+| `parse_session_payload` | OVOS-SESSION-1 | §5 (carrier parsing) |
 
 (`session.py` is owned by an in-flight PR; the citations above describe the
 symbols it exports as imported by the package `__init__`.)
