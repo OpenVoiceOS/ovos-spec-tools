@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.9.0a1) (2026-09-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.8.0a2...1.9.0a1)
+
+**Merged pull requests:**
+
+- feat: converse and fallback poll topics [\#112](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/112) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.8.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.8.0a2) (2026-08-31)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.8.0a1...1.8.0a2)
@@ -199,19 +207,19 @@
 
 ## [0.17.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.2a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.2a1)
 
 **Merged pull requests:**
 
 - fix: reject malformed keyword intents at build/emit \(INTENT-3 §4.2\) [\#54](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/54) ([JarbasAl](https://github.com/JarbasAl))
 
-## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.0a1)
-
 ## [0.17.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.1a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.1a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.1a1)
+
+## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.0a1)
 
 **Merged pull requests:**
 
