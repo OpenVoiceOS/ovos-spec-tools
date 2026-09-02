@@ -21,11 +21,13 @@ is tied to its owning spec section in the per-member comments below:
 - **OVOS-SESSION-2** — the out-of-utterance session sync topic
   (``ovos.session.sync`` §2.7);
 - **OVOS-CONVERSE-1** — the active-handler introspection pair
-  (``ovos.converse.active.list`` / ``.response`` §6.1);
+  (``ovos.converse.active.list`` / ``.response`` §6.1) and the §6.2 poll pair
+  (``ovos.converse.ping`` / ``ovos.converse.pong``);
 - **OVOS-PERSONA-1** — the §11 bus surface (``ovos.persona.{query,answer,list,
   list.response,register,deregister,activated,dismissed}``);
 - **OVOS-FALLBACK-1** — fallback registry topics (``ovos.fallback.{register,
-  deregister}`` §3);
+  deregister}`` §3) and the §6.1/§9 poll pair (``ovos.fallback.ping`` /
+  ``ovos.fallback.pong``);
 - **OVOS-COMMON-QUERY-1** — the wants-to-answer poll
   (``ovos.common_query.{ping,pong}`` §6);
 - **OVOS-TRANSFORM-1** — §6 introspection: six static query/response pairs
@@ -98,10 +100,9 @@ Topics whose ``type`` is assembled at runtime from identifiers are neither
 enum members nor static-mappable: ``ovos.pipeline.<pipeline_id>.intents.list``
 (PIPELINE-1 §10), the ``<skill_id>:<intent_name>`` dispatch topic
 (PIPELINE-1 §7), the per-skill ``<skill_id>.stop.ping`` / ``<skill_id>.stop``
-placeholders (STOP-1), the CONVERSE-1 §6.2/§6.3
-``<skill_id>.converse.{ping,pong}`` / ``<skill_id>:{converse,response}`` poll
-and dispatch, the FALLBACK-1 §6/§7 ``<skill_id>.fallback.{ping,pong}`` /
-``<skill_id>:fallback``, and the COMMON-QUERY-1 §7/§3
+placeholders (STOP-1), the CONVERSE-1 §6.3
+``<skill_id>:{converse,response}`` dispatch, the FALLBACK-1 §7
+``<skill_id>:fallback`` dispatch, and the COMMON-QUERY-1 §7/§3
 ``<skill_id>:common_query`` / ``<skill_id>.common_query.response`` /
 ``<pipeline_id>:common_query``.
 
@@ -250,13 +251,18 @@ class SpecMessage(str, Enum):
     SESSION_SYNC = "ovos.session.sync"
 
     # --- OVOS-CONVERSE-1 §6.1 active-handler introspection ---
-    # The §6.2 ``<skill_id>.converse.{ping,pong}`` poll and the §6.3
-    # ``<skill_id>:{converse,response}`` dispatches are runtime-templated
-    # (MSG-1 §2.1.1) and so are NOT static enum members.
+    # The §6.2 poll pair below is static dotted, non-dispatch (§6.2 table);
+    # only the §6.3 ``<skill_id>:{converse,response}`` dispatches are
+    # runtime-templated (MSG-1 §2.1.1) and so are NOT static enum members.
     #: §6.1 — observer→orchestrator: snapshot ``session.converse_handlers``.
     CONVERSE_ACTIVE_LIST = "ovos.converse.active.list"
     #: §6.1 — the ``.response`` reply carrying ``{converse_handlers}`` (MSG-1 §5.3).
     CONVERSE_ACTIVE_LIST_RESPONSE = "ovos.converse.active.list.response"
+    #: §6.2 — converse plugin's broadcast poll for the round; candidacy is
+    #: decided by ``session.converse_handlers`` membership, not by topic.
+    CONVERSE_PING = "ovos.converse.ping"
+    #: §6.2 — candidate's poll reply ``{skill_id, result, error_code?}``.
+    CONVERSE_PONG = "ovos.converse.pong"
 
     # --- OVOS-PERSONA-1 §11 bus surface ---
     #: §8.5 — out-of-band query to the active persona; any → persona.
@@ -277,13 +283,17 @@ class SpecMessage(str, Enum):
     PERSONA_DISMISSED = "ovos.persona.dismissed"
 
     # --- OVOS-FALLBACK-1 §9 bus surface ---
-    # The §6.1 ``<skill_id>.fallback.{ping,pong}`` poll and the §7
-    # ``<skill_id>:fallback`` dispatch are runtime-templated (MSG-1 §2.1.1)
-    # and so are NOT static enum members.
+    # The §9 poll pair below is static dotted, broadcast/shared-reply; only
+    # the §7 ``<skill_id>:fallback`` dispatch is runtime-templated
+    # (MSG-1 §2.1.1) and so is NOT a static enum member.
     #: §3.1 — a skill registers itself as a fallback handler; skill → broadcast.
     FALLBACK_REGISTER = "ovos.fallback.register"
     #: §3.2 — a skill removes itself from the fallback registry; skill → broadcast.
     FALLBACK_DEREGISTER = "ovos.fallback.deregister"
+    #: §6.1/§9 — one willingness query per round; fallback → all fallback skills.
+    FALLBACK_PING = "ovos.fallback.ping"
+    #: §6.1/§9 — claim or explicit decline, via ``reply``; skill → fallback.
+    FALLBACK_PONG = "ovos.fallback.pong"
 
     # --- OVOS-COMMON-QUERY-1 §13 bus surface ---
     # The §7.1 ``<skill_id>:common_query`` / ``<skill_id>.common_query.response``
