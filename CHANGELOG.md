@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.0a1) (2026-09-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.9.1a1...1.10.0a1)
+
+**Merged pull requests:**
+
+- feat: SCHEDULER-1 message topics [\#111](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/111) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.9.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.9.1a1) (2026-09-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.9.0a1...1.9.1a1)
