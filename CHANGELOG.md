@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.9.1a1) (2026-09-02)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.9.0a1...1.9.1a1)
+
+**Merged pull requests:**
+
+- fix: merge inbound fields into the default-session store per SESSION-2 §5.1 [\#114](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/114) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.9.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.9.0a1) (2026-09-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.8.0a2...1.9.0a1)
