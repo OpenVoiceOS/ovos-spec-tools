@@ -35,6 +35,21 @@ specification. This module fixes only the wire contract, the §3.1 /
 §3.2 / §3.3 fields whose meaning OVOS-SESSION-1 itself owns, and the
 mechanical recency / cap / prune behaviour the owners describe for the
 handler-list fields.
+
+**Clearing a field is not expressible on the carrier.** The §2.1
+omissible-but-never-nullable rule means an omitted field, an explicit
+``null``, an empty list (§3.4) and an empty object all serialize
+identically — as absence. On the pathways that read absence as "no
+opinion", chiefly the OVOS-SESSION-2 §5.1 default-session store write,
+a component therefore cannot clear a stored field by clearing it
+locally and re-serializing: the store keeps its last value. The same
+holds one level down for ``intent_context``, where OVOS-CONTEXT-1 §5.3
+gives removal a wire form — an explicit ``null`` entry — that
+:meth:`Session.to_dict` has no way to emit. A component that shares a
+process with the store clears through the live object and is
+unaffected; one that is out of process must send the ``null`` entry
+itself, which means composing the payload rather than re-serializing a
+Session.
 """
 from __future__ import annotations
 
@@ -55,6 +70,7 @@ __all__ = [
     "DEFAULT_CONVERSE_HANDLERS_CAP",
     "SESSION1_OWNED_FIELDS",
     "SESSION1_REGISTERED_FIELDS",
+    "parse_session_payload",
 ]
 
 
@@ -149,6 +165,30 @@ def _is_bcp47(value: Any) -> bool:
     module rejects only obvious type errors."""
     return isinstance(value, str) and bool(value) and not any(
         c.isspace() for c in value)
+
+
+def parse_session_payload(
+        payload: Union[str, bytes, bytearray, Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Normalise a §5 session carrier to the dict it encodes.
+
+    Raises :class:`MalformedSession` for the structural failures §5 calls
+    hard errors: JSON that does not parse, and a root that is not an object.
+    Field-level malformedness is left to the caller
+    (:meth:`Session.from_dict` absorbs it per §2.1).
+    """
+    if isinstance(payload, (bytes, bytearray)):
+        payload = payload.decode("utf-8")
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError as exc:
+            raise MalformedSession(
+                f"session payload is not valid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise MalformedSession(
+            "session must be a JSON object (§2 / §5)")
+    return payload
 
 
 class Session:
@@ -283,6 +323,13 @@ class Session:
                 raise MalformedSession(
                     "secondary_langs MUST NOT contain `lang` (§3.2.2)")
         # --- §3.1 / §3.2 / §3.3 owned scalars and lists ---------------------
+        #: the raw wire snapshot this object was deserialized from, when it
+        #: came off the wire at all. The OVOS-SESSION-2 §5.1 store-write merge
+        #: needs to know which fields a message actually carried, and that is
+        #: unrecoverable from the object alone (an omitted field and a field
+        #: sent at its default value construct identically). See
+        #: :meth:`merge_from`.
+        self.wire_payload: Optional[Dict[str, Any]] = None
         self.session_id = session_id
         self.lang = lang
         self.secondary_langs = list(secondary_langs) if secondary_langs else None
@@ -609,7 +656,9 @@ class Session:
                     "malformed; treating as omitted", key)
                 continue
             kwargs[key] = value
-        return cls(**kwargs)
+        sess = cls(**kwargs)
+        sess.wire_payload = deepcopy(payload)
+        return sess
 
     @classmethod
     def deserialize(cls,
@@ -624,15 +673,14 @@ class Session:
         absorbed by :meth:`from_dict`."""
         if payload is None:
             return cls()
-        if isinstance(payload, (bytes, bytearray)):
-            payload = payload.decode("utf-8")
-        if isinstance(payload, str):
-            try:
-                payload = json.loads(payload)
-            except json.JSONDecodeError as exc:
-                raise MalformedSession(
-                    f"session payload is not valid JSON: {exc}") from exc
-        return cls.from_dict(payload)
+        payload = parse_session_payload(payload)
+        sess = cls.from_dict(payload)
+        if sess.wire_payload is None:
+            # a subclass may override from_dict without recording the arrival;
+            # record it here so anything reaching the wire through this method
+            # merges presence-aware (see :meth:`merge_from`).
+            sess.wire_payload = deepcopy(payload)
+        return sess
 
     # --- §4 propagation -----------------------------------------------------
 
@@ -677,7 +725,121 @@ class Session:
         rebuilt = type(self).deserialize(other.serialize())
         rebuilt.session_id = self.session_id
         self.__dict__ = rebuilt.__dict__
+        # the round-trip through deserialize is not an arrival off the wire;
+        # letting it implant a wire_payload would leave a folded session
+        # claiming an arrival snapshot that no message ever sent.
+        self.wire_payload = None
         return self
+
+    def merge_from(self, other: "Session") -> "Session":
+        """Fold ``other`` onto this session **field by field**, in place.
+
+        This is the store-write rule of OVOS-SESSION-2 §5.1: an omitted
+        inbound field leaves the stored field unchanged, a present one
+        replaces it. §5.1 owns this as a deliberate deviation from
+        OVOS-SESSION-1 §2.1 and confines it to the orchestrator's
+        default-session store, because there the orchestrator — not a client —
+        is the authoritative holder and can fill an omission from its own last
+        value instead of from deployment defaults. Every *named* session takes
+        the whole-snapshot reading of :meth:`update_from` instead: §2.2 keeps
+        the orchestrator stateless for those, and §4.2 says a client that
+        resumes without a field enters with that field fresh.
+
+        Which fields the message *carried* is read off ``other.wire_payload``,
+        the snapshot it arrived with, intersected with what survived
+        deserialization — a field the payload named but §2.1 tolerated away as
+        malformed was never carried, so it leaves the stored value standing
+        rather than wiping it. Reading presence off the payload rather than off
+        the serialized object is what lets a subclass emit a field
+        unconditionally without that field looking present at its constructor
+        default on every fold.
+
+        **Presence-aware merging depends on the deserializing path recording
+        the arrival.** ``wire_payload`` is stamped by :meth:`from_dict` and
+        :meth:`deserialize` here, so a subclass that inherits either — or
+        overrides one and delegates up — gets it. A subclass that builds its
+        sessions some other way (ovos-bus-client's ``deserialize`` is a
+        staticmethod that constructs a fresh instance) leaves it unset, and
+        such a session falls to the own-baseline branch below: every field it
+        serializes counts as carried, so it overwrites the store but never
+        clears a field by omitting one. That is weaker than §5.1 asks for — a
+        subclass emitting a field unconditionally will overwrite the stored
+        value with its default — and the remedy is for that subclass to record
+        ``wire_payload`` when it parses a payload.
+
+        What ``other`` *presents now* is what applies, not what it arrived
+        with: §5.1 has lifecycle mutations propagate into the store, so a
+        session deserialized from a message and then mutated at a transformer,
+        pipeline or handler boundary carries those mutations in. A mutation is
+        anything that differs from the arrival baseline, which is why a field
+        the message never carried still applies when a handler set it, and a
+        field the message did carry is dropped from the store when a handler
+        cleared it.
+
+        ``intent_context`` resolves entry-by-entry per OVOS-CONTEXT-1 §5.3,
+        which §5.1 names as the one field with a finer intra-field merge: an
+        entry sets or replaces its key, a ``null`` entry removes the key, an
+        absent key is left alone. Entry removal is subject to the carrier
+        limitation described in this module's docstring.
+        """
+        if other is self:
+            return self
+        stored = parse_session_payload(self.serialize())
+        incoming = parse_session_payload(other.serialize())
+        arrived = other.wire_payload
+        if arrived is None:
+            # no wire arrival behind this object: it is its own baseline, and
+            # every field it presents counts as carried.
+            baseline, carried = incoming, set(incoming)
+        else:
+            baseline = parse_session_payload(
+                type(self).deserialize(arrived).serialize())
+            carried = {key for key in arrived if key in baseline}
+
+        merged = dict(stored)
+        for key, value in incoming.items():
+            if key == "intent_context":
+                continue
+            if key in carried or value != baseline.get(key):
+                merged[key] = value
+        for key in baseline:
+            if key != "intent_context" and key not in incoming:
+                # carried on arrival, gone now — cleared after arrival
+                merged.pop(key, None)
+
+        entries = dict(stored.get("intent_context") or {})
+        current = incoming.get("intent_context") or {}
+        base_entries = baseline.get("intent_context") or {}
+        if "intent_context" in carried or current != base_entries:
+            entries.update(current)
+            for key in base_entries:
+                if key not in current:
+                    entries.pop(key, None)
+            for key, entry in (arrived or {}).get("intent_context", {}).items():
+                if entry is None:
+                    entries.pop(key, None)
+        if entries:
+            merged["intent_context"] = entries
+        else:
+            merged.pop("intent_context", None)
+
+        # A merge can pair a field from one side with a field from the other
+        # that the constructor forbids together, even though both messages
+        # were legal. §3.2.2 is the one such cross-field rule in this version:
+        # secondary_langs is the complement of lang, so a lang that turns up
+        # in the merged complement is dropped from it. Every other constructor
+        # check is single-field and validated already on the side it came
+        # from, so a merge cannot synthesize one. Leaving the conflict for the
+        # constructor to reject would be sticky — the store would keep the
+        # offending pair and raise on every later fold.
+        secondary = merged.get("secondary_langs")
+        if merged.get("lang") and secondary:
+            merged["secondary_langs"] = [tag for tag in secondary
+                                         if tag != merged["lang"]]
+            if not merged["secondary_langs"]:
+                merged.pop("secondary_langs")
+
+        return self.update_from(type(self).deserialize(merged))
 
     # --- value semantics ----------------------------------------------------
 
@@ -824,15 +986,36 @@ class SessionManager:
         """Register ``sess`` and return the one live object for its id.
 
         When the id is already known the incoming snapshot is *folded* onto the
-        existing instance (:meth:`Session.update_from`, §2 last-writer-wins) and
-        that object — never the snapshot — is returned, so object identity per
-        id is stable for the process lifetime.
+        existing instance and that object — never the snapshot — is returned,
+        so object identity per id is stable for the process lifetime.
+
+        How the fold resolves depends on the id, because OVOS-SESSION-2 splits
+        the two cases. For a **named** session the orchestrator holds no
+        authoritative state (§2.2) and the inbound snapshot is complete state,
+        so the fold is the whole-object :meth:`Session.update_from`. For the
+        reserved **default** id the registry *is* the §5.1 default-session
+        store, where an omitted inbound field leaves the stored field unchanged
+        (:meth:`Session.merge_from`). That reading needs to know which fields
+        the message actually carried, which is why a Session deserialized from
+        the wire keeps its ``wire_payload``. A Session with none — built
+        programmatically, or one whose snapshot a previous fold already
+        consumed — is its own baseline: every field it presents counts as
+        carried and none of its omissions clears anything, so §5.1's rule that
+        an omission cannot drop a stored field holds on that path too.
         """
         with cls._lock:
             existing = cls.sessions.get(sess.session_id)
             if existing is not None and existing is not sess:
-                existing.update_from(sess)
+                if sess.session_id == DEFAULT_SESSION_ID:
+                    existing.merge_from(sess)
+                else:
+                    existing.update_from(sess)
+                # the arrival snapshot has served its purpose; re-folding the
+                # same object later would replay its clears against a store
+                # that has moved on.
+                sess.wire_payload = None
                 sess = existing
+            sess.wire_payload = None
             cls.sessions[sess.session_id] = sess
             if sess.session_id == DEFAULT_SESSION_ID:
                 cls.default_session = sess
