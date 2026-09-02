@@ -361,6 +361,30 @@ class SpecMessage(str, Enum):
     #: §4.4 — announce now-playing track transitions; player → broadcast.
     COMMON_PLAY_TRACK_STATE = "ovos.common_play.track.state"
 
+    # --- SCHEDULER-1 §4 event-scheduling bus surface ---
+    #: §4.1 — schedule a future/recurring event; client → scheduler.
+    SCHEDULER_SCHEDULE = "ovos.scheduler.schedule"
+    #: §4.1 — acknowledge/report a scheduled event; scheduler → client.
+    SCHEDULER_SCHEDULE_RESPONSE = "ovos.scheduler.schedule.response"
+    #: §4.1 — cancel a previously scheduled event; client → scheduler.
+    SCHEDULER_CANCEL = "ovos.scheduler.cancel"
+    #: §4.1 — acknowledge event cancellation; scheduler → client.
+    SCHEDULER_CANCEL_RESPONSE = "ovos.scheduler.cancel.response"
+    #: §4.1 — query a single scheduled event; client → scheduler.
+    SCHEDULER_GET = "ovos.scheduler.get"
+    #: §4.1 — return the queried scheduled event; scheduler → client.
+    SCHEDULER_GET_RESPONSE = "ovos.scheduler.get.response"
+    #: §4.1 — list all scheduled events; client → scheduler.
+    SCHEDULER_LIST = "ovos.scheduler.list"
+    #: §4.1 — return the scheduled-event list; scheduler → client.
+    SCHEDULER_LIST_RESPONSE = "ovos.scheduler.list.response"
+    #: §5.4 — signal the scheduler is initialized and ready; scheduler →
+    #: broadcast.
+    SCHEDULER_READY = "ovos.scheduler.ready"
+    #: §4.3 — report a scheduled event that fired late/was missed; scheduler
+    #: → broadcast.
+    SCHEDULER_MISSED = "ovos.scheduler.missed"
+
 
 #: Legacy (Mycroft-era) topic -> the :class:`SpecMessage` that supersedes it.
 #: This is the single source of truth for the legacy↔``ovos.*`` renames that
