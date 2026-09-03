@@ -72,14 +72,16 @@ RoutingValue = Union[str, List[str], None]
 DEFAULT_SESSION_ID = "default"
 
 
-def _stamp_live_session(message: "Message") -> "Message":
+def _stamp_live_session(message: "Message", source: "Message") -> "Message":
     """Refresh a derived message's ``session`` to the live value for its id.
 
     ``forward`` / ``reply`` deep-copy the originating message's ``session``
     snapshot (§5.1/§5.2). That snapshot may predate the current handler's
-    mutations, so this re-stamps the derived message with the live session for
-    its id via :meth:`SessionManager.sync_message_session` — see that class for
-    why this is always either a meaningful refresh or a no-op, never a discard.
+    mutations, so this re-stamps the derived message with the live session
+    via :meth:`SessionManager.stamp_derived` — either the default-session
+    store, or the session bound to ``source`` when a component read one off
+    it. See that class for why this is always a meaningful refresh or a
+    no-op, never a discard.
 
     Best-effort and non-invasive: a message with **no** session is left as-is
     (§5 carries no session forward), and a session id the registry never folded
@@ -91,7 +93,7 @@ def _stamp_live_session(message: "Message") -> "Message":
         if not ctx.get("session"):
             return message
         from ovos_spec_tools.session import SessionManager
-        return SessionManager.sync_message_session(message)
+        return SessionManager.stamp_derived(message, source)
     except Exception:  # never let session bookkeeping break message derivation
         return message
 
@@ -446,7 +448,7 @@ class Message:
         """
         derived = self.__class__(
             msg_type, data or {}, deepcopy(self.context))
-        return _stamp_live_session(derived)
+        return _stamp_live_session(derived, self)
 
     def reply(self, msg_type: str,
               data: Optional[Dict[str, Any]] = None,
@@ -505,7 +507,7 @@ class Message:
         if src is not None:
             new_context["destination"] = src
         derived = self.__class__(msg_type, data or {}, new_context)
-        return derived if explicit_session else _stamp_live_session(derived)
+        return derived if explicit_session else _stamp_live_session(derived, self)
 
     def response(self, data: Optional[Dict[str, Any]] = None,
                  context: Optional[Dict[str, Any]] = None) -> Message:
