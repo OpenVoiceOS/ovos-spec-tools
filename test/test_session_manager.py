@@ -7,7 +7,7 @@ import json
 import unittest
 
 from ovos_spec_tools.session import (MalformedSession, Session,
-                                     SessionManager)
+                                     SessionManager, carried_fields)
 from ovos_spec_tools.message import Message
 
 
@@ -16,24 +16,27 @@ class TestSessionManagerRegistry(unittest.TestCase):
         SessionManager.sessions.clear()
         SessionManager.default_session = None
 
-    def test_one_live_object_per_id(self):
-        a = SessionManager.update(Session("s1"))
-        b = SessionManager.get(Message("x", context={"session": {"session_id": "s1"}}))
-        self.assertIs(a, b)  # same live object, folded not replaced
+    def test_the_registry_holds_only_the_default_session(self):
+        # §2.2: no orchestrator state for a named id, not even briefly. The
+        # working session travels through the utterance flow instead.
+        sess = Session("s1")
+        self.assertIs(SessionManager.update(sess), sess)
+        self.assertNotIn("s1", SessionManager.sessions)
+        SessionManager.get_default_session()
+        self.assertEqual(list(SessionManager.sessions), ["default"])
 
-    def test_held_reference_observes_later_fold(self):
-        held = SessionManager.update(Session("s2"))
-        # a later snapshot for the same id is folded onto the held object
-        snap = {"session_id": "s2", "active_handlers": [{"skill_id": "k", "activated_at": 1.0}]}
-        SessionManager.get(Message("x", context={"session": snap}))
+    def test_held_reference_to_the_default_store_observes_later_arrivals(self):
+        held = SessionManager.get_default_session()
+        snap = {"session_id": "default",
+                "active_handlers": [{"skill_id": "k", "activated_at": 1.0}]}
+        SessionManager.fold_inbound(Message("x", context={"session": snap}))
         self.assertEqual([h["skill_id"] for h in held.active_handlers], ["k"])
 
-    def test_default_folds_like_any_session(self):
-        # the default session is a normal session per §4 — no owner-only
-        # reservation; a message carrying it folds onto the live default.
+    def test_default_arrival_lands_on_the_live_store(self):
         d = SessionManager.get_default_session()
-        SessionManager.get(Message("x", context={"session": {"session_id": "default",
-                                                             "lang": "pt-PT"}}))
+        SessionManager.fold_inbound(
+            Message("x", context={"session": {"session_id": "default",
+                                              "lang": "pt-PT"}}))
         self.assertEqual(d.lang, "pt-PT")
         self.assertIs(d, SessionManager.get_default_session())
 
@@ -43,20 +46,20 @@ class TestForwardReplyStamping(unittest.TestCase):
         SessionManager.sessions.clear()
         SessionManager.default_session = None
 
-    def test_forward_refreshes_to_live_session(self):
+    def test_forward_refreshes_to_the_default_store(self):
         # get -> mutate -> forward: the derived message carries the live state,
         # not the originating message's pre-mutation snapshot.
-        live = SessionManager.update(Session("123"))
+        live = SessionManager.get_default_session()
         live.add_active_handler("my.skill")
-        orig = Message("utt", context={"session": {"session_id": "123"}})
+        orig = Message("utt", context={"session": {"session_id": "default"}})
         fwd = orig.forward("my.skill.activate")
         ah = fwd.context["session"]["active_handlers"]
         self.assertEqual([h["skill_id"] for h in ah], ["my.skill"])
 
-    def test_reply_refreshes_to_live_session(self):
-        live = SessionManager.update(Session("123"))
+    def test_reply_refreshes_to_the_default_store(self):
+        live = SessionManager.get_default_session()
         live.add_active_handler("my.skill")
-        orig = Message("ask", context={"session": {"session_id": "123"},
+        orig = Message("ask", context={"session": {"session_id": "default"},
                                        "source": "A", "destination": "B"})
         rep = orig.reply("ask.response")
         ah = rep.context["session"]["active_handlers"]
@@ -77,17 +80,18 @@ class TestForwardReplyStamping(unittest.TestCase):
                                                   "lang": "explicit"})
 
     def test_reply_without_explicit_session_is_stamped(self):
-        live = SessionManager.update(Session("123"))
+        live = SessionManager.get_default_session()
         live.add_active_handler("live.skill")
-        orig = Message("ask", context={"session": {"session_id": "123"},
+        orig = Message("ask", context={"session": {"session_id": "default"},
                                        "source": "A"})
         # context= overrides routing only -> session still refreshed
         rep = orig.reply("ask.response", context={"destination": "X"})
         ah = rep.context["session"]["active_handlers"]
         self.assertEqual([h["skill_id"] for h in ah], ["live.skill"])
 
-    def test_unowned_id_left_untouched(self):
-        # a session id this process never folded is carried verbatim (§5)
+    def test_named_session_is_carried_verbatim(self):
+        # §2.2 / §2.5: the orchestrator holds nothing authoritative for a
+        # named id, so its carrier is the only authority and stands as sent.
         snap = {"session_id": "remote", "active_handlers": []}
         fwd = Message("u", context={"session": dict(snap)}).forward("x")
         self.assertEqual(fwd.context["session"], snap)
@@ -104,7 +108,7 @@ class TestForwardReplyStamping(unittest.TestCase):
 
     def test_stamp_is_noop_when_nothing_changed(self):
         # no intervening update -> stamp re-serializes the same state
-        live = SessionManager.update(Session("123"))
+        live = SessionManager.get_default_session()
         live.add_active_handler("a")
         orig = Message("u", context={"session": live.to_dict()})
         fwd = orig.forward("x")
@@ -112,13 +116,10 @@ class TestForwardReplyStamping(unittest.TestCase):
                          ["a"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestDefaultSessionStoreMerge(unittest.TestCase):
-    """OVOS-SESSION-2 §5.1 — writes into the default-session store are a
-    field merge, not a whole-object replace.
+    """OVOS-SESSION-2 §5.1 — an inbound Message on the default session is
+    merged into the store field by field.
 
     §5.1 owns this as a deliberate deviation from OVOS-SESSION-1 §2.1: for
     `session_id == "default"` the orchestrator is the authoritative holder,
@@ -133,15 +134,15 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
 
     @staticmethod
     def _inbound(snap):
-        return SessionManager.get(Message("recognizer_loop:utterance",
-                                          context={"session": snap}))
+        return SessionManager.fold_inbound(
+            Message("recognizer_loop:utterance", context={"session": snap}))
 
     def test_omitted_field_leaves_stored_value_unchanged(self):
         self._inbound({"session_id": "default", "lang": "en-US",
                        "intent_context": {"naptime:sleeping": {"value": True}},
                        "site_id": "kitchen"})
         # a second turn from the same device carries only what the client
-        # knows; server-owned state it never saw must survive the write
+        # knows; server-owned state it never saw must survive the arrival
         live = self._inbound({"session_id": "default", "lang": "en-US"})
         self.assertEqual(live.intent_context,
                          {"naptime:sleeping": {"value": True}})
@@ -188,95 +189,9 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
         live = self._inbound({"session_id": "default", "site_id": None})
         self.assertEqual(live.site_id, "kitchen")
 
-    def test_named_session_stays_a_whole_snapshot(self):
-        # §2.2 / §4.2: the orchestrator holds no cross-utterance state for a
-        # named session, so a client resuming without intent_context enters
-        # with a fresh context. The §5.1 merge must NOT leak to named ids.
-        self._inbound({"session_id": "sat-1",
-                       "intent_context": {"naptime:sleeping": {"value": True}},
-                       "site_id": "hallway"})
-        live = self._inbound({"session_id": "sat-1"})
-        self.assertIsNone(live.intent_context)
-        self.assertIsNone(live.site_id)
-
-    def test_session_naming_no_id_writes_the_default_store(self):
-        # §4.1/§4.3: a session carrying no session_id IS the default session,
-        # so it takes the §5.1 merge too.
-        self._inbound({"session_id": "default", "site_id": "kitchen"})
-        live = self._inbound({"lang": "en-US"})
-        self.assertEqual(live.site_id, "kitchen")
-
-    def test_subclass_only_fields_survive_the_fold(self):
-        # a downstream Session (ovos-bus-client) models fields beyond
-        # SESSION1_REGISTERED_FIELDS; the merge projects both sides through
-        # serialize so those fields merge instead of resetting to defaults.
-        class RicherSession(Session):
-            def __init__(self, *args, location=None, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.location = dict(location) if location else None
-
-            def serialize(self):
-                # bus-client's Session overrides serialize (not to_dict) to
-                # emit its extra keys, returns a dict rather than a string,
-                # and emits them UNCONDITIONALLY — no omit-when-empty guard,
-                # so every one of them looks present at its default value
-                out = super().to_dict()
-                out["location"] = dict(self.location) if self.location else {}
-                return out
-
-            @classmethod
-            def from_dict(cls, payload):
-                payload = dict(payload or {})
-                location = payload.pop("location", None)
-                sess = super().from_dict(payload)
-                sess.location = dict(location) if location else None
-                return sess
-
-        SessionManager.session_cls = RicherSession
-        try:
-            live = self._inbound({"session_id": "default",
-                                  "location": {"city": "Lisbon"}})
-            self._inbound({"session_id": "default", "lang": "en-US"})
-            self.assertEqual(live.location, {"city": "Lisbon"})
-        finally:
-            SessionManager.session_cls = Session
-
-    def test_subclass_field_mutated_after_arrival_reaches_the_store(self):
-        # the mirror of the above: a subclass field the message did not carry
-        # still applies when something set it after arrival.
-        class RicherSession(Session):
-            def __init__(self, *args, location=None, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.location = dict(location) if location else None
-
-            def serialize(self):
-                out = super().to_dict()
-                out["location"] = dict(self.location) if self.location else {}
-                return out
-
-            @classmethod
-            def from_dict(cls, payload):
-                payload = dict(payload or {})
-                location = payload.pop("location", None)
-                sess = super().from_dict(payload)
-                sess.location = dict(location) if location else None
-                return sess
-
-        SessionManager.session_cls = RicherSession
-        try:
-            live = self._inbound({"session_id": "default", "lang": "en-US"})
-            inbound = RicherSession.deserialize({"session_id": "default",
-                                                 "lang": "en-US"})
-            inbound.location = {"city": "Porto"}
-            SessionManager.update(inbound)
-            self.assertEqual(live.location, {"city": "Porto"})
-        finally:
-            SessionManager.session_cls = Session
-
-    def test_malformed_field_does_not_wipe_the_stored_value(self):
+    def test_malformed_field_counts_as_not_carried(self):
         # §2.1 tolerates a malformed field by treating it as omitted, and
-        # §5.1 leaves an omitted field's stored value standing. A field the
-        # payload named but deserialization dropped was never carried.
+        # §5.1 leaves an omitted field's stored value standing.
         self._inbound({"session_id": "default",
                        "active_handlers": [{"skill_id": "k",
                                             "activated_at": 1.0}],
@@ -289,56 +204,20 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
                               "response_mode": {"foo": 1}})
         self.assertEqual(live.response_mode["skill_id"], "k")
 
-    def test_consumed_session_does_not_replay_its_clears(self):
-        # _store consumes the arrival snapshot; re-folding the same object
-        # must not replay its clears against a store that has moved on.
-        live = self._inbound({"session_id": "default", "site_id": "kitchen"})
-        inbound = Session.deserialize({"session_id": "default",
-                                       "site_id": "kitchen"})
-        inbound.site_id = None
-        SessionManager.update(inbound)
-        self.assertIsNone(live.site_id)
-        self._inbound({"session_id": "default", "site_id": "hallway"})
-        SessionManager.update(inbound)
-        self.assertEqual(live.site_id, "hallway")
-
-    def test_lifecycle_mutation_reaches_the_store(self):
-        # §5.1: "session mutations during the lifecycle propagate into the
-        # store". A session deserialized from a minimal message and then
-        # mutated at a handler boundary must carry the mutation in, not the
-        # state it arrived with.
-        live = self._inbound({"session_id": "default", "lang": "en-US"})
-        inbound = Session.deserialize({"session_id": "default",
-                                       "lang": "en-US"})
-        inbound.site_id = "kitchen"
-        inbound.intent_context = {"a:x": {"value": 1}}
-        SessionManager.update(inbound)
-        self.assertEqual(live.site_id, "kitchen")
-        self.assertEqual(live.intent_context, {"a:x": {"value": 1}})
-
-    def test_field_cleared_after_arrival_is_cleared_in_the_store(self):
-        # the arrival snapshot tells an omission apart from a clear: the
-        # message carried site_id and the object no longer presents it.
-        live = self._inbound({"session_id": "default", "site_id": "kitchen"})
-        inbound = Session.deserialize({"session_id": "default",
-                                       "site_id": "kitchen"})
-        inbound.site_id = None
-        SessionManager.update(inbound)
-        self.assertIsNone(live.site_id)
-
-    def test_folded_session_keeps_no_arrival_snapshot(self):
-        # a deserialize round-trip inside update_from is not an arrival; a
-        # folded session must not claim a snapshot no message ever sent.
-        live = self._inbound({"session_id": "default", "site_id": "kitchen"})
-        self.assertIsNone(live.wire_payload)
-        self._inbound({"session_id": "default", "lang": "en-US"})
-        self.assertIsNone(live.wire_payload)
+    def test_empty_list_is_equivalent_to_omission(self):
+        # §3.4 makes an empty list wire-equivalent to omission, so it reads as
+        # "no opinion" here, not as a clear.
+        self._inbound({"session_id": "default",
+                       "blacklisted_skills": ["skill.a"]})
+        live = self._inbound({"session_id": "default",
+                              "blacklisted_skills": []})
+        self.assertEqual(live.blacklisted_skills, ["skill.a"])
 
     def test_merged_lang_conflict_resolves_instead_of_raising(self):
-        # §3.2.2 forbids secondary_langs to contain lang. Both messages below
+        # §3.2.2 forbids secondary_langs to contain lang. Both carriers below
         # are legal on their own; the merge must not synthesize the illegal
         # pair, which would be sticky — the store would keep it and raise on
-        # every later fold.
+        # every later arrival.
         self._inbound({"session_id": "default", "lang": "en-US",
                        "secondary_langs": ["pt-PT"]})
         live = self._inbound({"session_id": "default", "lang": "pt-PT"})
@@ -355,50 +234,84 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
         self.assertEqual(live.lang, "pt-PT")
         self.assertEqual(live.secondary_langs, ["en-US"])
 
-    def test_subclass_that_records_no_arrival_gets_overwrite_not_clear(self):
-        # ovos-bus-client's Session.deserialize is a staticmethod building a
-        # fresh instance, so wire_payload is never set. Such a session takes
-        # the own-baseline branch: it overwrites what it serializes — including
-        # fields it emits unconditionally at their defaults — but an omission
-        # of its still never clears a stored field.
-        class UnstampedSession(Session):
-            def __init__(self, *args, location=None, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.location = dict(location) if location else None
+    def test_equivalent_default_carriers_carry_nothing(self):
+        # SESSION-1 §3.1 / SESSION-2 §6.5: the local device may omit the
+        # carrier entirely or send {}. Both name the default session and
+        # carry no field, so the store stands untouched.
+        self._inbound({"session_id": "default", "site_id": "kitchen"})
+        live = SessionManager.fold_inbound(Message("u", context={}))
+        self.assertEqual(live.site_id, "kitchen")
+        live = self._inbound({})
+        self.assertEqual(live.site_id, "kitchen")
+        live = self._inbound({"lang": "en-US"})
+        self.assertEqual(live.site_id, "kitchen")
+        self.assertEqual(live.lang, "en-US")
 
-            def serialize(self):
-                out = super().to_dict()
-                out["location"] = dict(self.location) if self.location else {}
-                return out
+    def test_a_named_session_does_not_survive_its_utterance(self):
+        # §2.2: no cross-utterance state for a named id. Round two carries
+        # only what the client sent; nothing of round one is left to find.
+        self._inbound({"session_id": "sat-1", "site_id": "hallway",
+                       "lang": "pt-PT"})
+        self.assertNotIn("sat-1", SessionManager.sessions)
+        live = self._inbound({"session_id": "sat-1"})
+        self.assertIsNone(live.site_id)
+        self.assertIsNone(live.lang)
 
-            @staticmethod
-            def deserialize(payload):
-                payload = dict(json.loads(payload)
-                               if isinstance(payload, str) else payload or {})
-                location = payload.pop("location", None)
-                sess = UnstampedSession(**payload)
-                sess.location = dict(location) if location else None
-                return sess
+    def test_stamping_cannot_resurrect_a_previous_round(self):
+        # §2.2 forbids relying on the utterance cache as durable. A message
+        # derived in round two must not come back carrying round one's state.
+        self._inbound({"session_id": "sat-1", "site_id": "hallway",
+                       "lang": "pt-PT"})
+        fwd = Message("u", context={"session": {"session_id": "sat-1"}}
+                      ).forward("x")
+        self.assertEqual(fwd.context["session"], {"session_id": "sat-1"})
 
-        SessionManager.session_cls = UnstampedSession
-        try:
-            live = self._inbound({"session_id": "default",
-                                  "location": {"city": "Lisbon"},
-                                  "site_id": "kitchen"})
-            self.assertIsNone(live.wire_payload)
-            self._inbound({"session_id": "default"})
-            # unconditionally-emitted field is overwritten by its default...
-            self.assertIsNone(live.location)
-            # ...but a field the subclass omits when empty still stands
-            self.assertEqual(live.site_id, "kitchen")
-        finally:
-            SessionManager.session_cls = Session
+    def test_a_named_carrier_tolerates_a_malformed_field(self):
+        # §2.5: field-level malformedness resolves field by field for every
+        # consumer, named sessions included — one bad field must not cost the
+        # Message its session.
+        live = self._inbound({"session_id": "sat-1", "lang": 123,
+                              "site_id": "hallway"})
+        self.assertIsNone(live.lang)
+        self.assertEqual(live.site_id, "hallway")
 
-    def test_deserialize_records_the_arrival_when_from_dict_does_not(self):
-        # a subclass may replace from_dict without recording the arrival;
-        # inheriting deserialize still stamps it, so the merge stays
-        # presence-aware.
-        class OwnFromDict(Session):
+    def test_an_unusable_session_id_names_the_default_session(self):
+        # §6 wants a non-empty string when session_id is set, so an empty or
+        # wrong-typed one is malformed and reads as omitted (§2.1) — and an
+        # omitted id IS the default (§3.1). Routing it anywhere else would
+        # strand the arrival in a session no message can name.
+        self._inbound({"session_id": "default", "site_id": "kitchen"})
+        for unusable in ("", 0, [], {}, False):
+            with self.subTest(session_id=unusable):
+                live = self._inbound({"session_id": unusable,
+                                      "lang": "pt-PT"})
+                self.assertIs(live, SessionManager.get_default_session())
+                self.assertEqual(live.lang, "pt-PT")
+                self.assertEqual(live.site_id, "kitchen")
+
+    def test_named_session_stays_a_whole_snapshot(self):
+        # §2.2 / §4.2: the orchestrator holds no cross-utterance state for a
+        # named session, so a client resuming without intent_context enters
+        # with a fresh context. The §5.1 merge must NOT leak to named ids.
+        self._inbound({"session_id": "sat-1",
+                       "intent_context": {"naptime:sleeping": {"value": True}},
+                       "site_id": "hallway"})
+        live = self._inbound({"session_id": "sat-1"})
+        self.assertIsNone(live.intent_context)
+        self.assertIsNone(live.site_id)
+
+    def test_named_session_does_not_touch_the_default_store(self):
+        self._inbound({"session_id": "default", "site_id": "kitchen"})
+        self._inbound({"session_id": "sat-1", "site_id": "hallway"})
+        self.assertEqual(SessionManager.get_default_session().site_id,
+                         "kitchen")
+
+    def test_subclass_that_serializes_unconditionally_survives_the_arrival(self):
+        # ovos-bus-client's Session emits its extra keys unconditionally, so
+        # every one of them looks present at its default value. Presence is
+        # read off the carrier, never off a serialized object, so an
+        # unconditional emitter cannot wipe a stored subclass field.
+        class RicherSession(Session):
             def __init__(self, *args, location=None, **kwargs):
                 super().__init__(*args, **kwargs)
                 self.location = dict(location) if location else None
@@ -411,93 +324,214 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
             @classmethod
             def from_dict(cls, payload):
                 payload = dict(payload or {})
-                return cls(**{k: v for k, v in payload.items()
-                              if k in ("session_id", "lang", "location")})
+                location = payload.pop("location", None)
+                sess = super().from_dict(payload)
+                sess.location = dict(location) if location else None
+                return sess
 
-        SessionManager.session_cls = OwnFromDict
+        SessionManager.session_cls = RicherSession
         try:
             live = self._inbound({"session_id": "default",
                                   "location": {"city": "Lisbon"}})
             self._inbound({"session_id": "default", "lang": "en-US"})
             self.assertEqual(live.location, {"city": "Lisbon"})
+            self.assertEqual(live.lang, "en-US")
         finally:
             SessionManager.session_cls = Session
 
-    def test_subclass_that_records_the_arrival_merges_fully(self):
-        # the remedy: a subclass that records wire_payload where it parses a
-        # payload gets the full presence-aware merge.
-        class StampedSession(Session):
-            def __init__(self, *args, location=None, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.location = dict(location) if location else None
+    def test_wrong_typed_list_counts_as_not_carried(self):
+        # §2.5: a wrong-typed value has no reading, so it reads as omitted.
+        # A string is the trap — iterating one yields characters, which would
+        # silently install nonsense in a stored list.
+        self.assertEqual(carried_fields({"pipeline": "abc"}), {})
+        self.assertEqual(carried_fields({"blacklisted_skills": [1, 2]}), {})
+        self.assertEqual(carried_fields({"audio_transformers": [None]}), {})
+        self.assertEqual(carried_fields({"fallback_handlers": [{"a": 1}]}), {})
+        self.assertEqual(carried_fields({"intent_context": "nope"}), {})
 
-            def serialize(self):
-                out = super().to_dict()
-                out["location"] = dict(self.location) if self.location else {}
-                return out
-
-            @staticmethod
-            def deserialize(payload):
-                payload = dict(json.loads(payload)
-                               if isinstance(payload, str) else payload or {})
-                location = payload.pop("location", None)
-                sess = StampedSession(**payload)
-                sess.location = dict(location) if location else None
-                sess.wire_payload = dict(payload,
-                                         **({"location": location}
-                                            if location is not None else {}))
-                return sess
-
-        SessionManager.session_cls = StampedSession
-        try:
-            live = self._inbound({"session_id": "default",
-                                  "location": {"city": "Lisbon"},
-                                  "site_id": "kitchen"})
-            self._inbound({"session_id": "default"})
-            self.assertEqual(live.location, {"city": "Lisbon"})
-            self.assertEqual(live.site_id, "kitchen")
-        finally:
-            SessionManager.session_cls = Session
-
-    def test_empty_list_does_not_clear_the_stored_value(self):
-        # §3.4 makes an empty list wire-equivalent to omission, so it reads as
-        # "no opinion" here, not as a clear. This is a behaviour change from
-        # the whole-object replace, which dropped the stored value.
+    def test_wrong_typed_list_leaves_the_store_intact(self):
         self._inbound({"session_id": "default",
-                       "blacklisted_skills": ["skill.a"]})
-        live = self._inbound({"session_id": "default",
-                              "blacklisted_skills": []})
-        self.assertEqual(live.blacklisted_skills, ["skill.a"])
-
-    def test_reserializing_a_cleared_entry_cannot_remove_it(self):
-        # the carrier limitation (module docstring): to_dict never emits a
-        # null, so an out-of-process component that deletes an entry and
-        # re-serializes leaves the store's entry standing. Removal needs the
-        # explicit OVOS-CONTEXT-1 §5.3 null entry on the wire.
-        self._inbound({"session_id": "default",
-                       "intent_context": {"a:x": {"value": 1}}})
-        cleared = Session.deserialize({"session_id": "default",
-                                       "intent_context": {"a:x": {"value": 1}}})
-        cleared.intent_context = {}
-        live = self._inbound(json.loads(cleared.serialize()))
-        self.assertEqual(live.intent_context, {"a:x": {"value": 1}})
-        live = self._inbound({"session_id": "default",
-                              "intent_context": {"a:x": None}})
-        self.assertIsNone(live.intent_context)
+                       "pipeline": ["stop_high", "converse"]})
+        live = self._inbound({"session_id": "default", "pipeline": "abc"})
+        self.assertEqual(live.pipeline, ["stop_high", "converse"])
 
     def test_non_object_carrier_is_malformed(self):
+        # §2.5: a carrier that is not an object has no session identity to
+        # key on; the default must not be substituted for it.
         with self.assertRaises(MalformedSession):
             self._inbound("[1, 2]")
 
-    def test_programmatic_update_cannot_drop_stored_fields(self):
-        # §5.1: an omission never drops a stored default-session field. A
-        # Session built programmatically has no arrival snapshot, so it is its
-        # own baseline — it can overwrite, never clear by omitting.
-        live = self._inbound({"session_id": "default",
-                              "intent_context": {"a:x": {"value": 1}},
-                              "site_id": "kitchen"})
-        SessionManager.update(Session("default"))
-        self.assertEqual(live.intent_context, {"a:x": {"value": 1}})
+
+class TestSessionManagerGetIsARead(unittest.TestCase):
+    """`get` resolves which session a Message refers to and writes nothing."""
+
+    def setUp(self):
+        SessionManager.sessions.clear()
+        SessionManager.default_session = None
+
+    def test_get_does_not_write_the_store(self):
+        store = SessionManager.get_default_session()
+        store.site_id = "kitchen"
+        msg = Message("u", context={"session": {"session_id": "default",
+                                                "site_id": "hallway"}})
+        self.assertIs(SessionManager.get(msg), store)
+        msg.context["session"]["site_id"] = "garage"
+        self.assertIs(SessionManager.get(msg), store)
+        self.assertEqual(store.site_id, "kitchen")
+
+    def test_get_without_a_message_returns_the_store(self):
+        self.assertIs(SessionManager.get(), SessionManager.get_default_session())
+
+    def test_get_on_a_session_less_message_returns_the_store(self):
+        self.assertIs(SessionManager.get(Message("u", context={})),
+                      SessionManager.get_default_session())
+
+    def test_get_on_a_named_session_builds_from_the_carrier(self):
+        # §2.2: no orchestrator state for a named id, so the carrier is all
+        # there is and each read builds from it.
+        msg = Message("u", context={"session": {"session_id": "sat-1",
+                                                "site_id": "hallway"}})
+        first = SessionManager.get(msg)
+        self.assertEqual(first.site_id, "hallway")
+        self.assertIsNot(first, SessionManager.get(msg))
+        self.assertNotIn("sat-1", SessionManager.sessions)
+
+
+class TestDerivationChainWrite(unittest.TestCase):
+    """`update` is the OVOS-SESSION-2 §2.6 write — object-shaped and whole."""
+
+    def setUp(self):
+        SessionManager.sessions.clear()
+        SessionManager.default_session = None
+
+    def test_update_replaces_the_stored_state(self):
+        store = SessionManager.fold_inbound(
+            Message("u", context={"session": {"session_id": "default",
+                                              "site_id": "kitchen",
+                                              "lang": "en-US"}}))
+        SessionManager.update(Session("default", lang="pt-PT"))
+        self.assertEqual(store.lang, "pt-PT")
+        self.assertIsNone(store.site_id)
+
+    def test_update_keeps_the_store_identity(self):
+        store = SessionManager.get_default_session()
+        self.assertIs(SessionManager.update(Session("default", lang="pt-PT")),
+                      store)
+
+    def test_lifecycle_mutation_reaches_the_store(self):
+        # §5.1 third bullet: a session mutated at a handler boundary carries
+        # the mutation into the store when the handler writes it back.
+        store = SessionManager.fold_inbound(
+            Message("u", context={"session": {"session_id": "default",
+                                              "lang": "en-US"}}))
+        working = SessionManager.get(
+            Message("u", context={"session": {"session_id": "default"}}))
+        working.site_id = "kitchen"
+        working.intent_context = {"a:x": {"value": 1}}
+        SessionManager.update(working)
+        self.assertEqual(store.site_id, "kitchen")
+        self.assertEqual(store.intent_context, {"a:x": {"value": 1}})
+
+    def test_update_rejects_none(self):
+        with self.assertRaises(ValueError):
+            SessionManager.update(None)
+
+    def test_named_session_is_not_cross_utterance_state(self):
+        # §2.2: what `update` registers for a named id is the utterance-scoped
+        # cache, not a store — a later arrival replaces it wholesale.
+        SessionManager.update(Session("sat-1", site_id="hallway"))
+        live = SessionManager.fold_inbound(
+            Message("u", context={"session": {"session_id": "sat-1"}}))
+        self.assertIsNone(live.site_id)
+
+    def test_a_written_named_session_never_reaches_an_outbound_message(self):
+        # §2.5: a named session is client-owned, so the outbound carrier is
+        # exactly what the message was built with — the orchestrator has
+        # nothing truer to replace it with, and anything it kept would
+        # eventually be a past round's state.
+        working = Session("sat-1", site_id="hallway", lang="pt-PT")
+        working.add_active_handler("my.skill")
+        SessionManager.update(working)
+        fwd = Message("u", context={"session": {"session_id": "sat-1",
+                                                "lang": "en-US"}}
+                      ).forward("x")
+        self.assertEqual(fwd.context["session"],
+                         {"session_id": "sat-1", "lang": "en-US"})
+
+    def test_a_written_named_session_cannot_reach_the_next_round(self):
+        # the sharp edge: converse and stop route off active_handlers, so a
+        # stamp carrying a previous round's list would re-activate a handler
+        # the client deliberately dropped.
+        round_one = SessionManager.fold_inbound(
+            Message("u", context={"session": {
+                "session_id": "sat-1", "site_id": "hallway",
+                "intent_context": {"a:x": {"value": 1}}}}))
+        round_one.add_active_handler("my.skill")
+        SessionManager.update(round_one)
+        SessionManager.fold_inbound(
+            Message("u", context={"session": {"session_id": "sat-1",
+                                              "lang": "en-US"}}))
+        speak = Message("u", context={"session": {"session_id": "sat-1",
+                                                  "lang": "en-US"}}
+                        ).forward("ovos.utterance.speak")
+        self.assertEqual(speak.context["session"],
+                         {"session_id": "sat-1", "lang": "en-US"})
+
+
+class TestSessionSync(unittest.TestCase):
+    """OVOS-SESSION-2 §2.7 / §6.2 — `ovos.session.sync` consumer obligation."""
+
+    def setUp(self):
+        SessionManager.sessions.clear()
+        SessionManager.default_session = None
+
+    @staticmethod
+    def _sync(payload, carrier=None):
+        return SessionManager.handle_sync(
+            Message("ovos.session.sync", data={"session": payload},
+                    context={"session": carrier
+                             if carrier is not None
+                             else {"session_id": "default"}}))
+
+    def test_sync_payload_merges_into_the_store(self):
+        SessionManager.fold_inbound(
+            Message("u", context={"session": {"session_id": "default",
+                                              "site_id": "kitchen",
+                                              "lang": "en-US"}}))
+        live = self._sync({"lang": "pt-PT"})
+        self.assertEqual(live.lang, "pt-PT")
         self.assertEqual(live.site_id, "kitchen")
-        SessionManager.update(Session("default", site_id="hallway"))
-        self.assertEqual(live.site_id, "hallway")
+
+    def test_sync_removes_an_intent_context_entry(self):
+        # OVOS-CONTEXT-1 §5.3 names the sync payload as the removal path.
+        SessionManager.fold_inbound(
+            Message("u", context={"session": {
+                "session_id": "default",
+                "intent_context": {"a:x": {"value": 1},
+                                   "b:y": {"value": 2}}}}))
+        live = self._sync({"intent_context": {"a:x": None}})
+        self.assertEqual(live.intent_context, {"b:y": {"value": 2}})
+
+    def test_the_ambient_carrier_identifies_but_does_not_contribute(self):
+        # §2.7: context.session identifies the session, data.session is the
+        # content. Fields on the carrier are not part of the sync.
+        live = self._sync({"lang": "pt-PT"},
+                          carrier={"session_id": "default",
+                                   "site_id": "kitchen"})
+        self.assertEqual(live.lang, "pt-PT")
+        self.assertIsNone(live.site_id)
+
+    def test_sync_on_a_named_session_leaves_the_store_alone(self):
+        # §2.2: no store for a named id; §2.7 aims the update at the
+        # in-flight utterance session, which the orchestrator owns.
+        SessionManager.fold_inbound(
+            Message("u", context={"session": {"session_id": "default",
+                                              "site_id": "kitchen"}}))
+        self._sync({"site_id": "hallway"},
+                   carrier={"session_id": "sat-1"})
+        self.assertEqual(SessionManager.get_default_session().site_id,
+                         "kitchen")
+
+
+if __name__ == "__main__":
+    unittest.main()
