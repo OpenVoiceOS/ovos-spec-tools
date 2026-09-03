@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.3a1) (2026-09-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.2a1...1.10.3a1)
+
+**Merged pull requests:**
+
+- fix: bind the session returned by SessionManager.get to its message so forward carries mutations [\#121](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/121) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.2a1) (2026-09-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.1a1...1.10.2a1)
