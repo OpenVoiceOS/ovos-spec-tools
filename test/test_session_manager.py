@@ -6,8 +6,9 @@ value-passing contract; these tests pin its core invariants.
 import json
 import unittest
 
-from ovos_spec_tools.session import (MalformedSession, Session,
-                                     SessionManager, carried_fields)
+from ovos_spec_tools.session import (DEFAULT_SESSION_ID, MalformedSession,
+                                     Session, SessionManager, carried_fields,
+                                     resolve_session_id)
 from ovos_spec_tools.message import Message
 
 
@@ -281,7 +282,7 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
         # omitted id IS the default (§3.1). Routing it anywhere else would
         # strand the arrival in a session no message can name.
         self._inbound({"session_id": "default", "site_id": "kitchen"})
-        for unusable in ("", 0, [], {}, False):
+        for unusable in ("", 0, [], {}, False, 123, 1.5, True, b"x"):
             with self.subTest(session_id=unusable):
                 live = self._inbound({"session_id": unusable,
                                       "lang": "pt-PT"})
@@ -362,6 +363,29 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
             self._inbound("[1, 2]")
 
 
+class TestResolveSessionIdIsTypeAware(unittest.TestCase):
+    def test_wrong_typed_ids_resolve_to_the_default(self):
+        # §6 requires a non-empty string when session_id is set; a
+        # wrong-typed value has no reading and so is malformed, reading as
+        # omitted (§2.1) — and an omitted id IS the default (§3.1). A
+        # falsiness-only check misclassified a truthy wrong-typed value
+        # (e.g. 123) as naming some other session.
+        for unusable in (123, 1.5, True, [], {}, b"x"):
+            with self.subTest(session_id=unusable):
+                self.assertEqual(resolve_session_id(
+                    {"session_id": unusable}), DEFAULT_SESSION_ID)
+
+    def test_usable_ids_resolve_to_themselves(self):
+        self.assertEqual(resolve_session_id({"session_id": "abc"}), "abc")
+
+    def test_absent_or_empty_or_literal_default_resolve_to_the_default(self):
+        for carrier in ({}, {"session_id": None}, {"session_id": ""},
+                        {"session_id": "default"}):
+            with self.subTest(carrier=carrier):
+                self.assertEqual(resolve_session_id(carrier),
+                                 DEFAULT_SESSION_ID)
+
+
 class TestSessionManagerGetIsARead(unittest.TestCase):
     """`get` resolves which session a Message refers to and writes nothing."""
 
@@ -395,6 +419,17 @@ class TestSessionManagerGetIsARead(unittest.TestCase):
         self.assertEqual(first.site_id, "hallway")
         self.assertIsNot(first, SessionManager.get(msg))
         self.assertNotIn("sat-1", SessionManager.sessions)
+
+    def test_get_on_a_wrong_typed_session_id_resolves_to_the_store(self):
+        # A wrong-typed session_id is malformed and reads as omitted
+        # (§2.1), and an omitted id IS the default (§3.1) — it must not
+        # fall through to a freshly minted uuid4 session.
+        store = SessionManager.get_default_session()
+        msg = Message("u", context={"session": {"session_id": 123,
+                                                "lang": "pt-PT"}})
+        live = SessionManager.get(msg)
+        self.assertIs(live, store)
+        self.assertEqual(live.resolved_session_id(), "default")
 
 
 class TestDerivationChainWrite(unittest.TestCase):

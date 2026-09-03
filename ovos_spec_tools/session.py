@@ -72,6 +72,7 @@ from ovos_spec_tools.message import DEFAULT_SESSION_ID, _freeze
 __all__ = [
     "Session",
     "carried_fields",
+    "resolve_session_id",
     "merge_carrier",
     "SessionManager",
     "MalformedSession",
@@ -253,6 +254,21 @@ def carried_fields(carrier: Dict[str, Any]) -> Dict[str, Any]:
         if normalized is not None:
             out[name] = normalized
     return out
+
+
+def resolve_session_id(carrier: Dict[str, Any]) -> str:
+    """The effective ``session_id`` a raw carrier names (SESSION-1 §2 / §3.1 / §6).
+
+    §6 requires a non-empty string when ``session_id`` is set; a value that
+    cannot serve as an identity — absent, ``None``, ``""``, or any
+    non-string — is malformed and reads as omitted (§2.1), which resolves
+    to the reserved ``"default"`` id (§3.1). A well-formed string, the
+    literal ``"default"`` included, is returned as-is.
+    """
+    session_id = carrier.get("session_id")
+    if isinstance(session_id, str) and session_id:
+        return session_id
+    return DEFAULT_SESSION_ID
 
 
 def merge_carrier(stored: "Session", carrier: Dict[str, Any]) -> Dict[str, Any]:
@@ -1028,7 +1044,7 @@ class SessionManager:
         be stamped onto the next one.
         """
         carrier = cls._carrier(message)
-        if cls._names_the_default(carrier):
+        if resolve_session_id(carrier) == DEFAULT_SESSION_ID:
             with cls._lock:
                 stored = cls.get_default_session()
                 return stored.update_from(
@@ -1058,7 +1074,7 @@ class SessionManager:
         """
         payload = (getattr(message, "data", None) or {}).get("session") or {}
         carrier = cls._carrier(message)
-        if not cls._names_the_default(carrier):
+        if resolve_session_id(carrier) != DEFAULT_SESSION_ID:
             return cls.get(message)
         with cls._lock:
             stored = cls.get_default_session()
@@ -1110,7 +1126,7 @@ class SessionManager:
         if message is None:
             return cls.get_default_session()
         carrier = cls._carrier(message)
-        if cls._names_the_default(carrier):
+        if resolve_session_id(carrier) == DEFAULT_SESSION_ID:
             return cls.get_default_session()
         return cls._session_from_carrier(carrier)
 
@@ -1139,20 +1155,6 @@ class SessionManager:
         else:
             fields.pop("intent_context", None)
         return cls.session_cls.deserialize(fields)
-
-    @staticmethod
-    def _names_the_default(carrier: Dict[str, Any]) -> bool:
-        """Whether a carrier names the default session (SESSION-1 §3.1).
-
-        An omitted ``session_id`` resolves to the reserved ``"default"``
-        (§2.1), and so does any value that cannot serve as an identity —
-        §6 requires a non-empty string when the field is set, so an empty
-        or wrong-typed one is malformed and reads as omitted (§2.1). A
-        carrier naming no usable id IS the default session; routing it
-        anywhere else would strand it in a session no message can name.
-        """
-        return (carrier.get("session_id") or DEFAULT_SESSION_ID) == \
-            DEFAULT_SESSION_ID
 
     @staticmethod
     def _carrier(message: "object") -> Dict[str, Any]:
@@ -1201,7 +1203,7 @@ class SessionManager:
             # stamp it (also the emit inject-when-missing path).
             ctx["session"] = cls._wire_dict(cls.get_default_session())
             return message
-        if isinstance(snap, dict) and cls._names_the_default(snap):
+        if isinstance(snap, dict) and resolve_session_id(snap) == DEFAULT_SESSION_ID:
             ctx["session"] = cls._wire_dict(cls.get_default_session())
         return message
 
