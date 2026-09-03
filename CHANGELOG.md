@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.1a1) (2026-09-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.0a1...1.10.1a1)
+
+**Merged pull requests:**
+
+- fix: derive the default-session merge from OVOS-SESSION-2, not an arrival snapshot [\#116](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/116) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.0a1) (2026-09-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.9.1a1...1.10.0a1)
