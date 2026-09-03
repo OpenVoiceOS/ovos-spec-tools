@@ -412,12 +412,11 @@ class TestSessionManagerGetIsARead(unittest.TestCase):
 
     def test_get_on_a_named_session_builds_from_the_carrier(self):
         # §2.2: no orchestrator state for a named id, so the carrier is all
-        # there is and each read builds from it.
+        # there is and the read builds from it.
         msg = Message("u", context={"session": {"session_id": "sat-1",
                                                 "site_id": "hallway"}})
         first = SessionManager.get(msg)
         self.assertEqual(first.site_id, "hallway")
-        self.assertIsNot(first, SessionManager.get(msg))
         self.assertNotIn("sat-1", SessionManager.sessions)
 
     def test_get_on_a_wrong_typed_session_id_resolves_to_the_store(self):
@@ -566,6 +565,111 @@ class TestSessionSync(unittest.TestCase):
                    carrier={"session_id": "sat-1"})
         self.assertEqual(SessionManager.get_default_session().site_id,
                          "kitchen")
+
+
+class TestHandlerWritesRideOnDerivations(unittest.TestCase):
+    """OVOS-CONTEXT-1 §5.3 — read the session, mutate it, emit a derivation.
+
+    §5.0 makes this the only write path there is: no participant announces a
+    context change on a topic of its own, so a mutation that does not reach
+    the wire on the handler's own emission does not reach the wire at all.
+    """
+
+    def setUp(self):
+        SessionManager.sessions.clear()
+        SessionManager.default_session = None
+
+    @staticmethod
+    def _dispatch(session_id="sat-1", **fields):
+        return Message("my.skill:intent",
+                       context={"session": dict(session_id=session_id,
+                                                **fields),
+                                "source": "A", "destination": "B"})
+
+    def test_forward_carries_a_handler_write_on_a_named_session(self):
+        msg = self._dispatch()
+        sess = SessionManager.get(msg)
+        sess.intent_context = {"my.skill:topic": {"value": "weather"}}
+        self.assertEqual(
+            msg.forward("ovos.utterance.speak").context["session"]["intent_context"],
+            {"my.skill:topic": {"value": "weather"}})
+
+    def test_reply_and_response_carry_a_handler_write(self):
+        msg = self._dispatch()
+        SessionManager.get(msg).intent_context = {"my.skill:t": {"value": 1}}
+        for derived in (msg.reply("q.answer"), msg.response()):
+            self.assertEqual(derived.context["session"]["intent_context"],
+                             {"my.skill:t": {"value": 1}})
+        # §5.2 routing reversal is untouched by the stamp
+        self.assertEqual(msg.reply("q.answer").context["source"], "B")
+
+    def test_a_removal_rides_out_as_a_null_entry(self):
+        # §5.3: a removal is written into the handler's own copy exactly as
+        # an addition is, and travels the same way — as a null entry, which
+        # is what the entry-by-entry merge reads as "remove this key".
+        msg = self._dispatch(intent_context={"my.skill:t": {"value": 1}})
+        SessionManager.get(msg).intent_context = {"my.skill:t": None}
+        self.assertEqual(
+            msg.forward("ovos.utterance.speak").context["session"]["intent_context"],
+            {"my.skill:t": None})
+
+    def test_repeated_reads_of_one_message_give_one_session(self):
+        msg = self._dispatch()
+        self.assertIs(SessionManager.get(msg), SessionManager.get(msg))
+
+    def test_two_messages_on_one_id_do_not_share_a_session(self):
+        # §2.2: nothing is keyed on the id, so a second Message naming the
+        # same session starts from its own carrier and sees no leakage.
+        first, second = self._dispatch(), self._dispatch()
+        SessionManager.get(first).intent_context = {"my.skill:t": {"value": 1}}
+        self.assertIsNot(SessionManager.get(first), SessionManager.get(second))
+        self.assertIsNone(SessionManager.get(second).intent_context)
+        self.assertEqual(second.forward("x").context["session"],
+                         {"session_id": "sat-1"})
+
+    def test_a_handler_write_never_reaches_the_registry(self):
+        msg = self._dispatch()
+        SessionManager.get(msg).intent_context = {"my.skill:t": {"value": 1}}
+        self.assertNotIn("sat-1", SessionManager.sessions)
+        self.assertEqual(list(SessionManager.sessions), [])
+
+    def test_an_unread_message_forwards_its_carrier_unchanged(self):
+        carrier = {"session_id": "sat-1", "lang": "pt-PT",
+                   "intent_context": {"a:x": {"value": 1}}}
+        fwd = Message("u", context={"session": dict(carrier)}).forward("x")
+        self.assertEqual(fwd.context["session"], carrier)
+
+    def test_a_rewritten_carrier_drops_the_stale_binding(self):
+        msg = self._dispatch()
+        SessionManager.get(msg).intent_context = {"my.skill:t": {"value": 1}}
+        msg.context["session"] = {"session_id": "sat-2"}
+        rebound = SessionManager.get(msg)
+        self.assertEqual(rebound.resolved_session_id(), "sat-2")
+        self.assertIsNone(rebound.intent_context)
+
+    def test_a_derivation_for_another_session_is_not_stamped(self):
+        msg = self._dispatch()
+        SessionManager.get(msg).intent_context = {"my.skill:t": {"value": 1}}
+        msg.context["session"] = {"session_id": "other"}
+        self.assertEqual(msg.forward("x").context["session"],
+                         {"session_id": "other"})
+
+    def test_the_bound_session_outranks_a_direct_carrier_edit(self):
+        # once the session has been read off a Message, it is the authority
+        # for everything derived from it — a field poked straight into the
+        # carrier dict does not reach the derivation.
+        msg = self._dispatch(lang="en-US")
+        SessionManager.get(msg)
+        msg.context["session"]["lang"] = "pt-PT"
+        self.assertEqual(msg.forward("f").context["session"]["lang"], "en-US")
+
+    def test_a_write_on_the_default_session_still_rides_the_store(self):
+        msg = self._dispatch(session_id=DEFAULT_SESSION_ID)
+        sess = SessionManager.get(msg)
+        self.assertIs(sess, SessionManager.get_default_session())
+        sess.intent_context = {"shared:t": {"value": 1}}
+        self.assertEqual(msg.forward("x").context["session"]["intent_context"],
+                         {"shared:t": {"value": 1}})
 
 
 if __name__ == "__main__":

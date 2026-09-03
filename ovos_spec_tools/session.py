@@ -920,9 +920,14 @@ class SessionManager:
     the out-of-band path: ``ovos.session.sync`` carries a snapshot in
     ``Message.data`` that the orchestrator must merge (§2.7, §6.2).
 
-    :meth:`get` writes nothing. It answers "which session does this Message
-    refer to", and a read that quietly mutated the store would make the
-    answer depend on how many times it was asked.
+    :meth:`get` writes nothing into the store. It answers "which session
+    does this Message refer to", and a read that quietly mutated the store
+    would make the answer depend on how many times it was asked. The
+    session it answers with is bound to the Message that was asked about,
+    so asking twice about one Message gives back the same object and a
+    mutation made through it is the one :meth:`stamp_derived` puts on the
+    wire. The binding lives on the Message and dies with it — no id-keyed
+    state survives the Message, so §2.2 statelessness for named ids holds.
 
     Why stamping ``forward`` / ``reply`` is always correct
     -----------------------------------------------------
@@ -936,13 +941,16 @@ class SessionManager:
     propagates it, or nothing changed, in which case stamping re-serializes
     the same state. It is a meaningful refresh or a no-op, never a discard.
 
-    The guarantee stops at the default session, and must. For a named id
-    the process holds nothing authoritative to refresh from (§2.2), and
-    stamping from anything it happened to keep would eventually stamp a
-    past round onto the current one — silently re-activating handlers the
-    client dropped. A named carrier is left exactly as the message built
-    it; a handler that mutates a named session propagates the mutation by
-    emitting the session it holds.
+    The store is not the refresh source for a named id, and must not be:
+    the process holds nothing authoritative for one (§2.2), and stamping
+    from anything it happened to keep would eventually stamp a past round
+    onto the current one — silently re-activating handlers the client
+    dropped. What a named derivation refreshes from instead is the session
+    bound to the message it derives from, if a component asked for one:
+    that object *is* the carrier the message arrived with, and a handler
+    that mutated it is exactly the case CONTEXT-1 §5.3 wants carried out
+    on ``forward``. A message nobody asked about carries its named carrier
+    verbatim.
 
     Canonical example
     -----------------
@@ -953,9 +961,9 @@ class SessionManager:
         SessionManager.update(sess)          # write the mutation back (§2.6)
         reply = message.forward("my.skill.activate")
         #   forward() deep-copied message.context["session"] — the PRE-activation
-        #   snapshot. On the default session sync_message_session re-stamps
-        #   reply from the store, so the activation rides out on the wire; on a
-        #   named session the handler attaches its own session instead.
+        #   snapshot. On the default session the re-stamp comes from the store
+        #   and on a named session from the session bound to ``message`` by the
+        #   ``get`` above, so either way the activation rides out on the wire.
         bus.emit(reply)
 
     Pluggability
@@ -1120,15 +1128,37 @@ class SessionManager:
         Calling this twice never moves the store, which is what makes it
         safe to call anywhere in a component.
 
+        The session is bound to the Message it was asked about and the
+        binding is reused on later calls, so a component that reads, mutates
+        and then derives — the CONTEXT-1 §5.3 handler shape — has its
+        mutation on the object :meth:`stamp_derived` serializes onto the
+        derived Message. The binding is a per-Message attribute, not
+        registry state: it is unreachable from any other Message, is not
+        keyed on ``session_id``, and is collected with the Message, so the
+        orchestrator still holds nothing for a named id between utterances
+        (§2.2). A carrier rewritten to a different id after the fact drops
+        the stale binding.
+
+        After a ``get``, the bound session is the authority for anything
+        derived from that Message: write to the session object, not to the
+        carrier dict, since a field edited straight into
+        ``message.context["session"]`` is overwritten by the bound session
+        when :meth:`stamp_derived` runs.
+
         Arrivals go through :meth:`fold_inbound` and derivation-chain
         writes through :meth:`update`.
         """
         if message is None:
             return cls.get_default_session()
         carrier = cls._carrier(message)
-        if resolve_session_id(carrier) == DEFAULT_SESSION_ID:
-            return cls.get_default_session()
-        return cls._session_from_carrier(carrier)
+        session_id = resolve_session_id(carrier)
+        bound = getattr(message, "_bound_session", None)
+        if bound is not None and bound.resolved_session_id() == session_id:
+            return bound
+        sess = (cls.get_default_session() if session_id == DEFAULT_SESSION_ID
+                else cls._session_from_carrier(carrier))
+        message._bound_session = sess
+        return sess
 
     @classmethod
     def _session_from_carrier(cls, carrier: Dict[str, Any]) -> "Session":
@@ -1175,6 +1205,37 @@ class SessionManager:
             raise MalformedSession(
                 "session must be a JSON object (§2.5)")
         return carrier
+
+    @classmethod
+    def stamp_derived(cls, message: "object", source: "object") -> "object":
+        """Stamp a message derived from ``source`` with the live session.
+
+        The derivations of MSG-1 §5 deep-copy the source's carrier, which is
+        the session as it stood when the source Message was built. When a
+        component asked :meth:`get` about the source and mutated what it got
+        — the handler write of OVOS-CONTEXT-1 §5.3 — that snapshot is stale
+        and the bound session is the live one, so it is what goes on the
+        derived message. The check on the id keeps a derivation addressed at
+        a different session from inheriting the source's.
+
+        The bound session takes precedence over the source's carrier dict
+        whenever the two name the same id: once a component has read the
+        session off a Message, an edit written straight into
+        ``message.context["session"]`` does not reach the derivation. The
+        session object is the thing to write to.
+
+        With no binding, or a binding for another id, this falls back to
+        :meth:`sync_message_session`: the default store still stamps and a
+        named carrier still travels verbatim.
+        """
+        bound = getattr(source, "_bound_session", None)
+        if bound is not None and not bound.is_default:
+            snap = message.context.get("session")
+            if (isinstance(snap, dict)
+                    and resolve_session_id(snap) == bound.resolved_session_id()):
+                message.context["session"] = cls._wire_dict(bound)
+                return message
+        return cls.sync_message_session(message)
 
     @classmethod
     def sync_message_session(cls, message: "object",
