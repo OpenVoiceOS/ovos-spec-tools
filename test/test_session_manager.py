@@ -313,29 +313,29 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
         # read off the carrier, never off a serialized object, so an
         # unconditional emitter cannot wipe a stored subclass field.
         class RicherSession(Session):
-            def __init__(self, *args, location=None, **kwargs):
+            def __init__(self, *args, unit_prefs=None, **kwargs):
                 super().__init__(*args, **kwargs)
-                self.location = dict(location) if location else None
+                self.unit_prefs = dict(unit_prefs) if unit_prefs else None
 
             def serialize(self):
                 out = super().to_dict()
-                out["location"] = dict(self.location) if self.location else {}
+                out["unit_prefs"] = dict(self.unit_prefs) if self.unit_prefs else {}
                 return out
 
             @classmethod
             def from_dict(cls, payload):
                 payload = dict(payload or {})
-                location = payload.pop("location", None)
+                unit_prefs = payload.pop("unit_prefs", None)
                 sess = super().from_dict(payload)
-                sess.location = dict(location) if location else None
+                sess.unit_prefs = dict(unit_prefs) if unit_prefs else None
                 return sess
 
         SessionManager.session_cls = RicherSession
         try:
             live = self._inbound({"session_id": "default",
-                                  "location": {"city": "Lisbon"}})
+                                  "unit_prefs": {"system": "metric"}})
             self._inbound({"session_id": "default", "lang": "en-US"})
-            self.assertEqual(live.location, {"city": "Lisbon"})
+            self.assertEqual(live.unit_prefs, {"system": "metric"})
             self.assertEqual(live.lang, "en-US")
         finally:
             SessionManager.session_cls = Session
@@ -355,6 +355,23 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
                        "pipeline": ["stop_high", "converse"]})
         live = self._inbound({"session_id": "default", "pipeline": "abc"})
         self.assertEqual(live.pipeline, ["stop_high", "converse"])
+
+    def test_location_carries_as_a_preference_field(self):
+        # §3.5 / SESSION-2 §2.5: a preference field replaces the stored
+        # value when carried, and an omission leaves it alone -- the same
+        # merge rule as site_id.
+        self._inbound({"session_id": "default",
+                       "location": {"lat": 38.7, "tz": "Europe/Lisbon"}})
+        live = self._inbound({"session_id": "default"})
+        self.assertEqual(live.location, {"lat": 38.7, "tz": "Europe/Lisbon"})
+        live = self._inbound({"session_id": "default",
+                              "location": {"lat": 40.7}})
+        self.assertEqual(live.location, {"lat": 40.7})
+
+    def test_location_with_no_valid_key_counts_as_not_carried(self):
+        self.assertEqual(carried_fields({"location": {"city": "Lisbon"}}), {})
+        self.assertEqual(carried_fields({"location": "Lisbon"}), {})
+        self.assertEqual(carried_fields({"location": []}), {})
 
     def test_non_object_carrier_is_malformed(self):
         # §2.5: a carrier that is not an object has no session identity to

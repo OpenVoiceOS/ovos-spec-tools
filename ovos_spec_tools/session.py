@@ -97,11 +97,13 @@ DEFAULT_CONVERSE_HANDLERS_CAP = 64
 
 
 #: The field names whose semantics OVOS-SESSION-1 itself owns
-#: (§3.1 ``session_id`` + §3.2 language signals + §3.3 ``site_id``).
+#: (§3.1 ``session_id`` + §3.2 language signals + §3.3 ``site_id`` +
+#: §3.5 ``location``).
 SESSION1_OWNED_FIELDS = frozenset({
     "session_id", "site_id", "lang",
     "secondary_langs", "output_lang",
     "stt_lang", "request_lang", "detected_lang",
+    "location",
 })
 
 
@@ -175,6 +177,34 @@ def _is_bcp47(value: Any) -> bool:
     module rejects only obvious type errors."""
     return isinstance(value, str) and bool(value) and not any(
         c.isspace() for c in value)
+
+
+def _sanitize_location(raw: Any) -> Optional[Dict[str, Any]]:
+    """Validate the OVOS-SESSION-1 §3.5 ``location`` keys.
+
+    ``location`` carries only ``lat``/``lon``/``tz`` (§3.5: "``location``
+    carries only these three keys"). Per §2 a malformed key is dropped as
+    if omitted rather than rejecting the whole object: a wrong-typed or
+    out-of-range ``lat``/``lon``, or a non-string/empty ``tz``, is simply
+    left out. An unlisted key is tolerated (§2.4) but not re-emitted, since
+    this field defines no wire representation for it. A value that is not
+    a non-empty object, or one whose three keys are all malformed/absent,
+    normalizes to ``None`` — object-with-none-of-the-three is wire-equivalent
+    to omission.
+    """
+    if not isinstance(raw, dict) or not raw:
+        return None
+    out: Dict[str, Any] = {}
+    lat = raw.get("lat")
+    if isinstance(lat, (int, float)) and not isinstance(lat, bool) and -90 <= lat <= 90:
+        out["lat"] = float(lat)
+    lon = raw.get("lon")
+    if isinstance(lon, (int, float)) and not isinstance(lon, bool) and -180 <= lon <= 180:
+        out["lon"] = float(lon)
+    tz = raw.get("tz")
+    if isinstance(tz, str) and tz:
+        out["tz"] = tz
+    return out or None
 
 
 def parse_session_payload(
@@ -381,6 +411,15 @@ class Session:
     :param request_lang: §3.2.5 — language the emitter reported (hint).
     :param detected_lang: §3.2.6 — language a detector classified.
     :param site_id: §3.3 — opaque group / location identifier.
+    :param location: §3.5 — an object carrying zero or more of ``lat``
+        (number, [-90, 90]), ``lon`` (number, [-180, 180]) and ``tz`` (a
+        non-empty IANA zone string). All three are optional; a key that
+        fails its own check is dropped as if omitted, an unlisted key is
+        tolerated but not re-emitted, and a value with none of the three
+        set is wire-equivalent to omission. This field is a resolution-class
+        preference (OVOS-SESSION-2 §2.5) that the client owns; per §4.1 a
+        consumer MUST NOT materialize the deployment-configured location
+        default into it.
     :param pipeline: OVOS-PIPELINE-1 §5 — ordered pipeline-plugin ids.
     :param intent_context: OVOS-CONTEXT-1 §2 — the declarative intent
         context object (opaque to this module).
@@ -424,6 +463,7 @@ class Session:
                  request_lang: Optional[str] = None,
                  detected_lang: Optional[str] = None,
                  site_id: Optional[str] = None,
+                 location: Optional[Dict[str, Any]] = None,
                  pipeline: Optional[List[str]] = None,
                  intent_context: Optional[Dict[str, Any]] = None,
                  blacklisted_skills: Optional[List[str]] = None,
@@ -496,6 +536,9 @@ class Session:
         self.request_lang = request_lang
         self.detected_lang = detected_lang
         self.site_id = site_id
+        # §3.5: key-wise validated, malformed keys dropped, never a hard
+        # error — see :func:`_sanitize_location`.
+        self.location = _sanitize_location(location)
 
         # --- other-spec list/object override fields (carried opaquely) ------
         self.pipeline = self._as_str_list(pipeline)
@@ -758,6 +801,8 @@ class Session:
             out["detected_lang"] = self.detected_lang
         if self.site_id is not None:
             out["site_id"] = self.site_id
+        if self.location:
+            out["location"] = dict(self.location)
 
         # other-spec list/object override fields (omit-when-empty, §3.4)
         for name in _LIST_OVERRIDE_FIELDS:

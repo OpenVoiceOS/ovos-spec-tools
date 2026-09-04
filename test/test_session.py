@@ -149,6 +149,68 @@ class TestSiteId(unittest.TestCase):
         self.assertEqual(s.to_dict(), {"site_id": "unknown"})
 
 
+# --- §3.5 location -----------------------------------------------------
+
+class TestLocation(unittest.TestCase):
+    def test_full_location_round_trips(self):
+        s = Session(location={"lat": 38.7, "lon": -9.1, "tz": "Europe/Lisbon"})
+        self.assertEqual(s.to_dict(),
+                          {"location": {"lat": 38.7, "lon": -9.1,
+                                        "tz": "Europe/Lisbon"}})
+        self.assertEqual(Session.from_dict(s.to_dict()), s)
+
+    def test_malformed_lat_type_dropped_alone(self):
+        s = Session(location={"lat": "x", "lon": -9.1, "tz": "Europe/Lisbon"})
+        self.assertEqual(s.to_dict(),
+                          {"location": {"lon": -9.1, "tz": "Europe/Lisbon"}})
+
+    def test_lat_out_of_range_dropped_alone(self):
+        s = Session(location={"lat": 95, "lon": -9.1, "tz": "Europe/Lisbon"})
+        self.assertEqual(s.to_dict(),
+                          {"location": {"lon": -9.1, "tz": "Europe/Lisbon"}})
+
+    def test_lon_out_of_range_dropped_alone(self):
+        s = Session(location={"lat": 38.7, "lon": -181, "tz": "Europe/Lisbon"})
+        self.assertEqual(s.to_dict(),
+                          {"location": {"lat": 38.7, "tz": "Europe/Lisbon"}})
+
+    def test_tz_wrong_type_dropped_alone(self):
+        s = Session(location={"lat": 38.7, "lon": -9.1, "tz": 123})
+        self.assertEqual(s.to_dict(), {"location": {"lat": 38.7, "lon": -9.1}})
+
+    def test_tz_empty_string_dropped_alone(self):
+        s = Session(location={"lat": 38.7, "lon": -9.1, "tz": ""})
+        self.assertEqual(s.to_dict(), {"location": {"lat": 38.7, "lon": -9.1}})
+
+    def test_unlisted_key_is_tolerated_but_not_reemitted(self):
+        s = Session(location={"lat": 38.7, "city": "Lisbon"})
+        self.assertEqual(s.to_dict(), {"location": {"lat": 38.7}})
+
+    def test_none_of_three_present_is_wire_equivalent_to_omission(self):
+        s = Session(location={"city": "Lisbon"})
+        self.assertEqual(s.to_dict(), {})
+
+    def test_none_is_omitted(self):
+        s = Session(location=None)
+        self.assertEqual(s.to_dict(), {})
+
+    def test_non_dict_string_is_omitted(self):
+        s = Session(location="Lisbon")
+        self.assertEqual(s.to_dict(), {})
+
+    def test_non_dict_list_is_omitted(self):
+        s = Session(location=[])
+        self.assertEqual(s.to_dict(), {})
+
+    def test_location_is_registered_and_owned(self):
+        self.assertIn("location", SESSION1_REGISTERED_FIELDS)
+        self.assertIn("location", SESSION1_OWNED_FIELDS)
+
+    def test_explicit_null_location_treated_as_omitted(self):
+        s = Session.from_dict({"location": None})
+        self.assertEqual(s.to_dict(), {})
+
+
 # --- OVOS-PERSONA-1 registered persona_id ----------------------------------
 
 class TestPersonaId(unittest.TestCase):
@@ -553,10 +615,10 @@ class TestSerialization(unittest.TestCase):
 class TestRegistry(unittest.TestCase):
     def test_owned_fields_registry(self):
         # The fields whose semantics SESSION-1 itself owns: §3.1 session_id,
-        # §3.2 the six language signals, §3.3 site_id.
+        # §3.2 the six language signals, §3.3 site_id, §3.5 location.
         self.assertEqual(SESSION1_OWNED_FIELDS, frozenset({
             "session_id", "site_id", "lang", "secondary_langs", "output_lang",
-            "stt_lang", "request_lang", "detected_lang",
+            "stt_lang", "request_lang", "detected_lang", "location",
         }))
 
     def test_registered_fields_superset_of_owned(self):
