@@ -83,14 +83,19 @@ def _stamp_live_session(message: "Message", source: "Message") -> "Message":
     it. See that class for why this is always a meaningful refresh or a
     no-op, never a discard.
 
-    Best-effort and non-invasive: a message with **no** session is left as-is
-    (§5 carries no session forward), and a session id the registry never folded
-    is left untouched — so this is transparent to pure spec usage that never
-    wires a registry (the session is carried over verbatim, as §5 mandates).
+    Best-effort and non-invasive: a message with **no** session and no
+    binding on ``source`` is left as-is (§5 carries no session forward),
+    and a session id the registry never folded is left untouched — so this
+    is transparent to pure spec usage that never wires a registry (the
+    session is carried over verbatim, as §5 mandates). A carrier-less
+    derivation whose source has a bound *named* session is the one
+    exception: ``SessionManager.bind`` allows binding a named session onto
+    a carrier-less Message precisely so a derivation can pick it up, so the
+    registry hook still runs in that case.
     """
     try:
         ctx = getattr(message, "context", None) or {}
-        if not ctx.get("session"):
+        if not ctx.get("session") and getattr(source, "_bound_session", None) is None:
             return message
         from ovos_spec_tools.session import SessionManager
         return SessionManager.stamp_derived(message, source)

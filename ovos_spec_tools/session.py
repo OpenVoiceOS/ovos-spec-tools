@@ -240,6 +240,14 @@ def carried_fields(carrier: Dict[str, Any]) -> Dict[str, Any]:
         if name not in SESSION1_REGISTERED_FIELDS:
             out[name] = value
             continue
+        if name == "session_id":
+            # :func:`resolve_session_id` is the one place that diagnoses
+            # this field — it already logs a §2 WARN for a present,
+            # non-null, wrong-typed value — so this probe carries a
+            # well-formed string through without repeating that warning.
+            if isinstance(value, str) and value:
+                out[name] = value
+            continue
         if name == "intent_context":
             if isinstance(value, dict) and value:
                 out[name] = value
@@ -264,10 +272,22 @@ def resolve_session_id(carrier: Dict[str, Any]) -> str:
     non-string — is malformed and reads as omitted (§2.1), which resolves
     to the reserved ``"default"`` id (§3.1). A well-formed string, the
     literal ``"default"`` included, is returned as-is.
+
+    A *present*, non-``null`` value that is not a string is a client bug —
+    the wire sent a wrong type for the field — and SESSION-1 §2 asks a
+    consumer to log that at WARN, naming the field and the type received,
+    so the fallback to ``"default"`` does not hide it. Absence and an
+    explicit ``null``/``""`` are the spec's own omission cases, not a wrong
+    type, and stay silent.
     """
     session_id = carrier.get("session_id")
     if isinstance(session_id, str) and session_id:
         return session_id
+    if session_id is not None and not isinstance(session_id, str):
+        _log.warning(
+            "OVOS-SESSION-1 §2: wrong type for `session_id` (got %s); "
+            "falling back to %r", type(session_id).__name__,
+            DEFAULT_SESSION_ID)
     return DEFAULT_SESSION_ID
 
 
@@ -1118,6 +1138,74 @@ class SessionManager:
             return stored if stored is sess else stored.update_from(sess)
 
     @classmethod
+    def bind(cls, message: "object", session: "Session") -> "Session":
+        """Bind ``session`` as the session of ``message``, replacing any prior binding.
+
+        :meth:`get` binds lazily the first time it is asked about a Message,
+        but an orchestrator holds its own round session — opened from the
+        folded carrier at intake — and needs every later :meth:`get` and
+        every :meth:`stamp_derived` in that round to see that exact object,
+        mutations included, rather than a fresh one rebuilt from a
+        Message's carrier. Binding it here is what makes the round a single
+        session object end to end, per the OVOS-SESSION-2 §5.1 write model.
+
+        Two invariants keep a bound Message from disagreeing with itself,
+        and a violation is a caller bug reported as ``ValueError`` rather
+        than something to log and silently ignore:
+
+        - **The default session bound is the registry's own store.**
+          :meth:`stamp_derived` treats ``not bound.is_default`` as "this is
+          a named session, prefer the binding over the carrier" and
+          anything else as "fall back to the default-store refresh"
+          (:meth:`sync_message_session`), which reads
+          :meth:`get_default_session` directly. A default-shaped ``Session``
+          that is not that same object would make :meth:`get` (which
+          returns the binding) and :meth:`stamp_derived` (which ignores it
+          and reads the store) disagree about the very same Message.
+          Bind the registry default itself — ``SessionManager.bind(message,
+          SessionManager.get_default_session())`` — never a copy or a
+          freshly built default-shaped ``Session``.
+        - **A named session's id matches the Message's own carrier**, when
+          that Message has one. A carrier naming ``"sat-2"`` and a binding
+          for ``"sat-1"`` is not "session sat-1 wins", it is two claims
+          about which session the Message belongs to, and
+          :meth:`stamp_derived`'s id check would silently prefer the
+          carrier's id over the mismatched binding — the bind would look
+          like it took and then quietly do nothing on every derivation.
+          A Message with no carrier at all (§2.1: absent, ``null``, and
+          ``{}`` are equivalent to "names nothing yet") has made no claim
+          to contradict, so any session id may be bound to it; the bound
+          session's id is what :meth:`stamp_derived` then stamps onto
+          derivations.
+        """
+        if session.is_default and session is not cls.get_default_session():
+            raise ValueError(
+                "bind() refuses a default-shaped Session that is not the "
+                "registry's own default store, or stamp_derived would "
+                "disagree with get() about the same Message; obtain it via "
+                "SessionManager.get_default_session() and bind that object")
+        carrier = cls._carrier(message)
+        if carrier:
+            carrier_id = resolve_session_id(carrier)
+            session_id = session.resolved_session_id()
+            if carrier_id != session_id:
+                raise ValueError(
+                    f"bind() session id {session_id!r} does not match "
+                    f"the message's own carrier id {carrier_id!r}")
+        message._bound_session = session
+        return session
+
+    @classmethod
+    def bound(cls, message: "object") -> Optional["Session"]:
+        """The session currently bound to ``message``, or ``None`` if none is.
+
+        A read-only peek at the same attribute :meth:`get` and :meth:`bind`
+        use, for callers that need to tell "nothing bound yet" apart from
+        triggering :meth:`get`'s side effect of binding one.
+        """
+        return getattr(message, "_bound_session", None)
+
+    @classmethod
     def get(cls, message: Optional["object"] = None) -> "Session":
         """Return the session a Message refers to, without writing anything.
 
@@ -1137,7 +1225,10 @@ class SessionManager:
         keyed on ``session_id``, and is collected with the Message, so the
         orchestrator still holds nothing for a named id between utterances
         (§2.2). A carrier rewritten to a different id after the fact drops
-        the stale binding.
+        the stale binding. A carrier-less Message names nothing to
+        contradict (§2.1), so a binding put there by :meth:`bind` — the
+        caller *declaring* which session the Message belongs to — stands
+        regardless of its id.
 
         After a ``get``, the bound session is the authority for anything
         derived from that Message: write to the session object, not to the
@@ -1153,7 +1244,8 @@ class SessionManager:
         carrier = cls._carrier(message)
         session_id = resolve_session_id(carrier)
         bound = getattr(message, "_bound_session", None)
-        if bound is not None and bound.resolved_session_id() == session_id:
+        if bound is not None and (
+                not carrier or bound.resolved_session_id() == session_id):
             return bound
         sess = (cls.get_default_session() if session_id == DEFAULT_SESSION_ID
                 else cls._session_from_carrier(carrier))
@@ -1222,7 +1314,12 @@ class SessionManager:
         whenever the two name the same id: once a component has read the
         session off a Message, an edit written straight into
         ``message.context["session"]`` does not reach the derivation. The
-        session object is the thing to write to.
+        session object is the thing to write to. A derived Message with no
+        session snapshot of its own has made no competing claim either —
+        :meth:`bind` allows binding a named session onto a carrier-less
+        Message for exactly this reason — so an absent snapshot also
+        inherits the binding rather than being routed through the
+        default-store fallback below.
 
         With no binding, or a binding for another id, this falls back to
         :meth:`sync_message_session`: the default store still stamps and a
@@ -1231,7 +1328,7 @@ class SessionManager:
         bound = getattr(source, "_bound_session", None)
         if bound is not None and not bound.is_default:
             snap = message.context.get("session")
-            if (isinstance(snap, dict)
+            if snap is None or (isinstance(snap, dict)
                     and resolve_session_id(snap) == bound.resolved_session_id()):
                 message.context["session"] = cls._wire_dict(bound)
                 return message
