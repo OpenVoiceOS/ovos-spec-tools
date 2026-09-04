@@ -974,6 +974,10 @@ class SessionManager:
     session_cls = Session
     #: id -> the one live Session object for that id.
     sessions: Dict[str, "Session"] = {}
+    #: Kept for readers of the pre-spec attribute; the registry (``sessions``)
+    #: is authoritative and this is only ever written to mirror it, never
+    #: read internally. Removed in 2.0.0.
+    default_session: Optional["Session"] = None
     # Reentrant: a write into the default-session store runs update_from
     # while holding this lock, and update_from runs full deserialization
     # (Session.__init__ -> config load, subclass projections, and any
@@ -1011,6 +1015,7 @@ class SessionManager:
         if sess is None:
             sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
             cls.sessions[DEFAULT_SESSION_ID] = sess
+        cls.default_session = sess
         return sess
 
     @classmethod
@@ -1283,4 +1288,5 @@ class SessionManager:
         with cls._lock:
             sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
             cls.sessions[DEFAULT_SESSION_ID] = sess
+            cls.default_session = sess
         return sess

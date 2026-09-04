@@ -41,6 +41,18 @@ class TestSessionManagerRegistry(unittest.TestCase):
         self.assertEqual(d.lang, "pt-PT")
         self.assertIs(d, SessionManager.get_default_session())
 
+    def test_default_session_attribute_mirrors_the_registry(self):
+        # Pre-spec readers (hivemind-websocket-client, ovoscope) still touch
+        # SessionManager.default_session directly; it must track the
+        # registry entry it mirrors, not lag behind it.
+        SessionManager.get_default_session()
+        self.assertIs(SessionManager.default_session,
+                      SessionManager.sessions[DEFAULT_SESSION_ID])
+        fresh = SessionManager.reset_default_session()
+        self.assertIs(SessionManager.default_session, fresh)
+        self.assertIs(SessionManager.default_session,
+                      SessionManager.sessions[DEFAULT_SESSION_ID])
+
 
 class TestForwardReplyStamping(unittest.TestCase):
     def setUp(self):
