@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.4a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.4a1) (2026-09-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.3a1...1.10.4a1)
+
+**Merged pull requests:**
+
+- fix: public SessionManager.bind for the round session, warn on wrong-typed session\_id [\#123](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/123) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.3a1) (2026-09-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.2a1...1.10.3a1)
@@ -247,19 +255,19 @@
 
 ## [0.17.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.2a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.2a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.2a1)
 
 **Merged pull requests:**
 
 - fix: reject malformed keyword intents at build/emit \(INTENT-3 §4.2\) [\#54](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/54) ([JarbasAl](https://github.com/JarbasAl))
 
-## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
-
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.0a1)
-
 ## [0.17.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.1a1) (2026-06-27)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.1a1)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.1a1)
+
+## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.0a1)
 
 **Merged pull requests:**
 
