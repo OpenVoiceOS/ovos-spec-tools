@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.6a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.6a1) (2026-09-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.5a2...1.10.6a1)
+
+**Merged pull requests:**
+
+- fix: restore SessionManager.default\_session as a compatibility mirror [\#129](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/129) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.5a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.5a2) (2026-09-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.5a1...1.10.5a2)
@@ -390,10 +398,6 @@
 ## [0.9.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.9.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.8.0a2...0.9.0a1)
-
-**Merged pull requests:**
-
-- feat: SpecMessage registry + legacy-\>spec MIGRATION\_MAP [\#26](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/26) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.8.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.8.0a2) (2026-06-13)
 
