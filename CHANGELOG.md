@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.5a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.5a1) (2026-09-04)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.4a1...1.10.5a1)
+
+**Merged pull requests:**
+
+- fix: register session.location \(OVOS-SESSION-1 §3.5\) in the field registry [\#125](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/125) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.4a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.4a1) (2026-09-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.3a1...1.10.4a1)
@@ -355,10 +363,6 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.11.0a1...0.12.0a1)
 
-**Merged pull requests:**
-
-- feat: OVOS-SESSION-1 canonical Session reference implementation [\#16](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/16) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.11.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.11.0a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.10.0a1...0.11.0a1)
@@ -395,81 +399,41 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.7.0a1...0.8.0a1)
 
-**Merged pull requests:**
-
-- feat: inline\_keywords — resolve \<keyword\> refs as \(a|b|c\) for engines without .voc support [\#22](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/22) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.7.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.7.0a1) (2026-06-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.6.0a1...0.7.0a1)
-
-**Merged pull requests:**
-
-- feat: union slot sets for .intent \(OVOS-INTENT-1 §5.5\) [\#19](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/19) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.6.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.6.0a1) (2026-05-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.5.1a1...0.6.0a1)
 
-**Merged pull requests:**
-
-- feat: find\_lang\_dir — standalone language-aware directory resolver [\#17](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/17) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.5.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.5.1a1) (2026-05-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.5.0a1...0.5.1a1)
-
-**Merged pull requests:**
-
-- fix\(Message\): three follow-ups missed by the 0.5.0a1 cut [\#14](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/14) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.5.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.5.0a1) (2026-05-24)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.4.0a1...0.5.0a1)
 
-**Merged pull requests:**
-
-- feat: OVOS-MSG-1 Message envelope [\#12](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/12) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.4.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.4.0a1) (2026-05-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.3.0a1...0.4.0a1)
-
-**Merged pull requests:**
-
-- feat: LocaleResources.voc\_list / .voc\_match / .remove\_voc [\#10](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/10) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.3.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.3.0a1) (2026-05-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.2.0a1...0.3.0a1)
 
-**Merged pull requests:**
-
-- feat: keyword\_form / vocabulary\_keywords + utterance\_contains / strip\_samples [\#8](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/8) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.2.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.2.0a1) (2026-05-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.1.0a1...0.2.0a1)
-
-**Merged pull requests:**
-
-- feat: LocaleResources.find — public resource lookup by \(name, ext, lang\) [\#6](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/6) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.1.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.1.0a1) (2026-05-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.0.1a2...0.1.0a1)
 
-**Merged pull requests:**
-
-- feat: lang\_matches and iter\_locale\_dirs — pin the cross-component lang policy [\#4](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/4) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.0.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.0.1a2) (2026-05-22)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/13d694e2960b7ede0533f4029442301c21c86a8c...0.0.1a2)
-
-**Merged pull requests:**
-
-- Configure Renovate [\#1](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/1) ([renovate[bot]](https://github.com/apps/renovate))
 
 
 
