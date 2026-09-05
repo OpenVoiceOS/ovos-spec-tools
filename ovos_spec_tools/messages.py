@@ -242,13 +242,16 @@ class SpecMessage(str, Enum):
     #: §6.4 — left sleep mode (sleep→awake transition); audio-input → broadcast.
     LISTENER_AWOKEN = "ovos.listener.awoken"
 
-    # --- OVOS-SESSION-2 out-of-utterance session sync (§2.7, bus table §7) ---
+    # --- OVOS-SESSION-1/SESSION-2 session lifecycle topics ---
     #: SESSION-2 §2.7 — broadcast an explicit session update OUTSIDE the
     #: utterance lifecycle; the updated snapshot rides in ``Message.data.session``
     #: and the orchestrator MUST merge it. (``ovos.session.update_default`` and
     #: ``ovos.session.start`` are NOT spec-defined — see module note — and stay
     #: out of this enum; SESSION-2 §1 explicitly defers lifecycle topics.)
     SESSION_SYNC = "ovos.session.sync"
+    #: SESSION-1 §2.5 — consumer drops a Message due to malformed carrier
+    #: (context.session is not a JSON object); data carries msg_type and reason.
+    SESSION_REJECTED = "ovos.session.rejected"
 
     # --- OVOS-CONVERSE-1 §6.1 active-handler introspection ---
     # The §6.2 poll pair below is static dotted, non-dispatch (§6.2 table);
