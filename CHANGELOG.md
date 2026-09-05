@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.8a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.8a1) (2026-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.7a2...1.10.8a1)
+
+**Merged pull requests:**
+
+- fix: reject the empty group \(\) as malformed \(OVOS-INTENT-1 §3.6\) [\#135](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/135) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.7a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.7a2) (2026-09-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.7a1...1.10.7a2)
@@ -389,7 +397,6 @@
 **Merged pull requests:**
 
 - docs: spec-traceability for the bus/message domain \(MSG-1\) [\#34](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/34) ([JarbasAl](https://github.com/JarbasAl))
-- docs: spec traceability for the locale/template/lint domain [\#33](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/33) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.12.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a1) (2026-06-26)
 
