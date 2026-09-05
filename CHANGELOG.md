@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.7a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.7a1) (2026-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.6a1...1.10.7a1)
+
+**Merged pull requests:**
+
+- fix: tolerate unknown session keys, malformed fields, and single-branch groups [\#131](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/131) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.6a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.6a1) (2026-09-04)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.5a2...1.10.6a1)
@@ -390,10 +398,6 @@
 ## [0.10.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.10.0a1) (2026-06-25)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.9.0a1...0.10.0a1)
-
-**Merged pull requests:**
-
-- feat: add NamespaceTranslator \(shared bus-namespace migration logic\) [\#28](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/28) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.9.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.9.0a1) (2026-06-25)
 
