@@ -1,52 +1,106 @@
-# ovos-intent-primitives
+# ovos-spec-tools
 
-Reference implementation of the OVOS intent specifications — the low-level,
-dependency-light primitives that the [formal
-specifications](https://github.com/OpenVoiceOS/formal-specifications) describe.
+Reference implementation of the OVOS [formal
+specifications](https://github.com/OpenVoiceOS/architecture), the
+low-level, dependency-light primitives those specifications describe.
 
-OVOS components reimplement template expansion and resource loading in several
-places, and the copies drift. This package is the single conformant
-implementation those components — and any third-party tool — can depend on.
+OVOS components reimplement template expansion, resource loading, and language
+matching in several places, and the copies drift. This package is the single
+conformant implementation those components, and any third-party tool, can
+depend on.
 
 ## Status
 
-| Primitive | Spec | State |
-|-----------|------|-------|
-| Sentence template expander | OVOS-INTENT-1 v2 | available |
-| Locale resource loader | OVOS-INTENT-2 | planned |
-| Dialog renderer | OVOS-INTENT-2 §4.2 | planned |
+| Tool | Spec | Code |
+|------|------|-------|
+| Sentence template expander | OVOS-INTENT-1 v2 | `expansion.py` |
+| Locale resource loader | OVOS-INTENT-2 |  `resources.py`  |
+| Dialog renderer | OVOS-INTENT-2 §4.2 |  `dialog.py`  |
+| Prompt renderer | OVOS-INTENT-2 §4.4 |  `prompt.py`  |
 
-## The expander
-
-`expand()` turns a sentence template into its **sample set** — the finite set
-of sentences it denotes (OVOS-INTENT-1 §4). It resolves `(a|b)` alternatives,
-`[x]` optionals, and `<name>` inline vocabulary references; named `{name}`
-slots are opaque and carried through unchanged.
-
-```python
-from ovos_intent_primitives import expand
-
-expand("(turn|switch) [the] (light|fan)")
-# ['turn the light', 'turn the fan', 'turn light', 'turn fan',
-#  'switch the light', 'switch the fan', 'switch light', 'switch fan']
-
-expand("<greeting> {name}", {"greeting": ["hello", "hi"]})
-# ['hello {name}', 'hi {name}']
-```
-
-A template that violates OVOS-INTENT-1 §3.6 — unbalanced metacharacters, a
-single-branch group, an empty sample, a slot-only template, adjacent slots, a
-repeated slot name, or an undefined or cyclic vocabulary reference — raises
-`MalformedTemplate`.
-
-Input is assumed already ASR-normalized (OVOS-INTENT-1 §2): lowercase,
-single-spaced, alphanumeric. This package expands; it does not normalize.
+| Tool | Spec | Code |
+|------|------|-------|
+| Language-tag matching | OVOS-INTENT-2 §2.2 |  `language.py` |
+| Bus message envelope | OVOS-MSG-1 |  `message.py`  |
+| Intent dispatch topics | OVOS-MSG-1 §2.1.1 / OVOS-INTENT-4 |  `intent_topics.py`  |
+| `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 |  `lint.py`  |
 
 ## Install
 
 ```bash
-pip install ovos-intent-primitives
+pip install ovos-spec-tools            # core — no dependencies
+pip install ovos-spec-tools[langcodes] # adds the smart language fallback
 ```
+
+Requires Python 3.10+.
+
+## Quick taste
+
+```python
+from ovos_spec_tools import (expand, LocaleResources, render, render_prompt,
+                             closest_lang, Message)
+
+expand("(turn|switch) [the] light")          # all 4 sentences it denotes
+res = LocaleResources("my-skill/locale")
+res.load_intent("play", "en-US")             # a skill's intent samples
+render(res.load_dialog("weather", "en-US"),  # a spoken response
+       slots={"temperature": 21})
+render_prompt(res.load_prompt("system", "en-US"),  # a language-model prompt
+              slots={"query": "what time is it"})
+closest_lang("en-AU", ["pt-BR", "en-US"])    # 'en-US'
+
+# OVOS-MSG-1 envelope: a bus message and its 'send back to the asker' reply
+m = Message("ovos.intent.list", {}, {"source": "skill.id"})
+res = m.response({"intents": ["..."]})       # 'ovos.intent.list.response'
+res.serialize()                              # single UTF-8 JSON object
+```
+
+```bash
+ovos-spec-lint my-skill/locale               # validate a locale folder
+```
+
+## Documentation
+
+A zero-to-hero guide lives in [`docs/`](docs/README.md):
+
+1. [Getting started](docs/getting-started.md), install, and a first taste of
+   every tool.
+2. [Sentence templates](docs/templates.md), the grammar: alternatives,
+   optionals, slots, vocabulary references, malformed forms.
+3. [Locale resources](docs/locale-resources.md), the `locale/` folder, the
+   six file roles, loading across languages, override precedence.
+4. [Dialog](docs/dialog.md), choosing and filling a spoken response, and
+   rendering language-model prompts.
+
+5. [Language matching](docs/language-matching.md), tag standardization,
+   distance, and closest-match resolution.
+6. [Bus messages](docs/message.md), the on-the-wire envelope, the
+   `forward` / `reply` / `response` derivations, and the session carrier.
+7. [Linting](docs/linting.md), validating a locale folder, on the CLI or in CI.
+8. [API reference](docs/api-reference.md), every public name, in brief.
+
+Runnable example scripts are in [`examples/`](examples/README.md).
+
+See [docs/prerelease-quirks.md](docs/prerelease-quirks.md) for what changed
+since the last stable release (there has not been one yet, so it covers
+everything since the first alpha).
+
+---
+
+## Credits
+
+Developed by [TigreGótico](https://tigregotico.pt) for
+[OpenVoiceOS](https://openvoiceos.org).
+
+[![NGI0 Commons Fund](./ngi.png)](https://nlnet.nl/project/OpenVoiceOS)
+
+This project was funded through the [NGI0 Commons Fund](https://nlnet.nl/commonsfund),
+a fund established by [NLnet](https://nlnet.nl) with financial support from the
+European Commission's [Next Generation Internet](https://ngi.eu) programme, under
+the aegis of [DG Communications Networks, Content and Technology](https://commission.europa.eu/about-european-commission/departments-and-executive-agencies/communications-networks-content-and-technology_en)
+under grant agreement No [101135429](https://cordis.europa.eu/project/id/101135429).
+
+---
 
 ## License
 
