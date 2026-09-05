@@ -850,7 +850,15 @@ class Session:
         ``Message.reply`` deep-copy the raw wire ``context`` rather than
         reconstructing it through this method). Passing ``None`` (no
         ``session`` key in ``context``) yields the same well-formed empty
-        session as ``{}`` (§2.1)."""
+        session as ``{}`` (§2.1).
+
+        A wrong-typed field is malformed too, and §2.5 resolves malformedness
+        field-by-field: "the offending field is treated as omitted and the
+        rest of the session is consumed normally." A single bad field
+        therefore does not cost the whole session — only :class:`Session`
+        itself validates cross-field rules (e.g. §3.2.2's ``secondary_langs``
+        collision), so a combination that only the constructor rejects still
+        raises."""
         if payload is None:
             return cls()
         if not isinstance(payload, dict):
@@ -869,7 +877,24 @@ class Session:
                     "malformed; treating as omitted", key)
                 continue
             kwargs[key] = value
-        return cls(**kwargs)
+        try:
+            return cls(**kwargs)
+        except MalformedSession:
+            pass
+
+        # §2.5: probe each field on its own so a malformed one is dropped
+        # without rejecting fields that validate fine by themselves.
+        valid: Dict[str, Any] = {}
+        for key, value in kwargs.items():
+            try:
+                cls(**{key: value})
+            except MalformedSession as exc:
+                _log.warning(
+                    "OVOS-SESSION-1 §2.5: `%s` is malformed (%s); treating "
+                    "as omitted", key, exc)
+                continue
+            valid[key] = value
+        return cls(**valid)
 
     @classmethod
     def deserialize(cls,
@@ -978,6 +1003,12 @@ class SessionManager:
     #: is authoritative and this is only ever written to mirror it, never
     #: read internally. Removed in 2.0.0.
     default_session: Optional["Session"] = None
+    #: Unrecognised top-level keys most recently carried onto the default
+    #: session. §2.4 forbids stripping them and SESSION-2 §5.1 requires the
+    #: store to carry them on the sessions it derives; :class:`Session`
+    #: itself only models the §3 field set (§2.4's own carve-out), so the
+    #: store keeps what it does not model here instead.
+    _extras: Dict[str, Any] = {}
     # Reentrant: a write into the default-session store runs update_from
     # while holding this lock, and update_from runs full deserialization
     # (Session.__init__ -> config load, subclass projections, and any
@@ -995,10 +1026,23 @@ class SessionManager:
         (ovos-bus-client) overrides it to return a dict carrying extra legacy
         projection keys. Normalise both to a dict so the richer shape, when
         present, survives onto ``message.context["session"]``.
+
+        For the default store, the top-level keys no registered field
+        models are re-emitted alongside it too: SESSION-2 §5.1 "Field
+        tolerance applies at store-write ... it MUST carry them on the
+        sessions it subsequently derives from the store." A named session
+        has no store to hold them in, so :meth:`_session_from_carrier`
+        stashes the same unrecognised keys on the object itself
+        (``_carrier_extras``) and they are re-emitted here the same way —
+        §2.4's MUST-NOT-strip applies to it too.
         """
         data = sess.serialize()
         if isinstance(data, (str, bytes, bytearray)):
             data = json.loads(data)
+        if sess is cls.sessions.get(DEFAULT_SESSION_ID):
+            data = {**cls._extras, **data}
+        elif getattr(sess, "_carrier_extras", None):
+            data = {**sess._carrier_extras, **data}
         return data
 
     @classmethod
@@ -1050,11 +1094,29 @@ class SessionManager:
         """
         carrier = cls._carrier(message)
         if resolve_session_id(carrier) == DEFAULT_SESSION_ID:
-            with cls._lock:
-                stored = cls.get_default_session()
-                return stored.update_from(
-                    cls.session_cls.deserialize(merge_carrier(stored, carrier)))
+            return cls._merge_into_default(carrier)
         return cls._session_from_carrier(carrier)
+
+    @classmethod
+    def _merge_into_default(cls, carrier: Dict[str, Any]) -> "Session":
+        """Merge ``carrier`` into the default store per OVOS-SESSION-2 §5.1.
+
+        Splits the merged wire dict into the §3 fields :class:`Session`
+        models and the unrecognised top-level keys it does not (§2.4). The
+        fields go through the deserializer as before; the unrecognised keys
+        are field-tolerant the same way — a carried one replaces, an omitted
+        one leaves the last stored value alone, per §5.1's "Field tolerance
+        applies at store-write" — and are kept in :attr:`_extras` so
+        :meth:`_wire_dict` can carry them onto the sessions this store
+        subsequently derives.
+        """
+        with cls._lock:
+            stored = cls.get_default_session()
+            merged = merge_carrier(stored, carrier)
+            cls._extras.update(
+                (key, value) for key, value in merged.items()
+                if key not in SESSION1_REGISTERED_FIELDS)
+            return stored.update_from(cls.session_cls.deserialize(merged))
 
     @classmethod
     def handle_sync(cls, message: "object") -> "Session":
@@ -1081,10 +1143,7 @@ class SessionManager:
         carrier = cls._carrier(message)
         if resolve_session_id(carrier) != DEFAULT_SESSION_ID:
             return cls.get(message)
-        with cls._lock:
-            stored = cls.get_default_session()
-            return stored.update_from(
-                cls.session_cls.deserialize(merge_carrier(stored, payload)))
+        return cls._merge_into_default(payload)
 
     @classmethod
     def update(cls, sess: "Session") -> "Session":
@@ -1196,6 +1255,13 @@ class SessionManager:
         entries here: OVOS-CONTEXT-1 §5.3 gives them the meaning *remove
         this key*, and there is nothing to remove from a snapshot that
         stands alone.
+
+        The unrecognised top-level keys ``carried_fields`` passes through
+        verbatim (§2.4) are stashed on the built object as
+        ``_carrier_extras`` so :meth:`_wire_dict` can carry them onto the
+        Messages this session is stamped on — the same MUST-NOT-strip rule
+        the default store honours, applied to a session that has no store
+        of its own to keep them in.
         """
         fields = carried_fields(carrier)
         entries = {key: entry
@@ -1205,7 +1271,12 @@ class SessionManager:
             fields["intent_context"] = entries
         else:
             fields.pop("intent_context", None)
-        return cls.session_cls.deserialize(fields)
+        extras = {key: value for key, value in fields.items()
+                 if key not in SESSION1_REGISTERED_FIELDS}
+        sess = cls.session_cls.deserialize(fields)
+        if extras:
+            sess._carrier_extras = extras
+        return sess
 
     @staticmethod
     def _carrier(message: "object") -> Dict[str, Any]:
@@ -1289,4 +1360,5 @@ class SessionManager:
             sess = cls.session_cls.deserialize({"session_id": DEFAULT_SESSION_ID})
             cls.sessions[DEFAULT_SESSION_ID] = sess
             cls.default_session = sess
+            cls._extras = {}
         return sess

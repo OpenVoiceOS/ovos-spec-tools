@@ -3,9 +3,12 @@
 Each test cites the section of OVOS-INTENT-1 version 2 it exercises. Together
 these form the conformance corpus for the Expander role (§7).
 """
+import logging
+
 import pytest
 
-from ovos_spec_tools import MalformedTemplate, expand, inline_keywords
+from ovos_spec_tools import (MalformedTemplate, expand, inline_keywords,
+                             iter_expand)
 
 
 # --- §4.2 the worked example -------------------------------------------------
@@ -193,10 +196,69 @@ def test_unbalanced_metacharacters(template):
         expand(template)
 
 
-@pytest.mark.parametrize("template", ["(word)", "()", "turn (on)"])
-def test_single_branch_group(template):
+def test_empty_group_still_yields_an_empty_sample():
+    # `()` is a single-branch group whose one branch is the empty string;
+    # it folds to that bare (empty) branch, which is then rejected by the
+    # separate §3.6 empty-sample rule, not by the group rule.
     with pytest.raises(MalformedTemplate):
-        expand(template)
+        expand("()")
+
+
+@pytest.mark.parametrize("template,expected", [
+    ("(word)", ["word"]),
+    ("turn on (light)", ["turn on light"]),
+])
+def test_single_branch_group_folds_to_the_bare_branch(template, expected, caplog):
+    # §3.6: "not malformed: loaders MUST accept it, SHOULD warn, and MUST
+    # treat it as exactly the bare branch (`(word)` == `word`)."
+    with caplog.at_level(logging.WARNING):
+        assert expand(template) == expected
+        assert list(iter_expand(template)) == expected
+    assert any("single-branch group" in r.message for r in caplog.records)
+
+
+def test_single_branch_group_warns_exactly_once_per_occurrence(caplog):
+    # A leading single-branch group folds once, up front, regardless of how
+    # many branches a later multi-branch group in the same template has --
+    # folding after branching would warn once per branch of that group
+    # instead of once per syntactic occurrence.
+    template = "(please) turn (on|off) the light"
+    with caplog.at_level(logging.WARNING):
+        result = expand(template)
+    assert result == ["please turn on the light", "please turn off the light"]
+    warnings = [r for r in caplog.records if "single-branch group" in r.message]
+    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize("template,expected,warning_count", [
+    # OVOS-INTENT-1 §3.5: "Expansion groups MAY be nested without limit."
+    # Both levels of `((word))` are single-branch groups -- two distinct
+    # syntactic occurrences, so two warnings, folding innermost first.
+    ("((word))", ["word"], 2),
+    # The nested `(word)` is degenerate; the enclosing group has two
+    # top-level branches (`on`, the folded `word`) and is not degenerate,
+    # so exactly one warning fires.
+    ("turn (on|(word))", ["turn on", "turn word"], 1),
+    ("turn ((word)|off) the light",
+     ["turn word the light", "turn off the light"], 1),
+])
+def test_nested_single_branch_group_folds_innermost_first(
+        template, expected, warning_count, caplog):
+    with caplog.at_level(logging.WARNING):
+        result = expand(template)
+    assert result == expected
+    warnings = [r for r in caplog.records if "single-branch group" in r.message]
+    assert len(warnings) == warning_count
+
+
+def test_single_branch_group_inside_optional_folds_once(caplog):
+    # `[opt (x)]` converts to `(opt (x)|)` (§4.1 step 2) before folding;
+    # the nested `(x)` is the only degenerate occurrence.
+    with caplog.at_level(logging.WARNING):
+        result = expand("turn [opt (x)]")
+    assert result == ["turn opt x", "turn"]
+    warnings = [r for r in caplog.records if "single-branch group" in r.message]
+    assert len(warnings) == 1
 
 
 @pytest.mark.parametrize("template", ["", "(|)", "[hello]"])

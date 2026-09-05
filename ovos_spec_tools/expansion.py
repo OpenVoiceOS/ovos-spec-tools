@@ -25,10 +25,13 @@ Malformed templates (OVOS-INTENT-1 §3.6) raise :class:`MalformedTemplate`.
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import Iterator, Dict, List, Optional, Sequence, Tuple
 
 __all__ = ["expand", "fold_double_braces", "MalformedTemplate"]
+
+_log = logging.getLogger(__name__)
 
 # A slot or vocabulary name: lowercase ASCII letters, digits, underscores;
 # never beginning with a digit (OVOS-INTENT-1 §3.4).
@@ -136,8 +139,9 @@ def _iter_expand(template: str,
             f"one literal word")
     resolved = _resolve_references(template, vocabularies, stack)
     converted = _convert_optionals(resolved)
+    folded = _fold_single_branch_groups(converted)
     seen = set()
-    for sentence in _iter_groups(converted):
+    for sentence in _iter_groups(folded):
         sentence = " ".join(sentence.split())  # normalize whitespace (§4.1)
         if sentence in seen:  # remove duplicates (§4.1)
             continue
@@ -251,43 +255,58 @@ def _convert_optionals(template: str) -> str:
     return template
 
 
+def _fold_single_branch_groups(template: str) -> str:
+    """Fold every single-branch group to its bare branch (§3.6).
+
+    A single-branch group ``(word)`` is degenerate, not malformed:
+    ``(word)`` == ``word``. OVOS-INTENT-1 §3.5: "Expansion groups MAY be
+    nested without limit." Folding runs bottom-up: an inner group's ``)``
+    closes (and is folded or left as a kept multi-branch group) before its
+    enclosing group's own branch count is read off the text, so a `|`
+    belonging to a nested, already-resolved group is never mistaken for
+    the enclosing group's own separator. Doing this before any multi-
+    branch group is expanded also means each syntactic occurrence, at
+    whatever depth, warns exactly once — folding after branching would
+    warn once per branch of every enclosing multi-branch group instead.
+    """
+    output: List[str] = []
+    stack: List[List[str]] = []
+    current = output
+    for char in template:
+        if char == "(":
+            stack.append(current)
+            current = []
+        elif char == ")":
+            inner = "".join(current)
+            current = stack.pop()
+            if "|" in inner:
+                current.append("(" + inner + ")")
+            else:
+                _log.warning(
+                    "OVOS-INTENT-1 §3.6: single-branch group (%s) is "
+                    "degenerate; treating as the bare branch %r", inner, inner)
+                current.append(inner)
+        else:
+            current.append(char)
+    return "".join(output)
+
+
 def _iter_groups(template: str) -> Iterator[str]:
-    """Yield every ``(...)`` group combination lazily, product order."""
+    """Yield every ``(...)`` group combination lazily, product order.
+
+    Every group reaching this point already has two or more branches —
+    :func:`_fold_single_branch_groups` folds the degenerate ones first.
+    """
     open_idx = template.rfind("(")
     if open_idx == -1:
         yield template
         return
     close_idx = template.find(")", open_idx)
     inner = template[open_idx + 1:close_idx]
-    branches = inner.split("|")
-    if len(branches) == 1:
-        raise MalformedTemplate(
-            f"single-branch group ({inner}): a group must offer a choice "
-            f"between at least two branches")
     prefix = template[:open_idx]
     suffix = template[close_idx + 1:]
-    for branch in branches:
+    for branch in inner.split("|"):
         yield from _iter_groups(prefix + branch + suffix)
-
-
-def _expand_groups(template: str) -> List[str]:
-    """Expand every ``(...)`` group by Cartesian product (§4.1 step 3)."""
-    open_idx = template.rfind("(")
-    if open_idx == -1:
-        return [template]
-    close_idx = template.find(")", open_idx)
-    inner = template[open_idx + 1:close_idx]
-    branches = inner.split("|")
-    if len(branches) == 1:
-        raise MalformedTemplate(
-            f"single-branch group ({inner}): a group must offer a choice "
-            f"between at least two branches")
-    prefix = template[:open_idx]
-    suffix = template[close_idx + 1:]
-    result: List[str] = []
-    for branch in branches:
-        result.extend(_expand_groups(prefix + branch + suffix))
-    return result
 
 
 def _check_sample(sentence: str, template: str) -> None:
