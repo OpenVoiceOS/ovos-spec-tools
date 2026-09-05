@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.7a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.7a2) (2026-09-05)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.7a1...1.10.7a2)
+
+**Merged pull requests:**
+
+- Add SESSION\_REJECTED spec topic [\#132](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/132) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.7a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.7a1) (2026-09-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.6a1...1.10.7a1)
@@ -390,10 +398,6 @@
 ## [0.11.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.11.0a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.10.0a1...0.11.0a1)
-
-**Merged pull requests:**
-
-- feat: bridge PIPELINE-1 trio, STOP-1, intent-unmatched & INTENT-4 management topics [\#30](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/30) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.10.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.10.0a1) (2026-06-25)
 
