@@ -67,6 +67,22 @@ class TestWireShape(unittest.TestCase):
         with self.assertRaises(MalformedSession):
             Session.from_dict(["not", "an", "object"])  # type: ignore[arg-type]
 
+    def test_malformed_field_is_omitted_field_by_field(self):
+        # §2.5: "the offending field is treated as omitted and the rest of
+        # the session is consumed normally" -- a wrong-typed `pipeline`
+        # must not cost the whole session its `lang`.
+        s = Session.from_dict({"lang": "pt-pt", "pipeline": "notalist"})
+        self.assertEqual(s.lang, "pt-pt")
+        self.assertIsNone(s.pipeline)
+
+        s = Session.from_dict({"lang": "pt-pt", "pipeline": ["ok", 2]})
+        self.assertEqual(s.lang, "pt-pt")
+        self.assertIsNone(s.pipeline)
+
+        s = Session.from_dict({"lang": "pt-pt", "intent_context": [1]})
+        self.assertEqual(s.lang, "pt-pt")
+        self.assertIsNone(s.intent_context)
+
     def test_unparsable_json_is_malformed(self):
         with self.assertRaises(MalformedSession):
             Session.deserialize("{not valid")

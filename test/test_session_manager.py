@@ -144,11 +144,41 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
     def setUp(self):
         SessionManager.sessions.clear()
         SessionManager.default_session = None
+        SessionManager._extras = {}
 
     @staticmethod
     def _inbound(snap):
         return SessionManager.fold_inbound(
             Message("recognizer_loop:utterance", context={"session": snap}))
+
+    def test_unknown_top_level_key_is_carried_onto_derived_messages(self):
+        # SESSION-1 §2.4: "MUST NOT strip unknown keys from a session it
+        # propagates." SESSION-2 §5.1: "Field tolerance applies at
+        # store-write ... it MUST carry them on the sessions it
+        # subsequently derives from the store."
+        msg = Message("recognizer_loop:utterance",
+                      context={"session": {"session_id": "default",
+                                          "lang": "pt-pt",
+                                          "future_field": {"a": 1}}})
+        sess = SessionManager.fold_inbound(msg)
+        SessionManager.bind(msg, sess)
+
+        fwd = msg.forward("my.skill:my_intent")
+        self.assertEqual(fwd.context["session"].get("future_field"), {"a": 1})
+
+    def test_unknown_top_level_key_is_carried_on_a_named_session_too(self):
+        # SESSION-1 §2.4 applies to a named session the same as the default
+        # one; a named session has no store, so SessionManager.get() must
+        # stash the carrier's unrecognised keys on the bound object itself
+        # rather than losing them once Session.deserialize drops them.
+        msg = Message("recognizer_loop:utterance",
+                      context={"session": {"session_id": "s1",
+                                          "lang": "pt-pt",
+                                          "future_field": {"a": 1}}})
+        SessionManager.get(msg)  # binds the named session to msg
+
+        fwd = msg.forward("my.skill:my_intent")
+        self.assertEqual(fwd.context["session"].get("future_field"), {"a": 1})
 
     def test_omitted_field_leaves_stored_value_unchanged(self):
         self._inbound({"session_id": "default", "lang": "en-US",
