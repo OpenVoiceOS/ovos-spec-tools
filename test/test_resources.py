@@ -59,6 +59,16 @@ def test_one_instance_serves_multiple_languages(tmp_path):
     assert res.load_intent("hi", "pt-BR") == ["ola"]
 
 
+def test_exact_regional_directory_wins_over_macro_language(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "eu" / "hi.intent", "macro\n")
+    _write(locale / "eu-ES" / "hi.intent", "regional\n")
+    res = LocaleResources(str(locale))
+
+    assert res.load_intent("hi", "eu") == ["macro"]
+    assert res.load_intent("hi", "eu-ES") == ["regional"]
+
+
 # --- §4.2 .dialog ------------------------------------------------------------
 
 def test_load_dialog_returns_unexpanded_phrases(tmp_path):
@@ -66,6 +76,42 @@ def test_load_dialog_returns_unexpanded_phrases(tmp_path):
     _write(locale / "en-US" / "hi.dialog", "Hello {name}!\n(Hi|Hey) {name}.\n")
     res = LocaleResources(str(locale))
     assert res.load_dialog("hi", "en-US") == ["Hello {name}!", "(Hi|Hey) {name}."]
+
+
+def test_static_dialog_and_prompt_are_snapshotted(tmp_path):
+    locale = tmp_path / "locale"
+    dialog = locale / "en-US" / "hi.dialog"
+    prompt = locale / "en-US" / "answer.prompt"
+    _write(dialog, "Hello.\n")
+    _write(prompt, "Answer briefly.")
+    resources = LocaleResources(str(locale))
+
+    _write(dialog, "Changed.\n")
+    _write(prompt, "Changed prompt.")
+
+    assert resources.load_dialog("hi", "en-US") == ["Hello."]
+    assert resources.load_prompt("answer", "en-US") == "Answer briefly."
+
+
+def test_user_dialog_and_prompt_remain_live(tmp_path):
+    skill = tmp_path / "skill"
+    user = tmp_path / "user"
+    dialog = user / "en-US" / "hi.dialog"
+    prompt = user / "en-US" / "answer.prompt"
+    _write(skill / "en-US" / "hi.dialog", "Skill dialog.\n")
+    _write(skill / "en-US" / "answer.prompt", "Skill prompt.")
+    user.mkdir()
+    resources = LocaleResources(str(skill), user_locale=str(user))
+
+    _write(dialog, "User dialog.\n")
+    _write(prompt, "User prompt.")
+    assert resources.load_dialog("hi", "en-US") == ["User dialog."]
+    assert resources.load_prompt("answer", "en-US") == "User prompt."
+
+    _write(dialog, "Updated dialog.\n")
+    _write(prompt, "Updated prompt.")
+    assert resources.load_dialog("hi", "en-US") == ["Updated dialog."]
+    assert resources.load_prompt("answer", "en-US") == "Updated prompt."
 
 
 # --- §4.3 slot-free roles ----------------------------------------------------
@@ -79,6 +125,90 @@ def test_load_entity_and_blacklist(tmp_path):
         "monday", "tuesday", "wednesday",
     ]
     assert res.load_blacklist("play", "en-US") == ["trailer"]
+
+
+def test_static_resources_are_read_once_and_return_defensive_copies(
+        tmp_path, monkeypatch):
+    locale = tmp_path / "locale"
+    resource = locale / "en-US" / "stop.voc"
+    _write(resource, "stop\n")
+    reads = 0
+
+    from ovos_spec_tools import resources as resources_module
+    original_reader = resources_module.read_resource_file
+    resource_target = resource.resolve()
+
+    def counted_reader(path):
+        nonlocal reads
+        if path.resolve() == resource_target:
+            reads += 1
+        return original_reader(path)
+
+    monkeypatch.setattr(resources_module, "read_resource_file", counted_reader)
+    loader = LocaleResources(str(locale))
+
+    first = loader.load_vocabulary("stop", "en-US")
+    first.append("mutated by caller")
+    assert loader.load_vocabulary("stop", "en-US") == ["stop"]
+    assert reads == 1
+
+
+def test_static_skill_resources_remain_snapshotted(tmp_path):
+    locale = tmp_path / "locale"
+    resource = locale / "en-US" / "stop.voc"
+    _write(resource, "stop\n")
+    resources = LocaleResources(str(locale))
+
+    assert resources.load_vocabulary("stop", "en-US") == ["stop"]
+    _write(resource, "cancel\n")
+    assert resources.load_vocabulary("stop", "en-US") == ["stop"]
+
+
+def test_user_resources_detect_create_update_and_remove(tmp_path):
+    skill = tmp_path / "skill"
+    user = tmp_path / "user"
+    override = user / "en-US" / "stop.voc"
+    _write(skill / "en-US" / "stop.voc", "stop\n")
+    user.mkdir()
+    resources = LocaleResources(str(skill), user_locale=str(user))
+
+    assert resources.load_vocabulary("stop", "en-US") == ["stop"]
+    _write(override, "cancel\n")
+    assert resources.load_vocabulary("stop", "en-US") == ["cancel"]
+    _write(override, "halt\n")
+    assert resources.load_vocabulary("stop", "en-US") == ["halt"]
+    override.unlink()
+    assert resources.load_vocabulary("stop", "en-US") == ["stop"]
+
+
+def test_live_user_vocabulary_reexpands_static_intent(tmp_path):
+    skill = tmp_path / "skill"
+    user = tmp_path / "user"
+    override = user / "en-US" / "greeting.voc"
+    _write(skill / "en-US" / "greeting.voc", "hello\n")
+    _write(skill / "en-US" / "greet.intent", "<greeting> {name}\n")
+    user.mkdir()
+    resources = LocaleResources(str(skill), user_locale=str(user))
+
+    assert resources.load_intent("greet", "en-US") == ["hello {name}"]
+    _write(override, "hi\n")
+    assert resources.load_intent("greet", "en-US") == ["hi {name}"]
+    _write(override, "hey\n")
+    assert resources.load_intent("greet", "en-US") == ["hey {name}"]
+    override.unlink()
+    assert resources.load_intent("greet", "en-US") == ["hello {name}"]
+
+
+def test_unused_malformed_static_resource_does_not_break_startup(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "good.voc", "good\n")
+    _write(locale / "fr-FR" / "bad.voc", "(single)\n")
+
+    resources = LocaleResources(str(locale))
+
+    assert resources.load_vocabulary("good", "en-US") == ["good"]
+    with pytest.raises(ValueError):
+        resources.load_vocabulary("bad", "fr-FR")
 
 
 def test_slot_free_role_rejects_a_named_slot(tmp_path):
