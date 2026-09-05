@@ -133,6 +133,71 @@ def test_double_brace_adjacent_slots_is_malformed():
         expand("{{a}} {b}")
 
 
+# --- §3.4, §4.1, §5.6 typed-slot grammar -------------------------------------
+
+def test_typed_and_untyped_expansion_are_byte_identical():
+    """§4.1 — a typed and an untyped template expand to the identical sample
+    set: the type prefix never survives into a sample."""
+    typed = expand("remind me to {task} at {date:when}")
+    untyped = expand("remind me to {task} at {when}")
+    assert typed == untyped
+    assert typed == ["remind me to {task} at {when}"]
+
+
+def test_double_brace_type_prefix_same_as_single_brace():
+    """§3.4 — ``{{date:when}}`` and ``{date:when}`` are the same slot."""
+    assert expand("set at {{date:when}}") == expand("set at {date:when}")
+    assert expand("set at {{date:when}}") == ["set at {when}"]
+
+
+def test_bare_and_typed_spellings_are_one_slot():
+    """§5.5 — a type prefix does not change the declared slot name: ``{when}``
+    and ``{date:when}`` in one template declare the same slot and therefore
+    collide exactly as ``{when}`` and ``{when}`` would."""
+    with pytest.raises(MalformedTemplate):
+        expand("{when} and {date:when}")
+
+
+def test_unregistered_type_degrades_with_warning_not_exception(caplog):
+    """§3.6 — an unregistered type prefix is not malformed: it degrades to the
+    untyped slot and SHOULD warn."""
+    with caplog.at_level(logging.WARNING):
+        samples = expand("set the {gizmo:widget} on")
+    assert samples == ["set the {widget} on"]
+    assert any("unregistered type prefix" in r.message for r in caplog.records)
+
+
+def test_colon_outside_braces_is_untouched():
+    """§2 — a colon is reserved only inside a slot's braces; elsewhere it is
+    ordinary (already-normalized) text the grammar does not touch."""
+    assert expand("ratio is a:b today") == ["ratio is a:b today"]
+
+
+def test_number_colon_empty_name_is_malformed():
+    """§3.4 — ``{number:}`` has an empty name, rejected by the charset check
+    exactly like any other invalid slot name."""
+    with pytest.raises(MalformedTemplate):
+        expand("set to {number:}")
+
+
+def test_colon_empty_type_is_malformed():
+    """§3.4 — ``{:name}`` has an empty type, rejected the same way."""
+    with pytest.raises(MalformedTemplate):
+        expand("set to {:name}")
+
+
+def test_multiple_colons_is_malformed():
+    with pytest.raises(MalformedTemplate):
+        expand("set to {a:b:c}")
+
+
+def test_registered_type_prefix_does_not_warn(caplog):
+    with caplog.at_level(logging.WARNING):
+        expand("set to {color:shade}")
+    assert not any("unregistered type prefix" in r.message
+                  for r in caplog.records)
+
+
 # --- §3.7 inline vocabulary references --------------------------------------
 
 VOCAB = {"greeting": ["hello", "hi", "good morning"]}

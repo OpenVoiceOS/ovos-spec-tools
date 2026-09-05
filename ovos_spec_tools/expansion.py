@@ -13,7 +13,11 @@ The grammar has four tokens:
   The double-brace form ``{{name}}`` is an **equivalent** spelling of the same
   named slot (OVOS-INTENT-1 §3.4): ``{name}`` and ``{{name}}`` denote the same
   slot, so a template may use either spelling and the resulting sample set is
-  identical;
+  identical. A slot MAY also carry a **type prefix**, ``{type:name}`` /
+  ``{{type:name}}`` (§3.4): the slot's name is still ``name``, and expansion
+  emits every slot in its bare ``{name}`` form regardless of whether a prefix
+  was written (§4.1), so a typed and an untyped template yield the identical
+  sample set;
 - ``<name>`` inline vocabulary references — replaced, before expansion, by a
   named slot-free vocabulary (OVOS-INTENT-1 §3.7).
 
@@ -29,9 +33,14 @@ import logging
 import re
 from typing import Iterator, Dict, List, Optional, Sequence, Tuple
 
-__all__ = ["expand", "fold_double_braces", "MalformedTemplate"]
+__all__ = ["expand", "fold_double_braces", "strip_type_prefixes",
+          "MalformedTemplate", "REGISTERED_TYPES"]
 
 _log = logging.getLogger(__name__)
+
+# The four registered typed-slot types (OVOS-INTENT-1 §5.6). Closed set: a
+# type outside it is unregistered and degrades to an untyped slot (§3.6).
+REGISTERED_TYPES = ("number", "duration", "date", "color")
 
 # A slot or vocabulary name: lowercase ASCII letters, digits, underscores;
 # never beginning with a digit (OVOS-INTENT-1 §3.4).
@@ -47,6 +56,12 @@ _VOC_TOKEN_RE = re.compile(r"<([^<>]*)>")
 # is ever considered, so ``{{x}}`` is read as one slot and never mis-parsed as
 # ``{`` + ``{x}`` + ``}``.
 _DOUBLE_SLOT_TOKEN_RE = re.compile(r"\{\{([^{}]*)\}\}")
+# A well-formed type prefix on a slot token: `type:name`, both halves obeying
+# the §3.4 charset. Matched strictly so a malformed prefix (`number:`, `:x`,
+# `a:b:c`) is left untouched here and falls through to `_check_names`, which
+# rejects it via the ordinary name-charset check (its content still contains
+# a bare `:`, which no valid name may contain).
+_TYPE_PREFIX_RE = re.compile(r"\A([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)\Z")
 # Two named slots in a sample with only whitespace between them.
 _ADJACENT_SLOTS_RE = re.compile(r"\}\s*\{")
 
@@ -96,6 +111,7 @@ def _expand(template: str,
     # Done first — and matching the double form before the single — so
     # ``{{x}}`` is never mis-read as ``{`` + ``{x}`` + ``}``.
     template = fold_double_braces(template)
+    template = strip_type_prefixes(template)
 
     _check_balanced(template)
     _check_names(template)
@@ -131,6 +147,7 @@ def _iter_expand(template: str,
     if not isinstance(template, str):
         raise MalformedTemplate(f"template must be a string, got {type(template)!r}")
     template = fold_double_braces(template)
+    template = strip_type_prefixes(template)
     _check_balanced(template)
     _check_names(template)
     if _SLOT_TOKEN_RE.fullmatch(template.strip()):
@@ -160,6 +177,34 @@ def fold_double_braces(template: str) -> str:
     to be rejected by the same §3.4 name check that guards ``{name}``.
     """
     return _DOUBLE_SLOT_TOKEN_RE.sub(lambda m: "{" + m.group(1) + "}", template)
+
+
+def strip_type_prefixes(template: str) -> str:
+    """Strip a well-formed ``type:`` prefix off every slot, folding it to
+    ``{name}`` (§3.4, §4.1).
+
+    Runs after :func:`fold_double_braces`, so both brace spellings reach this
+    as ``{type:name}``. A slot whose type is not one of :data:`REGISTERED_TYPES`
+    degrades the same way — the prefix is stripped and a warning logged
+    (§3.6) — because the degrade rule makes an unregistered type exactly as
+    portable as no type at all. A malformed prefix (empty type, empty name, or
+    more than one colon) does not match :data:`_TYPE_PREFIX_RE` and is left
+    untouched, to be rejected by :func:`_check_names`'s ordinary charset check.
+    """
+    def _fold(match: "re.Match[str]") -> str:
+        content = match.group(1)
+        prefix = _TYPE_PREFIX_RE.match(content)
+        if prefix is None:
+            return match.group(0)
+        slot_type, name = prefix.groups()
+        if slot_type not in REGISTERED_TYPES:
+            _log.warning(
+                "OVOS-INTENT-1 §3.6: unregistered type prefix %r on slot "
+                "{%s}; degrading to the untyped slot {%s}",
+                slot_type, content, name)
+        return "{" + name + "}"
+
+    return _SLOT_TOKEN_RE.sub(_fold, template)
 
 
 def _check_balanced(template: str) -> None:

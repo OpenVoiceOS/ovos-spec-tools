@@ -47,8 +47,8 @@ from ovos_spec_tools.dialog import (
     render,
     verify_slot_consistency,
 )
-from ovos_spec_tools.expansion import (MalformedTemplate, expand,
-                                       inline_keywords, iter_expand)
+from ovos_spec_tools.expansion import (REGISTERED_TYPES, MalformedTemplate,
+                                       expand, inline_keywords, iter_expand)
 from ovos_spec_tools.message import (
     DEFAULT_SESSION_ID,
     MalformedMessage,
@@ -64,7 +64,10 @@ from ovos_spec_tools.intent import (
     Intent,
     IntentBuilder,
     MalformedIntent,
+    MalformedTypedSlots,
+    drop_unregistered_typed_slots,
     open_intent_envelope,
+    validate_typed_slots,
     voc_match,
 )
 from ovos_spec_tools.intent_topics import (
@@ -79,9 +82,12 @@ from ovos_spec_tools.intent_topics import (
 from ovos_spec_tools.lint import (
     Finding,
     declared_slots,
+    declared_slot_types,
     lint_locale,
     lint_required_slots,
+    lint_slot_types,
     validate_required_slots,
+    validate_slot_types,
 )
 from ovos_spec_tools.messages import (
     MIGRATION_MAP,
@@ -136,7 +142,10 @@ __all__ = [
     "DEFAULT_CONVERSE_HANDLERS_CAP",
     "Intent",
     "IntentBuilder",
+    "MalformedTypedSlots",
+    "drop_unregistered_typed_slots",
     "open_intent_envelope",
+    "validate_typed_slots",
     "voc_match",
     "INTENT_FILE_SUFFIX",
     "canonical_intent_topic",
@@ -145,6 +154,10 @@ __all__ = [
     "expand",
     "inline_keywords",
     "MalformedTemplate",
+    "REGISTERED_TYPES",
+    "declared_slot_types",
+    "lint_slot_types",
+    "validate_slot_types",
     "LocaleResources",
     "MalformedResource",
     "find_lang_dir",

@@ -68,9 +68,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from ovos_spec_tools.expansion import (
+    REGISTERED_TYPES,
     MalformedTemplate,
     expand,
     fold_double_braces,
+    strip_type_prefixes,
 )
 from ovos_spec_tools.resources import (
     PROMPT_ROLE,
@@ -84,8 +86,11 @@ __all__ = [
     "Finding",
     "lint_locale",
     "declared_slots",
+    "declared_slot_types",
     "validate_required_slots",
     "lint_required_slots",
+    "validate_slot_types",
+    "lint_slot_types",
     "main",
 ]
 
@@ -112,6 +117,7 @@ _BASE_NAME_RE = re.compile(r"[a-z0-9_]+")
 _SLOT_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
 _LANG_TAG_RE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]+)*")
 _SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+_TYPED_SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)\}")
 
 ERROR = "error"
 WARNING = "warning"
@@ -159,7 +165,8 @@ def declared_slots(templates: Sequence[str]) -> frozenset:
     """
     slots: set = set()
     for template in templates:
-        slots.update(_SLOT_RE.findall(fold_double_braces(template)))
+        bare = strip_type_prefixes(fold_double_braces(template))
+        slots.update(_SLOT_RE.findall(bare))
     return frozenset(slots)
 
 
@@ -221,6 +228,87 @@ def lint_required_slots(
     """
     try:
         validate_required_slots(required_slots, templates)
+    except MalformedTemplate as exc:
+        return [Finding(ERROR, path, str(exc))]
+    return []
+
+
+def declared_slot_types(templates: Sequence[str]) -> Dict[str, str]:
+    """The ``slot_types`` map declared by ``templates`` (OVOS-INTENT-4 §6.1).
+
+    Reads every registered type prefix (OVOS-INTENT-1 §3.4, §5.6) off
+    ``templates`` and maps each slot's bare name to its declared type. Only
+    registered types (:data:`~ovos_spec_tools.expansion.REGISTERED_TYPES`) are
+    reported — an unregistered prefix degrades to an untyped slot (§3.6) and
+    so declares no type. When two templates disagree on a slot's type, the
+    first-seen prefix wins.
+
+    Args:
+        templates: the template lines of one intent definition.
+
+    Returns:
+        A ``slot name -> type name`` map, for the optional ``slot_types``
+        field of the OVOS-INTENT-4 §6.1 registration payload.
+    """
+    slot_types: Dict[str, str] = {}
+    for template in templates:
+        for slot_type, name in _TYPED_SLOT_RE.findall(fold_double_braces(template)):
+            if slot_type in REGISTERED_TYPES:
+                slot_types.setdefault(name, slot_type)
+    return slot_types
+
+
+def validate_slot_types(
+        slot_types: Dict[str, str],
+        templates: Sequence[str]) -> None:
+    """Validate a ``slot_types`` map against its templates (§6.1, §5.6).
+
+    Each key MUST name a slot the templates declare (§5.5: a type prefix does
+    not change which slot set a template declares) and each value MUST be a
+    registered type (§5.6): an unregistered type cannot be declared, since the
+    grammar itself degrades an unregistered prefix to an untyped slot.
+
+    Args:
+        slot_types: the ``slot name -> type name`` map to validate.
+        templates: the intent's template lines.
+
+    Raises:
+        MalformedTemplate: a key names a slot declared by no template, or a
+            value is not a registered type.
+    """
+    available = declared_slots(templates)
+    for name, slot_type in slot_types.items():
+        if name not in available:
+            raise MalformedTemplate(
+                f"slot_types names {name!r}, which no template declares "
+                f"(OVOS-INTENT-1 §5.5, OVOS-INTENT-4 §6.1)")
+        if slot_type not in REGISTERED_TYPES:
+            raise MalformedTemplate(
+                f"slot_types[{name!r}] = {slot_type!r} is not a registered "
+                f"type; registered types are {REGISTERED_TYPES} "
+                f"(OVOS-INTENT-1 §5.6)")
+
+
+def lint_slot_types(
+        path: str,
+        slot_types: Dict[str, str],
+        templates: Sequence[str]) -> List[Finding]:
+    """Lint an intent's ``slot_types`` against its templates (§6.1, §5.6).
+
+    A :class:`Finding`-returning wrapper over :func:`validate_slot_types`,
+    mirroring :func:`lint_required_slots`.
+
+    Args:
+        path: the offending intent's identifier (file path or name).
+        slot_types: the ``slot name -> type name`` map to validate.
+        templates: the intent's template lines.
+
+    Returns:
+        One :data:`ERROR` finding if ``slot_types`` is invalid, else an empty
+        list.
+    """
+    try:
+        validate_slot_types(slot_types, templates)
     except MalformedTemplate as exc:
         return [Finding(ERROR, path, str(exc))]
     return []
@@ -456,11 +544,12 @@ def _lint_file(path: Path,
                 f"{extension} is slot-free but a template contains a named "
                 f"slot (OVOS-INTENT-2 §4.3)  [in: {template!r}]"))
         if slot_bearing:
-            # Fold ``{{name}}`` to ``{name}`` first (OVOS-INTENT-1 §3.4) so the
-            # two equivalent slot spellings yield the identical slot set and a
-            # template mixing them is not mis-flagged as slot-inconsistent.
-            slot_sets.append(
-                frozenset(_SLOT_RE.findall(fold_double_braces(template))))
+            # Fold ``{{name}}`` to ``{name}`` and strip any type prefix first
+            # (OVOS-INTENT-1 §3.4, §5.5) so the equivalent slot spellings yield
+            # the identical slot set and a template mixing them is not
+            # mis-flagged as slot-inconsistent.
+            bare = strip_type_prefixes(fold_double_braces(template))
+            slot_sets.append(frozenset(_SLOT_RE.findall(bare)))
 
     # --- slot consistency: `.dialog` ONLY -----------------------------------
     # `.dialog` phrases MUST all declare the same slot set: the caller fills the
