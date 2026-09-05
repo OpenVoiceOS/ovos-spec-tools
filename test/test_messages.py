@@ -217,8 +217,9 @@ SPEC_STATIC_TOPICS = {
     "ovos.listener.record.ended": "AUDIO-IN-1 §6.2",
     "ovos.listener.sleep": "AUDIO-IN-1 §6.3",
     "ovos.listener.awoken": "AUDIO-IN-1 §6.4",
-    # OVOS-SESSION-2
+    # OVOS-SESSION-1/SESSION-2
     "ovos.session.sync": "SESSION-2 §2.7",
+    "ovos.session.rejected": "SESSION-1 §2.5",
     # OVOS-CONVERSE-1
     "ovos.converse.active.list": "CONVERSE-1 §6.1",
     "ovos.converse.active.list.response": "CONVERSE-1 §6.1",
