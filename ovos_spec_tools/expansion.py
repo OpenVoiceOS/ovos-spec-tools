@@ -281,6 +281,11 @@ def _fold_single_branch_groups(template: str) -> str:
             current = stack.pop()
             if "|" in inner:
                 current.append("(" + inner + ")")
+            elif inner.strip() == "":
+                raise MalformedTemplate(
+                    f"empty group ({inner}) is malformed (OVOS-INTENT-1 "
+                    f"§3.6): its one branch is the empty string, so the "
+                    f"group expresses no choice at all")
             else:
                 _log.warning(
                     "OVOS-INTENT-1 §3.6: single-branch group (%s) is "

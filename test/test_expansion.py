@@ -196,12 +196,25 @@ def test_unbalanced_metacharacters(template):
         expand(template)
 
 
-def test_empty_group_still_yields_an_empty_sample():
-    # `()` is a single-branch group whose one branch is the empty string;
-    # it folds to that bare (empty) branch, which is then rejected by the
-    # separate §3.6 empty-sample rule, not by the group rule.
+@pytest.mark.parametrize("template", ["()", "( )", "turn on (  ) the lights"])
+def test_empty_group_is_malformed(template):
+    # §3.6: the empty group `()` is malformed on its own terms, not merely
+    # via the (unrelated) empty-sample rule -- its one branch is the empty
+    # string, so the group expresses no choice at all.
     with pytest.raises(MalformedTemplate):
-        expand("()")
+        expand(template)
+
+
+def test_empty_branch_inside_multi_branch_group_is_unaffected():
+    # `(a|)` has two branches, one of them empty; that is the §3.2 "empty
+    # branch" case, not the §3.6 empty-group case, so the group-folding
+    # logic does not reject it (the multi-branch group is kept and
+    # expanded as-is). It still raises when the empty branch combination
+    # yields the whole-template empty sample -- that is the separate,
+    # unrelated §3.6 empty-sample rule, unchanged by this fix.
+    assert expand("(please|) turn it on") == ["please turn it on", "turn it on"]
+    with pytest.raises(MalformedTemplate):
+        expand("(a|)")
 
 
 @pytest.mark.parametrize("template,expected", [
