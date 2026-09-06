@@ -218,7 +218,6 @@ SPEC_STATIC_TOPICS = {
     "ovos.listener.sleep": "AUDIO-IN-1 §6.3",
     "ovos.listener.awoken": "AUDIO-IN-1 §6.4",
     # OVOS-SESSION-1/SESSION-2
-    "ovos.session.sync": "SESSION-2 §2.7",
     "ovos.session.rejected": "SESSION-1 §2.5",
     # OVOS-CONVERSE-1
     "ovos.converse.active.list": "CONVERSE-1 §6.1",
@@ -268,11 +267,15 @@ SPEC_STATIC_TOPICS = {
 }
 
 #: Topics ``ovos-bus-client`` uses that NO spec defines, so they MUST NOT be
-#: enum members (SESSION-2 §1 defers lifecycle topics; CONTEXT-1 §5 routes
-#: context mutations through ``ovos.session.sync``, not ``ovos.context.*``).
+#: enum members. SESSION-2 §2.7 defines no bus topic (§2.7: "This
+#: specification defines no topic on which any participant pushes a session
+#: at another"; §7: "This specification defines no bus topic"), so
+#: ``ovos.session.sync`` is a bus-client-internal shim, not a spec surface.
+#: CONTEXT-1 §5 similarly defines no bus topic for its mutation pathways.
 NON_SPEC_BUS_CLIENT_TOPICS = {
     "ovos.session.update_default",
     "ovos.session.start",
+    "ovos.session.sync",
     "ovos.context.set",
     "ovos.context.unset",
     "ovos.context.clear",
@@ -299,13 +302,23 @@ class TestSpecCompleteness(unittest.TestCase):
                          set(SPEC_STATIC_TOPICS))
 
     def test_bus_client_internals_are_not_enum_members(self):
-        # session.sync IS spec (SESSION-2 §2.7); update_default/start/context.*
-        # are NOT and must stay out of the enum.
+        # SESSION-2 §2.7 defines no bus topic, so session.sync/update_default/
+        # start/context.* are all bus-client internals and must stay out of
+        # the enum.
         members = {m.value for m in SpecMessage}
         for topic in NON_SPEC_BUS_CLIENT_TOPICS:
             self.assertNotIn(topic, members,
                              f"{topic} is not spec-defined; must not be a member")
-        self.assertIn("ovos.session.sync", members)  # SESSION-2 §2.7
+
+    def test_no_member_claims_a_session_push_topic(self):
+        # SESSION-2 §2.7 defines no topic on which any participant pushes a
+        # session at another; convergence is start-up derivation and runtime
+        # adoption only. No SpecMessage member may claim an
+        # ``ovos.session.*`` push surface beyond what SESSION-1/SESSION-2
+        # actually define (SESSION-1 §2.5's ``ovos.session.rejected``).
+        session_members = {m.value for m in SpecMessage
+                            if m.value.startswith("ovos.session.")}
+        self.assertEqual(session_members, {"ovos.session.rejected"})
 
     def test_no_templated_topics_are_members(self):
         # Runtime-assembled topics (MSG-1 §2.1.1) are never static members.

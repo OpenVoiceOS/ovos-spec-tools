@@ -265,10 +265,10 @@ def decrement(intent_context: Dict[str, Any],
     every remaining entry that sets it, whether or not any intent
     matched.
 
-    Per §4.1, an entry written by an ``ovos.session.sync`` emitted
+    Per §4.1, an entry written by a session arrival adopted
     **mid-dispatch** must not be decremented by the dispatch it was
     written in. The orchestrator captures the key set present at the
-    pre-match prune and passes it as ``only_keys`` so freshly-synced keys
+    pre-match prune and passes it as ``only_keys`` so freshly-adopted keys
     are skipped, landing alive for exactly the next match round.
 
     @param intent_context: the session's flat ``intent_context`` map

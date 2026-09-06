@@ -75,7 +75,6 @@ moves the bus onto those topics.
 | `SpecMessage.AUDIO_IS_SPEAKING` | OVOS-AUDIO-1 | §5.3 |
 | `SpecMessage.AUDIO_OUTPUT_STARTED` / `_OUTPUT_ENDED` | OVOS-AUDIO-1 | §5.1 / §5.2 |
 | `SpecMessage.MIC_LISTEN` | OVOS-AUDIO-1 | §4.4 |
-| `SpecMessage.SESSION_SYNC` | OVOS-SESSION-2 | §2.7 (bus table §7) |
 | `SpecMessage.CONVERSE_ACTIVE_LIST` / `_ACTIVE_LIST_RESPONSE` | OVOS-CONVERSE-1 | §6.1 |
 | `SpecMessage.PERSONA_QUERY` / `_ANSWER` | OVOS-PERSONA-1 | §8.5 (§11 bus surface) |
 | `SpecMessage.PERSONA_LIST` / `_LIST_RESPONSE` | OVOS-PERSONA-1 | §8.7 (§11) |
@@ -138,7 +137,6 @@ handler-list helpers that PIPELINE-1 and CONVERSE-1 keep in the session.
 | `carried_fields` | OVOS-SESSION-1 | §2.1 (omitted / malformed reads as not carried) |
 | `SessionManager.fold_inbound` | OVOS-SESSION-2 | §5.1 (inbound merge), §2.2 (named sessions stateless) |
 | `SessionManager.update` | OVOS-SESSION-2 | §2.6 / §5.1 (derivation-chain write) |
-| `SessionManager.handle_sync` | OVOS-SESSION-2 | §2.7 / §6.2 (`ovos.session.sync` consumer obligation) |
 | `parse_session_payload` | OVOS-SESSION-1 | §5 (carrier parsing) |
 
 (`session.py` is owned by an in-flight PR; the citations above describe the

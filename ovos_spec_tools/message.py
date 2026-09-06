@@ -435,8 +435,8 @@ class Message:
         the new ``source`` — the original producer stays named (§5.1, §3.2).
         This is the derivation the spec mandates for relay/notification
         topics that must preserve the asker's routing — e.g. the
-        PIPELINE-1 §8 handler-lifecycle trio and SESSION-2 §2.7
-        ``ovos.session.sync`` are both required to be ``forward``-derived.
+        PIPELINE-1 §8 handler-lifecycle trio is required to be
+        ``forward``-derived.
 
         The context is **deep-copied** so the derived Message is independent
         of the source (a §5.1 "MUST NOT modify a session already present"

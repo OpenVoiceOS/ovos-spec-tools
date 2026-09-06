@@ -18,8 +18,9 @@ is tied to its owning spec section in the per-member comments below:
 - **OVOS-AUDIO-IN-1** — listener lifecycle signals (``ovos.listener.*``).
   AUDIO-IN-1 §6.1–§6.4 mandates ``ovos.listener.record.started`` /
   ``.record.ended`` / ``ovos.listener.sleep`` / ``ovos.listener.awoken``;
-- **OVOS-SESSION-2** — the out-of-utterance session sync topic
-  (``ovos.session.sync`` §2.7);
+- **OVOS-SESSION-2** — §2.7 defines no bus topic; session state converges
+  only by start-up derivation and runtime adoption, both already carried by
+  the OVOS-MSG-1 arrival machinery;
 - **OVOS-CONVERSE-1** — the active-handler introspection pair
   (``ovos.converse.active.list`` / ``.response`` §6.1) and the §6.2 poll pair
   (``ovos.converse.ping`` / ``ovos.converse.pong``);
@@ -114,8 +115,9 @@ defers session-lifecycle observability topics — so they are implementation
 internals and legitimately remain bare strings in the bus client.
 ``ovos.context.set`` / ``.unset`` / ``.clear`` appear only as a stray reference
 in OVOS-TRANSFORM-1 (mis-citing "OVOS-CONTEXT-1 §5"); OVOS-CONTEXT-1 §5 in fact
-defines exactly three mutation pathways and the bus one is ``ovos.session.sync``
-(§5.3), so no ``ovos.context.*`` topic is spec-defined.
+defines exactly three mutation pathways, none of them a bus topic (§7: "This
+specification defines no bus topic"), so no ``ovos.context.*`` topic is
+spec-defined.
 """
 import json as _json
 import re as _re
@@ -243,12 +245,12 @@ class SpecMessage(str, Enum):
     LISTENER_AWOKEN = "ovos.listener.awoken"
 
     # --- OVOS-SESSION-1/SESSION-2 session lifecycle topics ---
-    #: SESSION-2 §2.7 — broadcast an explicit session update OUTSIDE the
-    #: utterance lifecycle; the updated snapshot rides in ``Message.data.session``
-    #: and the orchestrator MUST merge it. (``ovos.session.update_default`` and
-    #: ``ovos.session.start`` are NOT spec-defined — see module note — and stay
-    #: out of this enum; SESSION-2 §1 explicitly defers lifecycle topics.)
-    SESSION_SYNC = "ovos.session.sync"
+    # SESSION-2 §2.7 defines no topic on which any participant pushes a
+    # session at another; convergence is by start-up derivation and runtime
+    # adoption only, both already covered by the arrival/derivation topics
+    # elsewhere in this enum. (``ovos.session.update_default`` and
+    # ``ovos.session.start`` are NOT spec-defined — see module note — and
+    # stay out of this enum; SESSION-2 §1 explicitly defers lifecycle topics.)
     #: SESSION-1 §2.5 — consumer drops a Message due to malformed carrier
     #: (context.session is not a JSON object); data carries msg_type and reason.
     SESSION_REJECTED = "ovos.session.rejected"
