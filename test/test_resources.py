@@ -202,7 +202,7 @@ def test_live_user_vocabulary_reexpands_static_intent(tmp_path):
 def test_unused_malformed_static_resource_does_not_break_startup(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "good.voc", "good\n")
-    _write(locale / "fr-FR" / "bad.voc", "(single)\n")
+    _write(locale / "fr-FR" / "bad.voc", "(a|b\n")
 
     resources = LocaleResources(str(locale))
 
