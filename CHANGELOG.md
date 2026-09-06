@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.11.0a1) (2026-09-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.8a1...1.11.0a1)
+
+**Merged pull requests:**
+
+- feat: INTENT-1 typed-slot grammar and typed\_slots validation [\#137](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/137) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.10.8a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.10.8a1) (2026-09-05)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.7a2...1.10.8a1)
@@ -393,10 +401,6 @@
 ## [0.12.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a2) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.12.0a1...0.12.0a2)
-
-**Merged pull requests:**
-
-- docs: spec-traceability for the bus/message domain \(MSG-1\) [\#34](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/34) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.12.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a1) (2026-06-26)
 
