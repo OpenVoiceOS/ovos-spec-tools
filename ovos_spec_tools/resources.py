@@ -502,6 +502,8 @@ class LocaleResources:
         ] = {}
         self._static_lines: Dict[Path, Tuple[str, ...]] = {}
         self._static_prompts: Dict[Path, str] = {}
+        #: read failures from the snapshot, deferred to first access
+        self._static_errors: Dict[Path, Exception] = {}
         self._static_language_cache: Dict[
             Tuple[Path, str], Optional[str]
         ] = {}
@@ -545,17 +547,31 @@ class LocaleResources:
                             continue
                         key = (path.stem, path.suffix)
                         mutable.setdefault(key, []).append(path)
+                        # A file this instance may never be asked for must
+                        # not be able to fail construction: one installed
+                        # resource with, say, invalid UTF-8 in an unused
+                        # language would otherwise take down every language.
+                        # The failure is kept and re-raised from the accessor,
+                        # which is where a lazy reader would have raised it.
                         if path.suffix in line_roles:
                             target = path.resolve()
                             if target not in lines_by_target:
-                                lines_by_target[target] = tuple(
-                                    read_resource_file(path)
-                                )
+                                try:
+                                    lines_by_target[target] = tuple(
+                                        read_resource_file(path)
+                                    )
+                                except Exception as error:
+                                    self._static_errors[path] = error
+                                    continue
                             self._static_lines[path] = lines_by_target[target]
                         elif path.suffix == PROMPT_ROLE:
                             target = path.resolve()
                             if target not in prompts_by_target:
-                                prompts_by_target[target] = read_prompt_file(path)
+                                try:
+                                    prompts_by_target[target] = read_prompt_file(path)
+                                except Exception as error:
+                                    self._static_errors[path] = error
+                                    continue
                             self._static_prompts[path] = prompts_by_target[target]
                     resource_index = {
                         key: tuple(paths) for key, paths in mutable.items()
@@ -641,12 +657,16 @@ class LocaleResources:
         """Return cached static lines or freshly read user-override lines."""
         if path in self._static_lines:
             return self._static_lines[path]
+        if path in self._static_errors:
+            raise self._static_errors[path]
         return tuple(read_resource_file(path))
 
     def _prompt_text(self, path: Path) -> str:
         """Return cached static prompt text or a live user override."""
         if path in self._static_prompts:
             return self._static_prompts[path]
+        if path in self._static_errors:
+            raise self._static_errors[path]
         return read_prompt_file(path)
 
     def _lang_dir(self, source: Path, lang: str) -> Optional[Path]:

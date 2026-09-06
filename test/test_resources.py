@@ -903,3 +903,36 @@ def test_voc_list_missing_resource_returns_empty(tmp_path):
     (locale / "en-US").mkdir(parents=True)
     res = LocaleResources(str(locale))
     assert res.voc_list("nope", "en-US") == []
+
+
+def test_unreadable_static_resource_does_not_break_startup(tmp_path):
+    """One bad installed file must not take down every language.
+
+    The eager snapshot reads installed resources at construction. A file
+    this instance may never be asked for -- invalid UTF-8 in an unused
+    language, say -- must not fail construction; the error belongs at
+    access, which is where a lazy reader would have raised it.
+    """
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "good.voc", "good\n")
+    (locale / "fr-FR").mkdir(parents=True)
+    (locale / "fr-FR" / "bad.voc").write_bytes(b"\xff\xfe not utf-8\n")
+
+    resources = LocaleResources(str(locale))
+
+    assert resources.load_vocabulary("good", "en-US") == ["good"]
+    with pytest.raises(UnicodeDecodeError):
+        resources.load_vocabulary("bad", "fr-FR")
+
+
+def test_unreadable_static_prompt_does_not_break_startup(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "good.voc", "good\n")
+    (locale / "fr-FR").mkdir(parents=True)
+    (locale / "fr-FR" / "bad.prompt").write_bytes(b"\xff\xfe\n")
+
+    resources = LocaleResources(str(locale))
+
+    assert resources.load_vocabulary("good", "en-US") == ["good"]
+    with pytest.raises(UnicodeDecodeError):
+        resources.load_prompt("bad", "fr-FR")

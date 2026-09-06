@@ -83,14 +83,19 @@ res.load_intent("play", "en-US")
 res.load_intent("play", "pt-PT")     # same instance
 ```
 
-Installed **skill** and **core** resources are immutable for the lifetime of
-the owning process. `LocaleResources` reads and indexes those trees at
-construction and retains their raw lines, dialogs, and prompts in memory. When
+Installed **skill** and **core** resources are snapshotted for the lifetime of
+the `LocaleResources` instance -- not the process: a new instance built later
+in the same process sees the tree as it is then. `LocaleResources` reads and
+indexes those trees at construction and retains their raw lines, dialogs, and
+prompts in memory. When
 no user resource tree is configured, it also pre-expands valid intent, entity,
 vocabulary, and blacklist resources. This avoids filesystem discovery and
 parsing in the runtime intent path. Recreate the instance after installing or
 editing skill/core resources; there is intentionally no refresh operation for
-package-owned data.
+package-owned data. A file that cannot be read at construction (invalid UTF-8,
+say) does not fail construction: the error is raised when that resource is
+actually requested, so one bad file in an unused language cannot take down
+every other language.
 
 The optional **user** resource tree is deliberately different. It remains
 live and is checked on every call, so a user override can be created, edited,
