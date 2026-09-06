@@ -6,10 +6,13 @@ from ovos_spec_tools.lint import (
     ERROR,
     WARNING,
     declared_slots,
+    declared_slot_types,
     lint_locale,
     lint_required_slots,
+    lint_slot_types,
     main,
     validate_required_slots,
+    validate_slot_types,
 )
 
 
@@ -413,4 +416,55 @@ def test_lint_required_slots_returns_an_error_finding():
 def test_lint_required_slots_clean_returns_no_findings():
     findings = lint_required_slots(
         "play.intent", ["query"], ["(play|put on) {query}"])
+    assert findings == []
+
+
+# --- OVOS-INTENT-1 §5.6 / OVOS-INTENT-4 §6.1 slot_types ---------------------
+
+def test_declared_slot_types_reads_registered_prefixes():
+    templates = ["play {query} for {duration:length}"]
+    assert declared_slot_types(templates) == {"length": "duration"}
+
+
+def test_declared_slot_types_ignores_unregistered_prefix():
+    # An unregistered prefix degrades to an untyped slot (§3.6) and declares
+    # no type — the derived map must not claim a type the grammar never keeps.
+    templates = ["play {query} for {gizmo:length}"]
+    assert declared_slot_types(templates) == {}
+
+
+def test_declared_slot_types_folds_double_brace():
+    assert declared_slot_types(["set {{color:shade}}"]) == {"shade": "color"}
+
+
+def test_declared_slot_types_first_seen_wins_on_conflict():
+    templates = ["set {number:x}", "set {color:x} please"]
+    assert declared_slot_types(templates) == {"x": "number"}
+
+
+def test_validate_slot_types_accepts_declared_registered_slot():
+    validate_slot_types({"length": "duration"},
+                        ["play {query} for {duration:length}"])
+
+
+def test_validate_slot_types_rejects_undeclared_slot():
+    with pytest.raises(MalformedTemplate):
+        validate_slot_types({"length": "duration"}, ["play {query}"])
+
+
+def test_validate_slot_types_rejects_unregistered_type():
+    with pytest.raises(MalformedTemplate):
+        validate_slot_types({"length": "gizmo"}, ["play {length}"])
+
+
+def test_lint_slot_types_returns_an_error_finding():
+    findings = lint_slot_types("play.intent", {"length": "gizmo"},
+                              ["play {length}"])
+    assert len(findings) == 1
+    assert findings[0].severity == ERROR
+
+
+def test_lint_slot_types_clean_returns_no_findings():
+    findings = lint_slot_types("play.intent", {"length": "duration"},
+                              ["play {duration:length}"])
     assert findings == []

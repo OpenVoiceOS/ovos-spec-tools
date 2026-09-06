@@ -34,7 +34,11 @@ code changes:
 from __future__ import annotations
 
 import logging
+import re
+from numbers import Real
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from ovos_spec_tools.expansion import REGISTERED_TYPES
 
 _log = logging.getLogger(__name__)
 
@@ -42,9 +46,29 @@ __all__ = [
     "Intent",
     "IntentBuilder",
     "MalformedIntent",
+    "MalformedTypedSlots",
+    "drop_unregistered_typed_slots",
     "open_intent_envelope",
+    "validate_typed_slots",
     "voc_match",
 ]
+
+# RFC 3339 timestamp, as OVOS-INTENT-1 §5.6 fixes for the `date` type: a
+# calendar date and time, offset either as `Z` or `+HH:MM` / `-HH:MM`.
+_RFC3339_RE = re.compile(
+    r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})\Z")
+# `color`'s `hex` field (§5.6): a lowercase `#rrggbb` string.
+_HEX_COLOR_RE = re.compile(r"\A#[0-9a-f]{6}\Z")
+
+
+class MalformedTypedSlots(ValueError):
+    """A ``data.typed_slots`` map that violates OVOS-INTENT-1 §5.6.
+
+    Raised for a type key outside :data:`~ovos_spec_tools.expansion.REGISTERED_TYPES`,
+    an entry missing or adding to its three keys (``span``, ``surface``,
+    ``value``), a malformed ``span``, or a ``value`` that does not fit the
+    normalized form §5.6 fixes for its type.
+    """
 
 # A keyword role entry as the legacy adapt/workshop classes stored it:
 # ``(entity_type, attribute_name)`` for required/optional, a bare entity type
@@ -508,3 +532,97 @@ def voc_match(utterance: str, voc_name: str, lang: str,
     return resources.voc_match(
         utterance, voc_name, lang, exact=exact,
         strip_diacritics=strip_diacritics, strip_punct=strip_punct)
+
+
+def _validate_typed_slot_value(slot_type: str, value: Any) -> None:
+    """Check ``value`` against the §5.6 normalized-value form for ``slot_type``."""
+    if slot_type in ("number", "duration"):
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise MalformedTypedSlots(
+                f"{slot_type!r} entry value {value!r} is not a JSON number "
+                f"(OVOS-INTENT-1 §5.6)")
+    elif slot_type == "date":
+        if not isinstance(value, str) or not _RFC3339_RE.match(value):
+            raise MalformedTypedSlots(
+                f"'date' entry value {value!r} is not an RFC 3339 timestamp "
+                f"(OVOS-INTENT-1 §5.6)")
+    elif slot_type == "color":
+        if not isinstance(value, dict) or set(value) != {"hex", "name"}:
+            raise MalformedTypedSlots(
+                f"'color' entry value {value!r} must be an object with "
+                f"exactly the keys 'hex' and 'name' (OVOS-INTENT-1 §5.6)")
+        if not isinstance(value["hex"], str) or not _HEX_COLOR_RE.match(value["hex"]):
+            raise MalformedTypedSlots(
+                f"'color' entry hex {value['hex']!r} is not a lowercase "
+                f"'#rrggbb' string (OVOS-INTENT-1 §5.6)")
+        if value["name"] is not None and not isinstance(value["name"], str):
+            raise MalformedTypedSlots(
+                f"'color' entry name {value['name']!r} must be a string or "
+                f"null (OVOS-INTENT-1 §5.6)")
+
+
+def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
+    """Validate a ``data.typed_slots`` map against OVOS-INTENT-1 §5.6.
+
+    Every key MUST be a registered type
+    (:data:`~ovos_spec_tools.expansion.REGISTERED_TYPES`) — an unregistered key
+    is a producer bug, not a hint an orchestrator can act on; drop it with
+    :func:`drop_unregistered_typed_slots` before this raises on it. Every entry
+    MUST carry exactly the three §5.6 keys ``span``, ``surface``, ``value``:
+    ``span`` a two-integer ``[start, end]`` pair with ``start <= end``,
+    ``surface`` a string, and ``value`` the normalized form §5.6 fixes for the
+    entry's type. A type's list MAY be empty (§5.6: "the type was computed and
+    nothing of that kind was found").
+
+    Args:
+        typed_slots: the ``data.typed_slots`` map to validate.
+
+    Raises:
+        MalformedTypedSlots: the map violates any of the above.
+    """
+    for slot_type, entries in typed_slots.items():
+        if slot_type not in REGISTERED_TYPES:
+            raise MalformedTypedSlots(
+                f"typed_slots key {slot_type!r} is not a registered type; "
+                f"registered types are {REGISTERED_TYPES} (OVOS-INTENT-1 §5.6)")
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != {"span", "surface", "value"}:
+                raise MalformedTypedSlots(
+                    f"{slot_type!r} entry {entry!r} must be an object with "
+                    f"exactly the keys 'span', 'surface', 'value' "
+                    f"(OVOS-INTENT-1 §5.6)")
+            span = entry["span"]
+            if (not isinstance(span, (list, tuple)) or len(span) != 2
+                    or not all(isinstance(n, int) and not isinstance(n, bool)
+                              for n in span)
+                    or span[0] > span[1]):
+                raise MalformedTypedSlots(
+                    f"{slot_type!r} entry span {span!r} must be a "
+                    f"[start, end] pair of integers with start <= end "
+                    f"(OVOS-INTENT-1 §5.6)")
+            if not isinstance(entry["surface"], str):
+                raise MalformedTypedSlots(
+                    f"{slot_type!r} entry surface {entry['surface']!r} must "
+                    f"be a string (OVOS-INTENT-1 §5.6)")
+            _validate_typed_slot_value(slot_type, entry["value"])
+
+
+def drop_unregistered_typed_slots(
+        typed_slots: Dict[str, List[Dict[str, Any]]]
+        ) -> Dict[str, List[Dict[str, Any]]]:
+    """Drop every unregistered key from a ``data.typed_slots`` map.
+
+    OVOS-INTENT-1 §5.6 registers a closed set of types
+    (:data:`~ovos_spec_tools.expansion.REGISTERED_TYPES`); an orchestrator that
+    receives a map with an unregistered key drops it rather than passing it on,
+    exactly as an unregistered ``{type:name}`` prefix degrades to an untyped
+    slot (§3.4, §3.6). Registered entries are returned unchanged.
+
+    Args:
+        typed_slots: the ``data.typed_slots`` map to filter.
+
+    Returns:
+        A new map containing only the registered-type keys of ``typed_slots``.
+    """
+    return {slot_type: entries for slot_type, entries in typed_slots.items()
+            if slot_type in REGISTERED_TYPES}
