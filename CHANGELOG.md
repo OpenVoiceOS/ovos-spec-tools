@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.11.0a2) (2026-09-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.11.0a1...1.11.0a2)
+
+**Merged pull requests:**
+
+- refactor: retire the session-push residue \(SESSION-2 §2.7\) [\#138](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/138) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.11.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.11.0a1) (2026-09-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.10.8a1...1.11.0a1)
@@ -373,10 +381,6 @@
 ## [0.14.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.0a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.13.0a1...0.14.0a1)
-
-**Merged pull requests:**
-
-- feat: add persona\_id to canonical Session \(OVOS-PERSONA-1 registered field\) [\#37](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/37) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.13.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.13.0a1) (2026-06-26)
 
