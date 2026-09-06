@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.11.1a1) (2026-09-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.11.0a2...1.11.1a1)
+
+**Merged pull requests:**
+
+- fix: typed\_slots carries only types with entries [\#141](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/141) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.11.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.11.0a2) (2026-09-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.11.0a1...1.11.0a2)
@@ -386,17 +394,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.12.1a1...0.13.0a1)
 
-**Merged pull requests:**
-
-- feat: dual-brace template refs \({x} and {{x}}\); .prompt double-brace-only [\#38](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/38) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.12.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.1a1) (2026-06-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.12.0a3...0.12.1a1)
-
-**Merged pull requests:**
-
-- fix: converse-handler cap is a per-insertion deployment value, not Session state [\#39](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/39) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.12.0a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.12.0a3) (2026-06-26)
 
