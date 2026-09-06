@@ -986,13 +986,15 @@ class SessionManager:
     it (§2.2): its state arrives whole on each inbound Message and leaves
     on the derived ones, so ``sessions`` only ever holds the default entry.
 
-    State enters through :meth:`fold_inbound` (arrival, §5.1 first bullet),
-    :meth:`update` (derivation-chain writes, §2.6 / §5.1 third bullet) and
-    :meth:`handle_sync` (the out-of-band ``ovos.session.sync`` merge,
-    §2.7 / §6.2). :meth:`get` is a pure read; see OVOS-SESSION-2 §2.2 / §5.1
-    for the full read/write/propagation model, and ``session_cls`` lets a
-    downstream layer (e.g. ovos-bus-client) point the registry at a
-    ``Session`` subclass.
+    State enters through :meth:`fold_inbound` (arrival, §5.1 first bullet)
+    and :meth:`update` (derivation-chain writes, §2.6 / §5.1 third bullet).
+    §2.7 defines no push topic a participant sends another; session state
+    converges only by start-up derivation and runtime adoption, both of
+    which are §5.1 arrivals :meth:`fold_inbound` already handles. :meth:`get`
+    is a pure read; see OVOS-SESSION-2 §2.2 / §5.1 for the full
+    read/write/propagation model, and ``session_cls`` lets a downstream
+    layer (e.g. ovos-bus-client) point the registry at a ``Session``
+    subclass.
     """
 
     #: Session class the registry builds; override downstream to a subclass.
@@ -1117,33 +1119,6 @@ class SessionManager:
                 (key, value) for key, value in merged.items()
                 if key not in SESSION1_REGISTERED_FIELDS)
             return stored.update_from(cls.session_cls.deserialize(merged))
-
-    @classmethod
-    def handle_sync(cls, message: "object") -> "Session":
-        """Merge an ``ovos.session.sync`` payload, per OVOS-SESSION-2 §2.7.
-
-        §2.7 puts the updated snapshot in ``Message.data["session"]`` and
-        leaves ``Message.context["session"]`` as the ambient carrier that
-        identifies *which* session the sync is for. So the id comes from
-        the context and the content comes from the data — the context's own
-        fields are not an arrival and are not merged.
-
-        The merge is §5.1's, the same one :meth:`fold_inbound` applies:
-        present fields in the synced snapshot replace, absent fields leave
-        the stored values alone. §6.2 makes honouring it an orchestrator
-        MUST.
-
-        For a named session there is no store to merge into (§2.2). §2.7
-        directs the update at the transient per-utterance session instead,
-        which only exists inside an utterance the orchestrator is running —
-        applying it is the orchestrator's job, not this registry's. The
-        session named by the carrier is returned unchanged.
-        """
-        payload = (getattr(message, "data", None) or {}).get("session") or {}
-        carrier = cls._carrier(message)
-        if resolve_session_id(carrier) != DEFAULT_SESSION_ID:
-            return cls.get(message)
-        return cls._merge_into_default(payload)
 
     @classmethod
     def update(cls, sess: "Session") -> "Session":

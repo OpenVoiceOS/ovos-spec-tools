@@ -35,6 +35,9 @@ reset to empty the first time a stable version ships.
   entries were removed from `MIGRATION_MAP` along with their payload
   transforms. The `INTENT_HANDLER_*` `SpecMessage` members still exist;
   only the legacy<->spec auto-bridge for them is gone.
+- **`SessionManager.handle_sync` and `SpecMessage.SESSION_SYNC` removed
+  (#138).** SESSION-2 §2.7 defines no push topic; the one-cycle shim lives
+  in ovos-bus-client.
 
 ## `standardize_lang` vs. the old `standardize_lang_tag`
 
@@ -79,8 +82,8 @@ helpers as stateless functions operating on a session's flat
 - `prune(intent_context, now=None)` — §4 pre-match: strips every non-live
   entry (expired by `expires_at` or `turns_remaining <= 0`) in place.
 - `decrement(intent_context, only_keys=None)` — §4 post-match: decrements
-  `turns_remaining` on remaining entries. Per §4.1 an entry written by an
-  `ovos.session.sync` emitted mid-dispatch must not be decremented by the
+  `turns_remaining` on remaining entries. Per §4.1 an entry written by a
+  session arrival adopted mid-dispatch must not be decremented by the
   same dispatch that wrote it, so the orchestrator must capture the key set
   present at dispatch start and pass it as `only_keys`.
 

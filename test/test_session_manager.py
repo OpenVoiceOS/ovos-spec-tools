@@ -571,61 +571,6 @@ class TestDerivationChainWrite(unittest.TestCase):
                          {"session_id": "sat-1", "lang": "en-US"})
 
 
-class TestSessionSync(unittest.TestCase):
-    """OVOS-SESSION-2 §2.7 / §6.2 — `ovos.session.sync` consumer obligation."""
-
-    def setUp(self):
-        SessionManager.sessions.clear()
-        SessionManager.default_session = None
-
-    @staticmethod
-    def _sync(payload, carrier=None):
-        return SessionManager.handle_sync(
-            Message("ovos.session.sync", data={"session": payload},
-                    context={"session": carrier
-                             if carrier is not None
-                             else {"session_id": "default"}}))
-
-    def test_sync_payload_merges_into_the_store(self):
-        SessionManager.fold_inbound(
-            Message("u", context={"session": {"session_id": "default",
-                                              "site_id": "kitchen",
-                                              "lang": "en-US"}}))
-        live = self._sync({"lang": "pt-PT"})
-        self.assertEqual(live.lang, "pt-PT")
-        self.assertEqual(live.site_id, "kitchen")
-
-    def test_sync_removes_an_intent_context_entry(self):
-        # OVOS-CONTEXT-1 §5.3 names the sync payload as the removal path.
-        SessionManager.fold_inbound(
-            Message("u", context={"session": {
-                "session_id": "default",
-                "intent_context": {"a:x": {"value": 1},
-                                   "b:y": {"value": 2}}}}))
-        live = self._sync({"intent_context": {"a:x": None}})
-        self.assertEqual(live.intent_context, {"b:y": {"value": 2}})
-
-    def test_the_ambient_carrier_identifies_but_does_not_contribute(self):
-        # §2.7: context.session identifies the session, data.session is the
-        # content. Fields on the carrier are not part of the sync.
-        live = self._sync({"lang": "pt-PT"},
-                          carrier={"session_id": "default",
-                                   "site_id": "kitchen"})
-        self.assertEqual(live.lang, "pt-PT")
-        self.assertIsNone(live.site_id)
-
-    def test_sync_on_a_named_session_leaves_the_store_alone(self):
-        # §2.2: no store for a named id; §2.7 aims the update at the
-        # in-flight utterance session, which the orchestrator owns.
-        SessionManager.fold_inbound(
-            Message("u", context={"session": {"session_id": "default",
-                                              "site_id": "kitchen"}}))
-        self._sync({"site_id": "hallway"},
-                   carrier={"session_id": "sat-1"})
-        self.assertEqual(SessionManager.get_default_session().site_id,
-                         "kitchen")
-
-
 class TestHandlerWritesRideOnDerivations(unittest.TestCase):
     """OVOS-CONTEXT-1 §5.3 — read the session, mutate it, emit a derivation.
 
