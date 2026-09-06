@@ -571,8 +571,10 @@ def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
     MUST carry exactly the three §5.6 keys ``span``, ``surface``, ``value``:
     ``span`` a two-integer ``[start, end]`` pair with ``start <= end``,
     ``surface`` a string, and ``value`` the normalized form §5.6 fixes for the
-    entry's type. A type's list MAY be empty (§5.6: "the type was computed and
-    nothing of that kind was found").
+    entry's type. A type's list MUST NOT be empty — "no empty typed slots
+    allowed, either extraction succeeds or no slot" (§5.6 amendment): a type
+    with nothing of that kind found is absent from the map entirely, not
+    present with an empty list. A map with no types at all stays valid.
 
     Args:
         typed_slots: the ``data.typed_slots`` map to validate.
@@ -585,6 +587,11 @@ def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
             raise MalformedTypedSlots(
                 f"typed_slots key {slot_type!r} is not a registered type; "
                 f"registered types are {REGISTERED_TYPES} (OVOS-INTENT-1 §5.6)")
+        if not entries:
+            raise MalformedTypedSlots(
+                f"typed_slots key {slot_type!r} has an empty list — no empty "
+                f"typed slots allowed, either extraction succeeds or no slot "
+                f"(OVOS-INTENT-1 §5.6)")
         for entry in entries:
             if not isinstance(entry, dict) or set(entry) != {"span", "surface", "value"}:
                 raise MalformedTypedSlots(
@@ -610,19 +617,29 @@ def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
 def drop_unregistered_typed_slots(
         typed_slots: Dict[str, List[Dict[str, Any]]]
         ) -> Dict[str, List[Dict[str, Any]]]:
-    """Drop every unregistered key from a ``data.typed_slots`` map.
+    """Drop every unregistered key, and every type with no entries, from a
+    ``data.typed_slots`` map.
 
     OVOS-INTENT-1 §5.6 registers a closed set of types
     (:data:`~ovos_spec_tools.expansion.REGISTERED_TYPES`); an orchestrator that
     receives a map with an unregistered key drops it rather than passing it on,
     exactly as an unregistered ``{type:name}`` prefix degrades to an untyped
-    slot (§3.4, §3.6). Registered entries are returned unchanged.
+    slot (§3.4, §3.6). Per the §5.6 amendment ("no empty typed slots allowed,
+    either extraction succeeds or no slot") a type with an empty list carries
+    no information either, so it is dropped alongside unregistered keys.
+    Registered entries with at least one entry are returned unchanged.
 
     Args:
         typed_slots: the ``data.typed_slots`` map to filter.
 
     Returns:
-        A new map containing only the registered-type keys of ``typed_slots``.
+        A new map containing only the registered-type keys of ``typed_slots``
+        that have at least one entry.
     """
-    return {slot_type: entries for slot_type, entries in typed_slots.items()
-            if slot_type in REGISTERED_TYPES}
+    kept = {slot_type: entries for slot_type, entries in typed_slots.items()
+            if slot_type in REGISTERED_TYPES and entries}
+    dropped = [slot_type for slot_type in typed_slots if slot_type not in kept]
+    if dropped:
+        _log.warning("dropping typed_slots keys %s (unregistered or with no "
+                     "entries; OVOS-INTENT-1 §5.6)", dropped)
+    return kept

@@ -260,8 +260,13 @@ def test_validate_typed_slots_accepts_a_well_formed_map():
     validate_typed_slots({
         "date": [{"span": [17, 26], "surface": "tomorrow",
                  "value": "2026-04-12T00:00:00+01:00"}],
-        "number": [],
     })
+    validate_typed_slots({})
+
+
+def test_validate_typed_slots_rejects_empty_list():
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"number": []})
 
 
 def test_validate_typed_slots_rejects_unregistered_type_key():
@@ -317,7 +322,14 @@ def test_validate_typed_slots_rejects_bad_color_value():
             {"span": [0, 3], "surface": "red", "value": {"hex": "#ff0000"}}]})
 
 
-def test_drop_unregistered_typed_slots_removes_only_unregistered_keys():
-    typed_slots = {"date": [], "gizmo": [{"span": [0, 1], "surface": "x",
-                                          "value": 1}]}
-    assert drop_unregistered_typed_slots(typed_slots) == {"date": []}
+def test_drop_unregistered_typed_slots_removes_unregistered_and_empty_keys(caplog):
+    typed_slots = {
+        "date": [],
+        "gizmo": [{"span": [0, 1], "surface": "x", "value": 1}],
+        "number": [{"span": [0, 1], "surface": "1", "value": 1}],
+    }
+    with caplog.at_level("WARNING"):
+        result = drop_unregistered_typed_slots(typed_slots)
+    assert result == {"number": [{"span": [0, 1], "surface": "1", "value": 1}]}
+    assert "date" in caplog.text
+    assert "gizmo" in caplog.text
