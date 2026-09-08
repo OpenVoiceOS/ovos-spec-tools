@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.11.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.11.2a1) (2026-09-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.11.1a1...1.11.2a1)
+
+**Merged pull requests:**
+
+- fix: reserve all five PIPELINE-1 §7.3 intent\_names [\#144](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/144) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.11.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.11.1a1) (2026-09-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.11.0a2...1.11.1a1)
@@ -381,10 +389,6 @@
 ## [0.14.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.14.0a1...0.14.1a1)
-
-**Merged pull requests:**
-
-- fix: locale/template/lint/language spec-conformance \(audit remediation\) [\#41](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/41) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.14.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.0a1) (2026-06-26)
 
