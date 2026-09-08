@@ -80,20 +80,23 @@ NON_SKILL_NAMESPACES = frozenset({
     "converse",
 })
 
-#: Intent names reserved by the specifications for a per-skill *control*
-#: dispatch, not for an author-registered intent. ``<skill_id>:stop`` is
-#: OVOS-STOP-1 §2 (and OVOS-INTENT-4 §5.3 forbids a skill registering it);
-#: ``converse`` and ``common_query`` are the other reserved names in the
-#: ``pipeline_id`` ≡ ``skill_id`` dispatch namespace. None of them ever came
-#: from a ``.intent`` resource file, so none has a legacy twin.
+#: The intent names OVOS-PIPELINE-1 §7.3 leases to a reserving specification:
+#: ``converse`` and ``response`` (OVOS-CONVERSE-1 §§4–5), ``stop``
+#: (OVOS-STOP-1 §4), ``fallback`` (OVOS-FALLBACK-1 §6.3) and ``common_query``
+#: (OVOS-COMMON-QUERY-1 §3). Each addresses a per-skill *control* dispatch on
+#: ``<skill_id>:<reserved_name>``; no skill may register an intent under one,
+#: and none of them ever came from a ``.intent`` resource file, so none has a
+#: legacy twin.
 #:
-#: The set is deliberately minimal. Excluding a name here silently denies the
-#: compat twin to any skill that ships a resource file of that name, which
-#: brings back the very bug this module exists to fix — so a name earns its
-#: place only by being reserved *and* colliding with a real colon topic.
+#: The set is exactly §7.3's registry. A name outside it is an ordinary intent
+#: name: excluding one here would silently deny the compat twin to any skill
+#: shipping a resource file of that name, which is the bug this module exists
+#: to fix.
 RESERVED_INTENT_NAMES = frozenset({
-    "stop",
     "converse",
+    "response",
+    "stop",
+    "fallback",
     "common_query",
 })
 

@@ -3,6 +3,7 @@ import unittest
 
 from ovos_spec_tools import (
     INTENT_FILE_SUFFIX,
+    RESERVED_INTENT_NAMES,
     canonical_intent_topic,
     intent_topic_counterpart,
     is_intent_topic,
@@ -201,3 +202,33 @@ class TestIntentTopicCounterpart(unittest.TestCase):
 
     def test_a_bare_dot_intent_name_has_no_distinct_counterpart(self):
         self.assertIsNone(intent_topic_counterpart("skill-x:.intent"))
+
+
+class TestReservedIntentNames(unittest.TestCase):
+    """OVOS-PIPELINE-1 §7.3 leases five intent_names to reserving specs."""
+
+    # Transcribed from the §7.3 registry table, not from the module.
+    SPEC_RESERVED = {"converse", "response", "stop", "fallback", "common_query"}
+
+    def test_registry_matches_the_spec_table(self):
+        self.assertEqual(set(RESERVED_INTENT_NAMES), self.SPEC_RESERVED)
+
+    def test_every_reserved_name_is_rejected_like_stop(self):
+        for name in sorted(self.SPEC_RESERVED):
+            with self.subTest(name=name):
+                self.assertIn(name, RESERVED_INTENT_NAMES)
+                self.assertFalse(is_intent_topic(f"skill-fake.jarbas:{name}"))
+                self.assertFalse(is_intent_topic(f"skill-fake.jarbas:{name}.intent"))
+                self.assertIsNone(
+                    intent_topic_counterpart(f"skill-fake.jarbas:{name}"))
+
+    def test_control_dispatches_never_get_a_legacy_twin(self):
+        accepted = {name for name in sorted(self.SPEC_RESERVED)
+                    if is_intent_topic(f"skill-fake.jarbas:{name}")}
+        self.assertEqual(accepted, set())
+
+    def test_ordinary_names_are_untouched(self):
+        for name in ["responses", "fallbacks", "response_handler", "stopwatch"]:
+            with self.subTest(name=name):
+                self.assertNotIn(name, RESERVED_INTENT_NAMES)
+                self.assertTrue(is_intent_topic(f"skill-fake.jarbas:{name}"))
