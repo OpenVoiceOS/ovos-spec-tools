@@ -450,6 +450,28 @@ MIGRATION_MAP: Dict[str, SpecMessage] = {
     # --- STOP-1 (1:1 renames) ---
     "skill.stop.pong": SpecMessage.STOP_PONG,   # STOP-1 §4.2 stoppability reply
     "mycroft.stop": SpecMessage.STOP,           # STOP-1 §5.3 universal stop broadcast
+    # --- FALLBACK-1 §3.1/§3.2/§6.1 (payload-compatible 1:1 renames) ---
+    # The poll pair belongs here as much as the registry topics do. Every
+    # shipped FallbackSkill subscribes to the legacy ping alone, so the day a
+    # core emits the canonical ovos.fallback.ping the wire twin is the only
+    # thing that still reaches them; without this entry there is no twin and
+    # fallback stops answering with nothing in the logs to say so.
+    #
+    # The pong is the PIPELINE-1 §4.5 shape on both names -- ovos-workshop's
+    # FallbackSkill already emits {skill_id, can_handle} -- so the mirror
+    # forwards it unchanged. Duplicate delivery is harmless besides: the
+    # fallback plugin collects responding skill_ids only to test membership
+    # against a registry snapshot taken before the poll, so a repeated
+    # skill_id collapses to one entry in the handler ordering and one
+    # dispatch, and ordering comes from registered priority rather than
+    # arrival order. The §6.1 round and session guards admit the mirror
+    # because it carries the same utterance_id and session_id; a guard strict
+    # enough to reject it would also reject the original wherever only the
+    # legacy topic is subscribed.
+    "ovos.skills.fallback.register": SpecMessage.FALLBACK_REGISTER,      # §3.1
+    "ovos.skills.fallback.deregister": SpecMessage.FALLBACK_DEREGISTER,  # §3.2
+    "ovos.skills.fallback.ping": SpecMessage.FALLBACK_PING,              # §6.1
+    "ovos.skills.fallback.pong": SpecMessage.FALLBACK_PONG,              # §6.1
     # --- PIPELINE-1 §9.3 intent outcome (1:1 rename) ---
     "complete_intent_failure": SpecMessage.INTENT_UNMATCHED,
     # --- INTENT-4 §8 intent management ---

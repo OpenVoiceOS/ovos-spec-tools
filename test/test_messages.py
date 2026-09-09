@@ -152,6 +152,23 @@ class TestSpecMessage(unittest.TestCase):
             self.assertIsNotNone(spec)
             self.assertEqual(migration_counterpart(spec), legacy)
 
+    def test_fallback1_topics_are_payload_compatible_renames(self):
+        # FALLBACK-1 §3.1/§3.2/§6.1. The pong carries the PIPELINE-1 §4.5 shape
+        # on both names (ovos-workshop's FallbackSkill emits
+        # {skill_id, can_handle}), so all three migrate with no payload
+        # transform.
+        expected = {
+            "ovos.skills.fallback.register": SpecMessage.FALLBACK_REGISTER,
+            "ovos.skills.fallback.deregister": SpecMessage.FALLBACK_DEREGISTER,
+            "ovos.skills.fallback.ping": SpecMessage.FALLBACK_PING,
+            "ovos.skills.fallback.pong": SpecMessage.FALLBACK_PONG,
+        }
+        for legacy, spec in expected.items():
+            self.assertEqual(MIGRATION_MAP[legacy], spec)
+            self.assertNotIn(legacy, MIGRATION_PAYLOAD_TRANSFORMS)
+            self.assertEqual(migration_counterpart(migration_counterpart(legacy)),
+                             legacy)
+
 
 #: The complete set of STATIC (non-templated) ``ovos.*`` topics the OVOS
 #: architecture specs normatively define, each mapped to its owning spec +
