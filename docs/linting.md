@@ -66,9 +66,30 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
   OVOS-INTENT-2 roles.
 - a `.blacklist` with no matching `.intent` to suppress.
 - a file name that is not lowercase.
+- a line that repeats inside one resource file.
 
 A `.prompt` is checked too, but not as a template, it is plain text, so only
 its naming and non-emptiness are checked, never template syntax.
+
+### A repeated line
+
+No clause forbids a line from repeating inside one resource file, and such a
+line is well formed, so this is the one warning that enforces project policy
+instead of a spec clause.
+
+The message differs by role. A `.dialog` finding states the load-time fact of
+OVOS-INTENT-2 §4.2: the phrase list holds the one phrase as many times as the
+line repeats. It says nothing about how often the phrase is spoken, because
+the same clause puts phrase selection out of scope. Every other role gets the
+dead-weight wording, because the extra copies change nothing about matching.
+Both forms name the line, the count, and the file line of the first
+occurrence.
+
+The comparison is exact on the line the §3 reader already stripped, so outer
+whitespace folds and case and accents do not. One pair escapes it:
+OVOS-INTENT-1 §4.1 collapses runs of inner spaces and emits a typed
+`{type:name}` placeholder in its bare `{name}` form, so two lines that differ
+only there carry the identical sample set.
 
 ### Slot-set consistency
 

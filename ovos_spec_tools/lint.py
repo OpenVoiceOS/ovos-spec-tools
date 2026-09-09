@@ -38,6 +38,31 @@ Clause map (which spec rule each rule enforces):
   NOT fill that slot"). A ``.blacklist`` that matches neither is inert and
   is flagged; ``{slot}`` names declared inline in an ``.intent`` template
   count as a pairing target.
+- *repeated line within one file* → project lint policy, not a spec clause: no
+  MUST forbids a template line from repeating within one resource file, and a
+  repeated line is well-formed. It is flagged as a :data:`WARNING` because the
+  consequence differs by role. A ``.dialog`` "loads as the list of phrase
+  strings" (OVOS-INTENT-2 §4.2), so the finding states that load-time fact:
+  the phrase list holds the one phrase as many times as the line repeats. It
+  claims nothing about how often the phrase is spoken, because the same clause
+  puts phrase selection out of scope — "*how* a phrase is selected (random,
+  round-robin, repetition avoidance) is implementation behaviour" — and an
+  implementation that avoids repetition speaks a repeated phrase no more often
+  than a unique one. In every other role a repeated line is dead weight: it
+  changes nothing about matching. Both findings name the repeated line, the
+  count, and the file line of the line's first occurrence.
+
+  The §3 reader strips each line before the comparison, so the match is exact
+  on the **stripped** line: leading and trailing whitespace are folded, and
+  case and accents are not. Case and accents stay unfolded because folding
+  them would borrow a normalizer from a different component (making the
+  verdict depend on that component's version), and because they are not noise
+  in a spoken phrase; they can be a deliberate choice a folded comparison
+  would erase. The known limit of an exact match is that OVOS-INTENT-1 §4.1
+  collapses every run of inner spaces and emits a typed ``{type:name}``
+  placeholder in its bare ``{name}`` form, so two lines that differ only in
+  inner spacing or in a slot's type prefix carry the identical sample set.
+  Such a pair is dead weight that a byte comparison does not see.
 - *required slot declared by no template* → OVOS-INTENT-3 §5.3 — "A required
   slot MUST be declared by at least one template in the intent … a tool MUST
   reject the definition at registration time." This is an intent-**definition**
@@ -534,6 +559,10 @@ def _lint_file(path: Path,
             "template (OVOS-INTENT-2 §5)"))
         return findings
 
+    # One numbered read serves both blocks below; each re-read is another
+    # pass over every resource file in the tree.
+    numbered = read_resource_file_numbered(path)
+
     # --- §3.6 malformed form: a pipe outside a group -------------------------
     # OVOS-INTENT-1 §3.6 names the form: a `|` inside no group, where a group
     # is `( ... )` or `[ ... ]`. `plata|argent` in an .entity is malformed,
@@ -544,12 +573,32 @@ def _lint_file(path: Path,
     # it.
     bare_pipe_lines = set()
     if extension in BARE_PIPE_ROLES:
-        for number, line in read_resource_file_numbered(path):
+        for number, line in numbered:
             reason = bare_pipe_reason(line)
             if reason is not None:
                 bare_pipe_lines.add(line)
                 findings.append(Finding(
                     ERROR, str(path), f"{reason}  [in: {line!r}]", number))
+
+    # --- repeated line within one file (project lint policy, no spec MUST) --
+    # Exact match on the stripped line — see the module docstring. Counted on
+    # the raw template lines (before expansion), so a repeat is a literal
+    # duplicate. Read numbered, because the author has to open the line.
+    counts: Dict[str, int] = {}
+    first_seen: Dict[str, int] = {}
+    for number, line in numbered:
+        counts[line] = counts.get(line, 0) + 1
+        first_seen.setdefault(line, number)
+    for line, n in counts.items():
+        if n <= 1:
+            continue
+        if extension == ".dialog":
+            message = (f"line {line!r} repeats — the phrase list loads this "
+                       f"one phrase {n} times (OVOS-INTENT-2 §4.2)")
+        else:
+            message = (f"line {line!r} repeats {n} times — dead weight, the "
+                       f"extra copies change nothing about matching")
+        findings.append(Finding(WARNING, str(path), message, first_seen[line]))
 
     # --- syntax (OVOS-INTENT-1) ---------------------------------------------
     slot_free = extension in SLOT_FREE_ROLES

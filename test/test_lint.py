@@ -76,6 +76,105 @@ def test_duplicate_resource_is_an_error(tmp_path):
     assert any("duplicate" in f.message for f in _errors(lint_locale(locale)))
 
 
+# --- repeated line within one file (project lint policy) --------------------
+#
+# The shape at scale is date-time's pl-PL intents/what_time_will_it_be.intent:
+# 4512 lines the §3 reader keeps, 3024 of them distinct, so 1488 phrasings are
+# each carried twice.
+
+_LOADS = ("line {!r} repeats — the phrase list loads this one phrase "
+          "{} times (OVOS-INTENT-2 §4.2)")
+
+
+def test_repeated_dialog_line_names_the_count_and_the_first_line(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "da-DK" / "last_digits.dialog",
+           "sidste {digits}\n"
+           "de sidste {digits} cifre\n"
+           "sidste {digits}\n"
+           "de sidste {digits} cifre\n"
+           "endelig {digits}\n")
+    findings = lint_locale(locale)
+    assert _errors(findings) == []
+    warnings = _warnings(findings)
+    assert len(warnings) == 2
+    assert [f.line for f in warnings] == [1, 2]
+    assert warnings[0].message == _LOADS.format("sidste {digits}", 2)
+    assert warnings[1].message == _LOADS.format("de sidste {digits} cifre", 2)
+
+
+def test_repeated_intent_template_is_dead_weight(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.intent", "hello\nhello\nhi\n")
+    findings = lint_locale(locale)
+    assert _errors(findings) == []
+    warnings = _warnings(findings)
+    assert len(warnings) == 1
+    assert warnings[0].line == 1
+    assert warnings[0].message == (
+        "line 'hello' repeats 2 times — dead weight, the extra copies "
+        "change nothing about matching")
+
+
+def test_an_even_repeat_split_reports_one_warning_per_line(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.dialog", "a {x}\na {x}\nb {x}\nb {x}\n")
+    warnings = _warnings(lint_locale(locale))
+    assert len(warnings) == 2
+    assert [f.line for f in warnings] == [1, 3]
+    assert warnings[0].message == _LOADS.format("a {x}", 2)
+    assert warnings[1].message == _LOADS.format("b {x}", 2)
+
+
+def test_a_file_holding_one_phrase_twice_names_only_that_phrase(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.dialog",
+           "only phrasing {x}\nonly phrasing {x}\n")
+    warnings = _warnings(lint_locale(locale))
+    assert len(warnings) == 1
+    assert warnings[0].line == 1
+    assert warnings[0].message == _LOADS.format("only phrasing {x}", 2)
+
+
+def test_outer_whitespace_is_stripped_before_the_comparison(tmp_path):
+    # The §3 reader strips each line, so the three spellings are one line.
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.dialog",
+           "hello there\nhello there   \n   hello there\n")
+    warnings = _warnings(lint_locale(locale))
+    assert len(warnings) == 1
+    assert warnings[0].line == 1
+    assert warnings[0].message == _LOADS.format("hello there", 3)
+
+
+def test_no_repeated_lines_has_no_finding(tmp_path):
+    locale = tmp_path / "locale"
+    greet = locale / "en-US" / "greet.dialog"
+    _write(greet, "hello\nhi there\ngood day\n")
+    assert lint_locale(locale) == []
+    # Control for that empty result: one duplicate in the same file warns, and
+    # the warning points at the first occurrence rather than at the copy.
+    _write(greet, "hello\nhi there\ngood day\nhi there\n")
+    warnings = _warnings(lint_locale(locale))
+    assert len(warnings) == 1
+    assert warnings[0].line == 2
+    assert warnings[0].message == _LOADS.format("hi there", 2)
+
+
+def test_repeat_differing_only_by_case_or_accent_is_not_flagged(tmp_path):
+    # Case and accents reach TTS and are not folded.
+    locale = tmp_path / "locale"
+    digits = locale / "da-DK" / "last_digits.dialog"
+    _write(digits, "sidste {digits}\nSidste {digits}\nsidsté {digits}\n")
+    assert lint_locale(locale) == []
+    # Control for that empty result: an exact duplicate in the file warns.
+    _write(digits, "sidste {digits}\nSidste {digits}\nsidste {digits}\n")
+    warnings = _warnings(lint_locale(locale))
+    assert len(warnings) == 1
+    assert warnings[0].line == 1
+    assert warnings[0].message == _LOADS.format("sidste {digits}", 2)
+
+
 def test_legacy_extension_is_a_warning(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "x.voc", "yes\n")
