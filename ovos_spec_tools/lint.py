@@ -33,6 +33,19 @@ Clause map (which spec rule each rule enforces):
   flagged.
 - *blacklist with no matching ``.intent``* → OVOS-INTENT-2 §4.3 — a
   ``.blacklist`` "is paired by base name with exactly one ``.intent``".
+- *repeated line within one file* → project lint policy, not a spec clause: no
+  MUST forbids a template line from repeating within one resource file, and a
+  repeated line is well-formed. It is flagged as a :data:`WARNING` because the
+  consequence differs by role. In a ``.dialog`` the caller picks a phrase at
+  random, so a repeated line changes the **selection weight** — a phrase that
+  appears twice among five is spoken twice as often as one that appears once —
+  and the finding names the observed ratio. In every other role a repeated line
+  is dead weight: it changes nothing about matching, so the finding just says
+  so. The comparison is an **exact** string match — not case-, whitespace- or
+  accent-folded — because folding would borrow a normalizer from a different
+  component (making the verdict depend on that component's version) and
+  because case and accents are not noise in a spoken phrase; they can be a
+  deliberate choice that a folded comparison would erase.
 - *required slot declared by no template* → OVOS-INTENT-3 §5.3 — "A required
   slot MUST be declared by at least one template in the intent … a tool MUST
   reject the definition at registration time." This is an intent-**definition**
@@ -519,6 +532,30 @@ def _lint_file(path: Path,
             "empty file — every resource file must contribute at least one "
             "template (OVOS-INTENT-2 §5)"))
         return findings
+
+    # --- repeated line within one file (project lint policy, no spec MUST) --
+    # Exact match only — see the module docstring. Counted on the raw template
+    # lines (before expansion), so a repeat is a literal duplicate phrase/line.
+    counts: Dict[str, int] = {}
+    for template in templates:
+        counts[template] = counts.get(template, 0) + 1
+    if any(n > 1 for n in counts.values()):
+        ratio = ":".join(str(n) for n in sorted(counts.values(), reverse=True))
+        for template, n in counts.items():
+            if n <= 1:
+                continue
+            if extension == ".dialog":
+                findings.append(Finding(
+                    WARNING, str(path),
+                    f"line {template!r} appears {n} times — selection weight "
+                    f"across this file's {len(counts)} unique lines is "
+                    f"{ratio} rather than an even split, so this phrasing is "
+                    f"spoken {n}x as often as a unique one"))
+            else:
+                findings.append(Finding(
+                    WARNING, str(path),
+                    f"line {template!r} appears {n} times in one file — dead "
+                    f"weight, no behaviour change"))
 
     # --- syntax (OVOS-INTENT-1) ---------------------------------------------
     slot_free = extension in SLOT_FREE_ROLES
