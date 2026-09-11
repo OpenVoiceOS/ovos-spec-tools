@@ -379,10 +379,11 @@ class Message:
             absent ``data`` / ``context`` defaulted to ``{}`` (§2).
 
         Raises :class:`MalformedMessage` per the §7 ``MUST reject``
-        conformance rules: unparsable JSON, non-object root, unknown
-        top-level keys, missing ``type``, or wrong value types — including
-        a present-but-non-object ``data`` / ``context`` (``[]``, ``0``,
-        ``false``, …), which §6 forbids silently coercing to ``{}``.
+        conformance rules: unparsable JSON, non-object root, missing
+        ``type``, or wrong value types — including a present-but-non-object
+        ``data`` / ``context`` (``[]``, ``0``, ``false``, …), which §6
+        forbids silently coercing to ``{}``. Unknown top-level keys are
+        **not** a rejection ground (§2) — they are ignored.
         """
         if isinstance(payload, (bytes, bytearray)):
             payload = payload.decode("utf-8")
@@ -397,13 +398,10 @@ class Message:
         if not isinstance(obj, dict):
             raise MalformedMessage(
                 "Message payload must be a JSON object (§2)")
-        # §2: "Other top-level keys MUST NOT appear; consumers MUST
-        # reject any Message with unknown top-level keys."
-        unknown = set(obj.keys()) - {"type", "data", "context"}
-        if unknown:
-            raise MalformedMessage(
-                f"unknown top-level keys {sorted(unknown)!r} — §2 "
-                "forbids any key other than 'type', 'data', 'context'")
+        # §2: producers MUST NOT emit any top-level key beyond 'type',
+        # 'data', 'context', but a consumer that receives one anyway
+        # "MUST NOT reject the Message on that ground alone, and MUST
+        # ignore those keys."
         if "type" not in obj:
             raise MalformedMessage("missing required key 'type' (§2)")
         # §2.2/§2.3: when present, ``data`` and ``context`` MUST be JSON
@@ -507,10 +505,20 @@ class Message:
         if dst is not None:
             # array-of-strings form: producer chooses one; consumers
             # MUST NOT rely on a particular member being chosen (§5.2)
-            new_context["source"] = (
-                dst[0] if isinstance(dst, list) and dst else dst)
+            dst = dst[0] if isinstance(dst, list) and dst else dst
+            # §3.3: "A producer MUST NOT emit an empty string as
+            # `destination` ... the same holds for `source`." An
+            # empty-string peer is treated as absent rather than minted
+            # as the new `source`.
+            if dst:
+                new_context["source"] = dst
+            else:
+                new_context.pop("source", None)
         if src is not None:
-            new_context["destination"] = src
+            if src:
+                new_context["destination"] = src
+            else:
+                new_context.pop("destination", None)
         derived = self.__class__(msg_type, data or {}, new_context)
         return derived if explicit_session else _stamp_live_session(derived, self)
 
@@ -529,11 +537,34 @@ class Message:
         correlate ``<request>.response`` against an outstanding request in
         the same ``session`` (§5.4).
 
+        §5.3 defines the shorthand "only where the arithmetic is
+        unambiguous": ``T`` **MUST NOT** already end in ``.response``
+        (that would mint ``<x>.response.response``, "which no
+        specification defines"), and **MUST NOT** contain a ``:`` (a
+        dispatch topic "has no ``.response`` counterpart"). Where either
+        condition fails, "the answering component names the answering
+        topic explicitly and derives via ``reply`` instead" — so this
+        method raises rather than mint an undefined topic.
+
         Args:
             data: payload of the response (``D'``); ``None`` → ``{}``.
             context: optional context keys overlaid before the §5.2 swap.
 
         Returns:
             A new Message whose ``type`` is ``self.msg_type + ".response"``.
+
+        Raises:
+            ValueError: if ``self.msg_type`` already ends in
+                ``.response``, or contains a ``:`` (§5.3).
         """
+        if self.msg_type.endswith(".response"):
+            raise ValueError(
+                f"{self.msg_type!r} already ends in '.response' — the "
+                "'.response' shorthand is undefined here (§5.3); name "
+                "the answering topic explicitly and use reply() instead")
+        if ":" in self.msg_type:
+            raise ValueError(
+                f"{self.msg_type!r} is a dispatch topic (contains ':') — "
+                "it has no '.response' counterpart (§5.3); name the "
+                "answering topic explicitly and use reply() instead")
         return self.reply(self.msg_type + ".response", data, context)
