@@ -83,6 +83,28 @@ res.load_intent("play", "en-US")
 res.load_intent("play", "pt-PT")     # same instance
 ```
 
+Installed **skill** and **core** resources are snapshotted for the lifetime of
+the `LocaleResources` instance -- not the process: a new instance built later
+in the same process sees the tree as it is then. `LocaleResources` reads and
+indexes those trees at construction and retains their raw lines, dialogs, and
+prompts in memory. When
+no user resource tree is configured, it also pre-expands valid intent, entity,
+vocabulary, and blacklist resources. This avoids filesystem discovery and
+parsing in the runtime intent path. Recreate the instance after installing or
+editing skill/core resources; there is intentionally no refresh operation for
+package-owned data. A file that cannot be read at construction (invalid UTF-8,
+say) does not fail construction: the error is raised when that resource is
+actually requested, so one bad file in an unused language cannot take down
+every other language.
+
+The optional **user** resource tree is deliberately different. It remains
+live and is checked on every call, so a user override can be created, edited,
+or removed without rebuilding the installed-resource snapshot. A live user
+`.voc` override also re-expands a static intent that references it. When a user
+tree is configured, expanded results are therefore computed per call against
+the in-memory static snapshot and the current user files instead of being
+retained.
+
 The load methods:
 
 | Method | Returns |
@@ -139,7 +161,8 @@ res = LocaleResources(
 
 A file at a higher level replaces the whole lower-level file with the same
 `(role, base name)`. The user-data path is **assistant-defined**. This package
-takes it as a parameter and imports no configuration of its own.
+takes it as a parameter and imports no configuration of its own. Skill and
+core changes require a new `LocaleResources` instance; user changes do not.
 
 ## Smart language fallback
 
@@ -149,8 +172,10 @@ language. `LocaleResources` implements that suggested fallback.
 
 When a skill has no directory for the requested language, it resolves to the
 **nearest available** language instead. A request for `en-AU` loads `en-US`.
-This is re-evaluated on every call, so the same instance can serve an exact
-language and a fallback one side by side.
+Static resolution is retained per requested language, so the same instance can
+serve an exact language and a fallback one side by side without repeating
+installed-directory discovery. The live user tree is still resolved on every
+call.
 
 ```python
 res.load_intent("play", "en-AU")   # finds en-US/ if there is no en-AU/

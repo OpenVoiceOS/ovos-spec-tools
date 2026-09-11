@@ -52,6 +52,11 @@ class TestFindLangDir(unittest.TestCase):
         self.assertEqual(find_lang_dir(self.root, "en"),
                          Path(self.root) / "en-US")
 
+    def test_exact_region_wins_over_macro_language(self):
+        _mkdirs(self.root, "eu", "eu-ES")
+        self.assertEqual(find_lang_dir(self.root, "eu-ES"),
+                         Path(self.root) / "eu-ES")
+
     def test_no_match_returns_none(self):
         _mkdirs(self.root, "pt-PT", "ja-JP")
         self.assertIsNone(find_lang_dir(self.root, "ko-KR"))
