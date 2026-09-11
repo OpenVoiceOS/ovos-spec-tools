@@ -76,6 +76,54 @@ def test_duplicate_resource_is_an_error(tmp_path):
     assert any("duplicate" in f.message for f in _errors(lint_locale(locale)))
 
 
+# --- repeated line within one file (project lint policy) --------------------
+
+def test_repeated_dialog_line_is_a_warning_naming_the_ratio(tmp_path):
+    # ip's da-DK last_digits.dialog: 5 non-empty lines, 3 unique, two
+    # phrasings each appear twice and one appears once — a 2:2:1 split.
+    locale = tmp_path / "locale"
+    _write(locale / "da-DK" / "last_digits.dialog",
+           "sidste {digits}\n"
+           "sidste {digits}\n"
+           "de sidste {digits} cifre\n"
+           "de sidste {digits} cifre\n"
+           "endelig {digits}\n")
+    warnings = _warnings(lint_locale(locale))
+    matches = [f for f in warnings if "'sidste {digits}'" in f.message]
+    assert len(matches) == 1
+    assert "2 times" in matches[0].message
+    assert "2:2:1" in matches[0].message
+    assert _errors(lint_locale(locale)) == []
+
+
+def test_repeated_intent_template_is_dead_weight_not_selection_weight(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.intent", "hello\nhello\nhi\n")
+    warnings = _warnings(lint_locale(locale))
+    matches = [f for f in warnings if "hello" in f.message]
+    assert len(matches) == 1
+    assert "dead weight" in matches[0].message
+    assert "selection weight" not in matches[0].message
+
+
+def test_no_repeated_lines_has_no_finding(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "greet.dialog", "hello\nhi there\ngood day\n")
+    findings = lint_locale(locale)
+    assert not any("times" in f.message for f in findings)
+
+
+def test_repeat_differing_only_by_case_or_accent_is_not_flagged(tmp_path):
+    # Exact match only: case and accents reach TTS and are not noise.
+    locale = tmp_path / "locale"
+    _write(locale / "da-DK" / "last_digits.dialog",
+           "sidste {digits}\n"
+           "Sidste {digits}\n"
+           "sidsté {digits}\n")
+    findings = lint_locale(locale)
+    assert not any("times" in f.message for f in findings)
+
+
 def test_legacy_extension_is_a_warning(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "x.voc", "yes\n")
