@@ -889,9 +889,10 @@ class Session:
             try:
                 cls(**{key: value})
             except MalformedSession as exc:
+                # name the wire type, so the producer that sent it can be found
                 _log.warning(
-                    "OVOS-SESSION-1 §2.5: `%s` is malformed (%s); treating "
-                    "as omitted", key, exc)
+                    "OVOS-SESSION-1 §2.5: `%s` is malformed (%s; got %s); "
+                    "treating as omitted", key, exc, type(value).__name__)
                 continue
             valid[key] = value
         return cls(**valid)
