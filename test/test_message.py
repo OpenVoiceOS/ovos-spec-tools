@@ -69,14 +69,16 @@ class TestSerialization:
         assert isinstance(parsed, dict)
         assert set(parsed.keys()) == {"type", "data", "context"}
 
-    def test_deserialize_rejects_unknown_top_level_keys(self):
-        """§2: 'Other top-level keys MUST NOT appear; consumers MUST
-        reject any Message with unknown top-level keys.'"""
+    def test_deserialize_ignores_unknown_top_level_keys(self):
+        """§2: a consumer that receives a Message carrying top-level keys
+        it does not know 'MUST NOT reject the Message on that ground
+        alone, and MUST ignore those keys.'"""
         payload = json.dumps({
             "type": "ovos.test", "data": {}, "context": {},
             "extra": "field"})
-        with pytest.raises(MalformedMessage):
-            Message.deserialize(payload)
+        m = Message.deserialize(payload)
+        assert m.msg_type == "ovos.test"
+        assert not hasattr(m, "extra")
 
     def test_deserialize_rejects_missing_type(self):
         with pytest.raises(MalformedMessage):
@@ -276,6 +278,72 @@ class TestReply:
         assert r.context["source"] == "D"
         assert r.context["destination"] == "C"
 
+    def test_reply_does_not_mint_empty_string_destination(self):
+        """§3.3: 'A producer MUST NOT emit an empty string as
+        destination; no identifier is ever the empty string ... The
+        same holds for source.' A ``reply`` MUST NOT mint an
+        empty-string ``source`` as the new ``destination``."""
+        m = Message("ovos.req", {}, {"source": "", "destination": None})
+        r = m.reply("ovos.ack")
+        assert r.context.get("destination") != ""
+        assert "destination" not in r.context
+
+    def test_reply_does_not_mint_empty_string_source(self):
+        m = Message("ovos.req", {}, {"destination": ""})
+        r = m.reply("ovos.ack")
+        assert r.context.get("source") != ""
+        assert "source" not in r.context
+
+    _ABSENT = object()
+
+    @pytest.mark.parametrize("source", ["A", "", _ABSENT])
+    @pytest.mark.parametrize("destination",
+                             ["B", "", _ABSENT, ["B", "C"], ["", "C"]])
+    def test_reply_empty_routing_key_equals_absent_key(self, source,
+                                                       destination):
+        """§3.3: a consumer that receives an empty-string ``source`` or
+        ``destination`` "MUST treat the field as absent". So ``reply``
+        on a context with "" MUST route as ``reply`` on the same context
+        with that key removed (§5.2 step 3), and MUST NOT emit ""."""
+        def build(drop_empty):
+            ctx = {}
+            for key, value in (("source", source),
+                               ("destination", destination)):
+                if value is self._ABSENT:
+                    continue
+                if drop_empty and value == "":
+                    continue
+                if drop_empty and isinstance(value, list):
+                    value = [member for member in value if member != ""]
+                ctx[key] = value
+            return Message("ovos.req", {}, ctx).reply("ovos.ack").context
+
+        def routing(ctx):
+            return {k: ctx[k] for k in ("source", "destination") if k in ctx}
+
+        got = routing(build(drop_empty=False))
+        assert got == routing(build(drop_empty=True))
+        # §5.2 steps 1-3 on the context with "" treated as absent,
+        # computed here rather than read back from reply()
+        src = None if source in ("", self._ABSENT) else source
+        dst = destination
+        if dst in ("", self._ABSENT):
+            dst = None
+        elif isinstance(dst, list):
+            dst = [member for member in dst if member != ""]
+        expected = {}
+        if src is not None:
+            expected["source"] = src
+        if dst is not None:
+            expected["destination"] = dst
+            expected["source"] = dst[0] if isinstance(dst, list) else dst
+        if src is not None:
+            expected["destination"] = src
+        assert got == expected
+        for value in got.values():
+            members = value if isinstance(value, list) else [value]
+            assert "" not in members
+
     def test_provided_non_routing_context_keys_pass_through(self):
         """Keys that are not ``source`` / ``destination`` overlay
         without being swapped — handy for custom session shapes or
@@ -302,6 +370,21 @@ class TestResponse:
         r = m.response()
         assert r.context["source"] == "B"
         assert r.context["destination"] == "A"
+
+    def test_response_rejects_already_suffixed_topic(self):
+        """§5.3: 'T MUST NOT already end in .response' — suffixing again
+        produces ``<x>.response.response``, 'which no specification
+        defines.'"""
+        m = Message("ovos.test.response")
+        with pytest.raises(ValueError):
+            m.response()
+
+    def test_response_rejects_dispatch_topic(self):
+        """§5.3: 'T ... MUST NOT contain a `:`. A dispatch topic (§2.1.1)
+        has no `.response` counterpart.'"""
+        m = Message("skill:intent")
+        with pytest.raises(ValueError):
+            m.response()
 
 
 # --- §4 session carrier -----------------------------------------------------
