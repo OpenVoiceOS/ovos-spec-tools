@@ -38,9 +38,10 @@ __all__ = ["expand", "fold_double_braces", "strip_type_prefixes",
 
 _log = logging.getLogger(__name__)
 
-# The four registered typed-slot types (OVOS-INTENT-1 §5.6). Closed set: a
+# The seven registered typed-slot types (OVOS-INTENT-1 §5.6). Closed set: a
 # type outside it is unregistered and degrades to an untyped slot (§3.6).
-REGISTERED_TYPES = ("number", "duration", "date", "color")
+REGISTERED_TYPES = ("number", "duration", "date", "color",
+                    "language", "location", "timezone")
 
 # A slot or vocabulary name: lowercase ASCII letters, digits, underscores;
 # never beginning with a digit (OVOS-INTENT-1 §3.4).
