@@ -600,8 +600,16 @@ class TestHandlerWritesRideOnDerivations(unittest.TestCase):
 
     def test_reply_and_response_carry_a_handler_write(self):
         msg = self._dispatch()
-        SessionManager.get(msg).intent_context = {"my.skill:t": {"value": 1}}
-        for derived in (msg.reply("q.answer"), msg.response()):
+        sess = SessionManager.get(msg)
+        sess.intent_context = {"my.skill:t": {"value": 1}}
+        # §5.3 forbids the ``.response`` shorthand on a dispatch topic
+        # (it contains ``:``), so the response leg is exercised on a
+        # plain-topic Message bound to the same session object.
+        plain = Message("q.ask",
+                        context={"session": dict(session_id="sat-1"),
+                                 "source": "A", "destination": "B"})
+        SessionManager.bind(plain, sess)
+        for derived in (msg.reply("q.answer"), plain.response()):
             self.assertEqual(derived.context["session"]["intent_context"],
                              {"my.skill:t": {"value": 1}})
         # §5.2 routing reversal is untouched by the stamp
@@ -703,7 +711,14 @@ class TestSessionManagerBind(unittest.TestCase):
         round_session = Session("sat-1")
         SessionManager.bind(msg, round_session)
         round_session.intent_context = {"my.skill:t": {"value": 2}}
-        for derived in (msg.reply("q.answer"), msg.response()):
+        # §5.3 forbids the ``.response`` shorthand on a dispatch topic
+        # (it contains ``:``); bind the same object onto a plain-topic
+        # Message to exercise the response leg.
+        plain = Message("q.ask",
+                        context={"session": {"session_id": "sat-1"},
+                                 "source": "A", "destination": "B"})
+        SessionManager.bind(plain, round_session)
+        for derived in (msg.reply("q.answer"), plain.response()):
             self.assertEqual(derived.context["session"]["intent_context"],
                              {"my.skill:t": {"value": 2}})
 
