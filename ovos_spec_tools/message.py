@@ -464,8 +464,12 @@ class Message:
         - new ``destination`` := old ``source`` (§5.2 step 1, when set);
         - new ``source`` := old ``destination`` — if the old
           ``destination`` was an array, the **first** entry is chosen
-          (§5.2 step 2: the choice is implementation-defined and consumers
-          MUST NOT rely on a particular member);
+          (§5.2 step 2). The array-of-strings form itself has **no MSG-1
+          clause**: §3.2/§3.3 type both routing keys as ``string``, and
+          §3.3 names "one consumer or all of them" as the only forms —
+          "there is no multi-address form." This is pre-existing,
+          unchanged behaviour, kept because real producers on the fleet
+          emit it (T-2238, filed against architecture; not a §5.2 rule);
         - every other context key, including ``session`` (§4), is preserved
           unchanged (§5.2 step 3).
 
@@ -500,27 +504,25 @@ class Message:
         if context:
             new_context.update(context)
         # §3.3: "no identifier is ever the empty string. A consumer that
-        # receives one MUST treat the field as absent". Drop empty-string
-        # and ``None`` peers (and empty members of the array form) BEFORE
-        # the swap, so §5.2 step 3 sees them as absent and they are never
-        # emitted.
+        # receives one MUST treat the field as absent". Drop an empty-string
+        # or ``None`` peer BEFORE the swap, so §5.2 step 3 sees it as absent
+        # and it is never emitted. The array-of-strings form has no MSG-1
+        # clause (§3.2/§3.3 type both keys as ``string``) and is pre-existing,
+        # untouched behaviour here — see T-2238, filed against architecture.
         for key in ("source", "destination"):
             value = new_context.get(key)
-            if isinstance(value, list):
-                value = [member for member in value if member != ""]
-                if value:
-                    new_context[key] = value
-                else:
-                    new_context.pop(key)
-            elif value is None or value == "":
+            if value is None or value == "":
                 new_context.pop(key, None)
         # §5.2 swap. Read both sides BEFORE writing to avoid clobbering.
         src = new_context.get("source")
         dst = new_context.get("destination")
         if dst is not None:
-            # array-of-strings form: producer chooses one; consumers
-            # MUST NOT rely on a particular member being chosen (§5.2)
-            new_context["source"] = dst[0] if isinstance(dst, list) else dst
+            # pre-existing array-of-strings handling, not a §5.2 clause
+            # (T-2238): producer picks a member; an empty list cannot reach
+            # here since nothing above empties one, so ``dst[0]`` is safe
+            # only when ``dst`` is a non-empty list — guard it explicitly.
+            new_context["source"] = (
+                dst[0] if isinstance(dst, list) and dst else dst)
         if src is not None:
             new_context["destination"] = src
         derived = self.__class__(msg_type, data or {}, new_context)

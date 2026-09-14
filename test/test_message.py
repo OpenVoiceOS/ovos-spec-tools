@@ -297,14 +297,18 @@ class TestReply:
     _ABSENT = object()
 
     @pytest.mark.parametrize("source", ["A", "", _ABSENT])
-    @pytest.mark.parametrize("destination",
-                             ["B", "", _ABSENT, ["B", "C"], ["", "C"]])
+    @pytest.mark.parametrize("destination", ["B", "", _ABSENT])
     def test_reply_empty_routing_key_equals_absent_key(self, source,
                                                        destination):
         """§3.3: a consumer that receives an empty-string ``source`` or
         ``destination`` "MUST treat the field as absent". So ``reply``
         on a context with "" MUST route as ``reply`` on the same context
-        with that key removed (§5.2 step 3), and MUST NOT emit ""."""
+        with that key removed (§5.2 step 3), and MUST NOT emit "".
+
+        The array-of-strings form is deliberately out of scope here — it
+        has no MSG-1 clause at all (T-2238), so this test only pins the
+        conformant string/empty/absent cases, not the array picking that
+        ``test_destination_array_picks_one_for_source`` covers."""
         def build(drop_empty):
             ctx = {}
             for key, value in (("source", source),
@@ -313,8 +317,6 @@ class TestReply:
                     continue
                 if drop_empty and value == "":
                     continue
-                if drop_empty and isinstance(value, list):
-                    value = [member for member in value if member != ""]
                 ctx[key] = value
             return Message("ovos.req", {}, ctx).reply("ovos.ack").context
 
@@ -326,17 +328,13 @@ class TestReply:
         # §5.2 steps 1-3 on the context with "" treated as absent,
         # computed here rather than read back from reply()
         src = None if source in ("", self._ABSENT) else source
-        dst = destination
-        if dst in ("", self._ABSENT):
-            dst = None
-        elif isinstance(dst, list):
-            dst = [member for member in dst if member != ""]
+        dst = None if destination in ("", self._ABSENT) else destination
         expected = {}
         if src is not None:
             expected["source"] = src
         if dst is not None:
             expected["destination"] = dst
-            expected["source"] = dst[0] if isinstance(dst, list) else dst
+            expected["source"] = dst
         if src is not None:
             expected["destination"] = src
         assert got == expected
