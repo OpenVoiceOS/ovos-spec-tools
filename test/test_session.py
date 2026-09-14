@@ -35,11 +35,14 @@ class TestWireShape(unittest.TestCase):
         self.assertEqual(s.session_id, "abc")
 
     def test_wrong_typed_lang_is_omitted_and_the_warning_names_the_type(self):
-        # §6 consumer: a value of the wrong wire type is malformed; behave as
-        # if the field were omitted and log the violation. The log names the
-        # type, so a producer that sends a number or a list can be found.
-        for value, type_name in ((5, "int"), (["en-US"], "list"),
-                                 ({"tag": "en-US"}, "dict"), (True, "bool")):
+        # §2: a value of the wrong wire type is malformed; behave as if the
+        # field were omitted and log the violation "naming the field and the
+        # wire type received". The type is named in JSON's vocabulary, the
+        # vocabulary §3 fixes the fields in, so an object reads as `object`
+        # and never as Python's `dict`.
+        for value, type_name in ((5, "number"), (["en-US"], "array"),
+                                 ({"tag": "en-US"}, "object"),
+                                 (True, "boolean")):
             with self.subTest(value=value):
                 with self.assertLogs("ovos_spec_tools.session",
                                      level="WARNING") as cm:

@@ -171,6 +171,29 @@ class MalformedSession(ValueError):
     """
 
 
+def _wire_type(value: Any) -> str:
+    """The JSON wire-type name of ``value``, for a §2 malformed-field warning.
+
+    OVOS-SESSION-1 §2 asks the log to name "the wire type received", and §3
+    fixes each field in JSON's vocabulary, so a JSON object is reported as
+    ``object`` and not as Python's ``dict``. ``bool`` is tested before ``int``,
+    because ``isinstance(True, int)`` holds.
+    """
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, (list, tuple)):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return type(value).__name__
+
+
 def _is_bcp47(value: Any) -> bool:
     """Cheap shape check: a BCP-47 tag is a non-empty string with no
     whitespace. The full grammar is owned by language tools; this
@@ -285,9 +308,13 @@ def carried_fields(carrier: Dict[str, Any]) -> Dict[str, Any]:
         try:
             normalized = Session(**{name: value}).to_dict().get(name)
         except (ValueError, TypeError):
+            # Name the wire type here too: this is the line the deployed
+            # consumer reaches (SessionManager.get resolves a carrier through
+            # this function), so §2's "naming the field and the wire type
+            # received" is met on the path a bus takes.
             _log.warning(
-                "OVOS-SESSION-1 §2.1: malformed `%s`; treating as not "
-                "carried", name)
+                "OVOS-SESSION-1 §2.1: malformed `%s` (got %s); treating as not "
+                "carried", name, _wire_type(value))
             continue
         if normalized is not None:
             out[name] = normalized
@@ -316,7 +343,7 @@ def resolve_session_id(carrier: Dict[str, Any]) -> str:
     if session_id is not None and not isinstance(session_id, str):
         _log.warning(
             "OVOS-SESSION-1 §2: wrong type for `session_id` (got %s); "
-            "falling back to %r", type(session_id).__name__,
+            "falling back to %r", _wire_type(session_id),
             DEFAULT_SESSION_ID)
     return DEFAULT_SESSION_ID
 
@@ -890,9 +917,12 @@ class Session:
                 cls(**{key: value})
             except MalformedSession as exc:
                 # name the wire type, so the producer that sent it can be found
+                # (§2). The prefix is §2 and not §2.5: §2.5 is the malformed
+                # *carrier*, which makes a consumer drop the Message, and this
+                # line reports a malformed field, which is dropped alone.
                 _log.warning(
-                    "OVOS-SESSION-1 §2.5: `%s` is malformed (%s; got %s); "
-                    "treating as omitted", key, exc, type(value).__name__)
+                    "OVOS-SESSION-1 §2: `%s` is malformed (%s; got %s); "
+                    "treating as omitted", key, exc, _wire_type(value))
                 continue
             valid[key] = value
         return cls(**valid)
