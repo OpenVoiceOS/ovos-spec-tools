@@ -322,6 +322,71 @@ def test_validate_typed_slots_rejects_bad_color_value():
             {"span": [0, 3], "surface": "red", "value": {"hex": "#ff0000"}}]})
 
 
+def test_validate_typed_slots_accepts_good_language_value():
+    validate_typed_slots({"language": [
+        {"span": [9, 15], "surface": "German",
+         "value": {"code": "de", "name": "Deutsch"}}]})
+    validate_typed_slots({"language": [
+        {"span": [6, 26], "surface": "Brazilian Portuguese",
+         "value": {"code": "pt-br", "name": "Português"}}]})
+    validate_typed_slots({"language": [
+        {"span": [0, 3], "surface": "xyz",
+         "value": {"code": "xyz", "name": None}}]})
+
+
+def test_validate_typed_slots_rejects_bad_language_value():
+    with pytest.raises(MalformedTypedSlots):  # code must be lowercase
+        validate_typed_slots({"language": [
+            {"span": [0, 2], "surface": "de",
+             "value": {"code": "DE", "name": "Deutsch"}}]})
+    with pytest.raises(MalformedTypedSlots):  # missing key
+        validate_typed_slots({"language": [
+            {"span": [0, 2], "surface": "de", "value": {"code": "de"}}]})
+    with pytest.raises(MalformedTypedSlots):  # name must be string or null
+        validate_typed_slots({"language": [
+            {"span": [0, 2], "surface": "de",
+             "value": {"code": "de", "name": 1}}]})
+
+
+def test_validate_typed_slots_accepts_good_location_value():
+    validate_typed_slots({"location": [
+        {"span": [11, 17], "surface": "Lisbon",
+         "value": {"name": "Lisbon", "kind": "city"}}]})
+    validate_typed_slots({"location": [
+        {"span": [0, 6], "surface": "Neverland",
+         "value": {"name": "Neverland", "kind": None}}]})
+
+
+def test_validate_typed_slots_rejects_bad_location_value():
+    with pytest.raises(MalformedTypedSlots):  # empty name
+        validate_typed_slots({"location": [
+            {"span": [0, 1], "surface": "x",
+             "value": {"name": "", "kind": None}}]})
+    with pytest.raises(MalformedTypedSlots):  # kind outside the closed set
+        validate_typed_slots({"location": [
+            {"span": [0, 6], "surface": "Lisbon",
+             "value": {"name": "Lisbon", "kind": "planet"}}]})
+    with pytest.raises(MalformedTypedSlots):  # missing key
+        validate_typed_slots({"location": [
+            {"span": [0, 6], "surface": "Lisbon", "value": {"name": "Lisbon"}}]})
+
+
+def test_validate_typed_slots_accepts_good_timezone_value():
+    validate_typed_slots({"timezone": [
+        {"span": [0, 21], "surface": "Central European Time",
+         "value": {"tz": "Europe/Paris"}}]})
+
+
+def test_validate_typed_slots_rejects_bad_timezone_value():
+    with pytest.raises(MalformedTypedSlots):  # empty tz
+        validate_typed_slots({"timezone": [
+            {"span": [0, 3], "surface": "EST", "value": {"tz": ""}}]})
+    with pytest.raises(MalformedTypedSlots):  # extra key
+        validate_typed_slots({"timezone": [
+            {"span": [0, 3], "surface": "EST",
+             "value": {"tz": "America/Detroit", "name": "EST"}}]})
+
+
 def test_drop_unregistered_typed_slots_removes_unregistered_and_empty_keys(caplog):
     typed_slots = {
         "date": [],

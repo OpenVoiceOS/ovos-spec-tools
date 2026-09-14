@@ -59,6 +59,8 @@ _RFC3339_RE = re.compile(
     r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})\Z")
 # `color`'s `hex` field (§5.6): a lowercase `#rrggbb` string.
 _HEX_COLOR_RE = re.compile(r"\A#[0-9a-f]{6}\Z")
+# `location`'s `kind` field (§5.6): a place is a city, a country or a region.
+_LOCATION_KINDS = ("city", "country", "region")
 
 
 class MalformedTypedSlots(ValueError):
@@ -559,6 +561,42 @@ def _validate_typed_slot_value(slot_type: str, value: Any) -> None:
             raise MalformedTypedSlots(
                 f"'color' entry name {value['name']!r} must be a string or "
                 f"null (OVOS-INTENT-1 §5.6)")
+    elif slot_type == "language":
+        if not isinstance(value, dict) or set(value) != {"code", "name"}:
+            raise MalformedTypedSlots(
+                f"'language' entry value {value!r} must be an object with "
+                f"exactly the keys 'code' and 'name' (OVOS-INTENT-1 §5.6)")
+        if not isinstance(value["code"], str) or not value["code"] or \
+                value["code"] != value["code"].lower():
+            raise MalformedTypedSlots(
+                f"'language' entry code {value['code']!r} must be a "
+                f"lowercase BCP-47 tag (OVOS-INTENT-1 §5.6)")
+        if value["name"] is not None and not isinstance(value["name"], str):
+            raise MalformedTypedSlots(
+                f"'language' entry name {value['name']!r} must be a string "
+                f"or null (OVOS-INTENT-1 §5.6)")
+    elif slot_type == "location":
+        if not isinstance(value, dict) or set(value) != {"name", "kind"}:
+            raise MalformedTypedSlots(
+                f"'location' entry value {value!r} must be an object with "
+                f"exactly the keys 'name' and 'kind' (OVOS-INTENT-1 §5.6)")
+        if not isinstance(value["name"], str) or not value["name"]:
+            raise MalformedTypedSlots(
+                f"'location' entry name {value['name']!r} must be a "
+                f"non-empty string (OVOS-INTENT-1 §5.6)")
+        if value["kind"] is not None and value["kind"] not in _LOCATION_KINDS:
+            raise MalformedTypedSlots(
+                f"'location' entry kind {value['kind']!r} must be one of "
+                f"{_LOCATION_KINDS} or null (OVOS-INTENT-1 §5.6)")
+    elif slot_type == "timezone":
+        if not isinstance(value, dict) or set(value) != {"tz"}:
+            raise MalformedTypedSlots(
+                f"'timezone' entry value {value!r} must be an object with "
+                f"exactly the key 'tz' (OVOS-INTENT-1 §5.6)")
+        if not isinstance(value["tz"], str) or not value["tz"]:
+            raise MalformedTypedSlots(
+                f"'timezone' entry tz {value['tz']!r} must be a non-empty "
+                f"IANA zone name (OVOS-INTENT-1 §5.6)")
 
 
 def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
