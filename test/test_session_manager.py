@@ -392,6 +392,24 @@ class TestDefaultSessionStoreMerge(unittest.TestCase):
         self.assertEqual(carried_fields({"fallback_handlers": [{"a": 1}]}), {})
         self.assertEqual(carried_fields({"intent_context": "nope"}), {})
 
+    def test_carried_fields_warning_names_the_wire_type(self):
+        # §2: "SHOULD log the violation at WARN -- naming the field and the
+        # wire type received". `carried_fields` is the line the deployed
+        # consumer reaches, because SessionManager.get resolves a carrier
+        # through it, so the type has to be named here and not only in
+        # Session.from_dict. The vocabulary is JSON's, never Python's.
+        for value, type_name in ((5, "number"), (["en-US"], "array"),
+                                 ({"tag": "en-US"}, "object"),
+                                 (True, "boolean")):
+            with self.subTest(value=value):
+                with self.assertLogs("ovos_spec_tools.session",
+                                     level="WARNING") as cm:
+                    out = carried_fields({"session_id": "abc", "lang": value})
+                self.assertNotIn("lang", out)
+                logged = "\n".join(cm.output)
+                self.assertIn("`lang`", logged)
+                self.assertIn(f"got {type_name}", logged)
+
     def test_wrong_typed_list_leaves_the_store_intact(self):
         self._inbound({"session_id": "default",
                        "pipeline": ["stop_high", "converse"]})
@@ -791,7 +809,8 @@ class TestWrongTypedSessionIdIsLogged(unittest.TestCase):
             resolve_session_id({"session_id": 123})
         self.assertEqual(len(cm.output), 1)
         self.assertIn("session_id", cm.output[0])
-        self.assertIn("int", cm.output[0])
+        # §2 asks for the wire type received, so JSON's name and not Python's.
+        self.assertIn("got number", cm.output[0])
 
     def test_wrong_typed_session_id_through_get_logs_once(self):
         msg = Message("u", context={"session": {"session_id": 123,
