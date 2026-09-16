@@ -212,6 +212,15 @@ def test_voc_match_reuses_one_locale_resources_per_installed_tree(locale,
     assert len(built) == 1, f"rebuilt the locale tree {len(built)} times"
 
 
+def test_voc_match_never_caches_a_caller_supplied_instance(locale):
+    """The documented opt-out for a caller that needs its own lifetime:
+    build the LocaleResources yourself and voc_match uses it as given."""
+    _static_locale_resources.cache_clear()
+    mine = LocaleResources(str(locale))
+    assert voc_match("yeah right", "yes", "en-US", mine) is True
+    assert _static_locale_resources.cache_info().currsize == 0
+
+
 def test_voc_match_keeps_user_overrides_live(tmp_path):
     """A user-override tree is never shared: §2.1 keeps it live, so an edit
     between two calls must be visible to the second."""

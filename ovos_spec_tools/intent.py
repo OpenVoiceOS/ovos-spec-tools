@@ -528,6 +528,18 @@ def voc_match(utterance: str, voc_name: str, lang: str,
             a sequence of such paths searched in override-precedence order
             (user, skill, core — see
             :class:`~ovos_spec_tools.resources.LocaleResources`).
+
+            A bare directory fills the **skill** slot, and skill trees are
+            installed with their owning package —
+            :class:`LocaleResources` already snapshots them at construction
+            and treats them as static for the instance lifetime. So a bare
+            directory is loaded once per process and shared between calls,
+            which is what keeps a per-utterance caller off a full re-expansion
+            of the tree. Two ways to opt out, both already supported: pass the
+            live tree as the first element of a sequence, which fills the
+            **user** slot and is never shared, or construct a
+            :class:`LocaleResources` yourself and pass the instance — this
+            function uses it as given and caches nothing.
         exact: require equality after normalization rather than whole-word
             substring containment.
         strip_diacritics: forwarded to the matcher.
