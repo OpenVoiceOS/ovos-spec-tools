@@ -12,6 +12,7 @@ from ovos_spec_tools import (
     validate_typed_slots,
     voc_match,
 )
+from ovos_spec_tools.intent import _static_locale_resources
 from ovos_spec_tools.message import Message
 
 
@@ -183,6 +184,47 @@ def test_voc_match_accepts_sequence_of_dirs(locale):
 
 def test_voc_match_missing_voc_returns_false(locale):
     assert voc_match("anything", "nonexistent", "en-US", str(locale)) is False
+
+
+def test_voc_match_reuses_one_locale_resources_per_installed_tree(locale,
+                                                                 monkeypatch):
+    """Passing a path must not rebuild the whole locale tree on every call.
+
+    Constructing LocaleResources snapshots and expands every resource it can
+    see, so a pipeline calling voc_match(locale=SOME_DIR) once per utterance
+    used to pay that cost per utterance -- measured at ~7 s for a 13-language
+    tree, three times per turn in the OCP pipeline.
+    """
+    _static_locale_resources.cache_clear()
+    built = []
+    original = LocaleResources.__init__
+
+    def counting_init(self, *args, **kwargs):
+        built.append(args[0] if args else kwargs.get("skill_locale"))
+        original(self, *args, **kwargs)
+
+    monkeypatch.setattr(LocaleResources, "__init__", counting_init)
+
+    for _ in range(3):
+        assert voc_match("yeah right", "yes", "en-US", str(locale)) is True
+    assert voc_match("yep indeed", "yes", "en-US", [str(locale)]) is True
+
+    assert len(built) == 1, f"rebuilt the locale tree {len(built)} times"
+
+
+def test_voc_match_keeps_user_overrides_live(tmp_path):
+    """A user-override tree is never shared: §2.1 keeps it live, so an edit
+    between two calls must be visible to the second."""
+    _static_locale_resources.cache_clear()
+    skill = tmp_path / "skill" / "locale"
+    user = tmp_path / "user" / "locale"
+    _write(skill / "en-US" / "yes.voc", "yes\n")
+    _write(user / "en-US" / "yes.voc", "yes\n")
+    dirs = [str(user), str(skill)]
+
+    assert voc_match("absolutely not", "yes", "en-US", dirs) is False
+    _write(user / "en-US" / "yes.voc", "yes\nabsolutely\n")
+    assert voc_match("absolutely not", "yes", "en-US", dirs) is True
 
 
 # --- OVOS-INTENT-3 §4.2 well-formedness (validate raises; build/emit warn) ---
