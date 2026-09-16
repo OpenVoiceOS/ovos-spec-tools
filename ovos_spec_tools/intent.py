@@ -639,12 +639,16 @@ def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
     empty list for a type MUST drop that type before carrying the map onward".
     A map with no types at all stays valid.
 
-    Two ``timezone`` entries MUST NOT share a span, per §5.6: "One surface
-    gives one entry with one zone, also when the surface names more than one
-    zone." Two entries with the same surface at different spans are legal,
-    because entries are computed over every candidate utterance and share one
-    map, so the same zone abbreviation at two positions is two entries. The
-    span is what identifies the one occurrence the rule speaks about.
+    Two ``timezone`` entries MUST NOT share a surface at one span, per §5.6:
+    "One surface gives one entry with one zone, also when the surface names
+    more than one zone." A surface is one occurrence of text, and §5.6 ties
+    it to its span by ``utterance[start:end] == surface``, so the
+    ``(span, surface)`` pair is the key. Two entries with the same surface at
+    different spans are legal: the same abbreviation at two positions is two
+    occurrences. Two entries with different surfaces at the same span are
+    legal too: entries are computed over every candidate utterance and share
+    one map, so two candidates can read two different zone names at the same
+    offsets.
 
     Args:
         typed_slots: the ``data.typed_slots`` map to validate.
@@ -683,15 +687,16 @@ def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
                     f"be a string (OVOS-INTENT-1 §5.6)")
             _validate_typed_slot_value(slot_type, entry["value"])
         if slot_type == "timezone":
-            seen_spans = set()
+            seen_surfaces = set()
             for entry in entries:
-                span = tuple(entry["span"])
-                if span in seen_spans:
+                occurrence = (tuple(entry["span"]), entry["surface"])
+                if occurrence in seen_surfaces:
                     raise MalformedTypedSlots(
-                        f"'timezone' has more than one entry for span "
-                        f"{list(span)!r} — one surface gives one entry with "
-                        f"one zone (OVOS-INTENT-1 §5.6)")
-                seen_spans.add(span)
+                        f"'timezone' has more than one entry for surface "
+                        f"{entry['surface']!r} at span {entry['span']!r} — "
+                        f"one surface gives one entry with one zone "
+                        f"(OVOS-INTENT-1 §5.6)")
+                seen_surfaces.add(occurrence)
 
 
 def drop_unregistered_typed_slots(

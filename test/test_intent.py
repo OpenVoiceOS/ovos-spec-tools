@@ -473,6 +473,24 @@ def test_validate_typed_slots_accepts_one_surface_at_two_spans():
         {"span": [20, 23], "surface": "EST", "value": {"tz": "America/Detroit"}}]})
 
 
+def test_validate_typed_slots_accepts_two_surfaces_at_one_span():
+    # Entries are computed over every candidate utterance and share one map
+    # (§5.6), so the candidates "3 pm EST" and "3 pm CET" put two different
+    # surfaces at the same offsets. One entry per surface: conformant.
+    validate_typed_slots({"timezone": [
+        {"span": [5, 8], "surface": "EST", "value": {"tz": "America/Detroit"}},
+        {"span": [5, 8], "surface": "CET", "value": {"tz": "Europe/Paris"}}]})
+
+
+def test_validate_typed_slots_rejects_one_surface_twice_with_one_zone():
+    # The key is the (span, surface) pair, not the zone: the same occurrence
+    # listed twice is two entries for one surface even when the zones agree.
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"timezone": [
+            {"span": [8, 11], "surface": "CET", "value": {"tz": "Europe/Paris"}},
+            {"span": [8, 11], "surface": "CET", "value": {"tz": "Europe/Paris"}}]})
+
+
 def test_drop_unregistered_typed_slots_removes_unregistered_and_empty_keys(caplog):
     typed_slots = {
         "date": [],
