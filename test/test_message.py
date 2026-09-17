@@ -294,6 +294,16 @@ class TestReply:
         assert r.context.get("source") != ""
         assert "source" not in r.context
 
+    def test_reply_strips_empty_members_from_list_source(self):
+        """§3.3: no identifier is ever the empty string; a producer MUST NOT
+        emit one. The array-of-strings form is a list of identifiers, so a
+        ``""`` member is dropped the same as a scalar ``""`` would be."""
+        m = Message("q.ask", {}, {"source": "A",
+                                   "destination": ["", "B"]})
+        r = m.reply("q.ans")
+        assert r.context.get("source") == "B"
+        assert r.context.get("source") != ""
+
     _ABSENT = object()
 
     @pytest.mark.parametrize("source", ["A", "", _ABSENT])

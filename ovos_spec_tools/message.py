@@ -507,11 +507,18 @@ class Message:
         # receives one MUST treat the field as absent". Drop an empty-string
         # or ``None`` peer BEFORE the swap, so §5.2 step 3 sees it as absent
         # and it is never emitted. The array-of-strings form has no MSG-1
-        # clause (§3.2/§3.3 type both keys as ``string``) and is pre-existing,
-        # untouched behaviour here — see T-2238, filed against architecture.
+        # clause of its own (T-2238, filed against architecture), but each
+        # member is still an identifier under §3.3, so an empty member is
+        # dropped the same as a scalar ``""`` would be.
         for key in ("source", "destination"):
             value = new_context.get(key)
-            if value is None or value == "":
+            if isinstance(value, list):
+                value = [v for v in value if v != ""]
+                if value:
+                    new_context[key] = value
+                else:
+                    new_context.pop(key, None)
+            elif value is None or value == "":
                 new_context.pop(key, None)
         # §5.2 swap. Read both sides BEFORE writing to avoid clobbering.
         src = new_context.get("source")
