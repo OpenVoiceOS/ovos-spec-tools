@@ -1,4 +1,7 @@
 """Conformance tests for the OVOS-INTENT-4 keyword intent primitives."""
+import json
+import zoneinfo
+
 import pytest
 
 from ovos_spec_tools import (
@@ -320,6 +323,172 @@ def test_validate_typed_slots_rejects_bad_color_value():
     with pytest.raises(MalformedTypedSlots):
         validate_typed_slots({"color": [
             {"span": [0, 3], "surface": "red", "value": {"hex": "#ff0000"}}]})
+
+
+def test_validate_typed_slots_accepts_good_language_value():
+    validate_typed_slots({"language": [
+        {"span": [9, 15], "surface": "German",
+         "value": {"code": "de", "name": "Deutsch"}}]})
+    validate_typed_slots({"language": [
+        {"span": [6, 26], "surface": "Brazilian Portuguese",
+         "value": {"code": "pt-br", "name": "Português"}}]})
+    validate_typed_slots({"language": [
+        {"span": [0, 3], "surface": "xyz",
+         "value": {"code": "xyz", "name": None}}]})
+
+
+def test_validate_typed_slots_rejects_bad_language_value():
+    with pytest.raises(MalformedTypedSlots):  # code must be lowercase
+        validate_typed_slots({"language": [
+            {"span": [0, 2], "surface": "de",
+             "value": {"code": "DE", "name": "Deutsch"}}]})
+    with pytest.raises(MalformedTypedSlots):  # missing key
+        validate_typed_slots({"language": [
+            {"span": [0, 2], "surface": "de", "value": {"code": "de"}}]})
+    with pytest.raises(MalformedTypedSlots):  # name must be string or null
+        validate_typed_slots({"language": [
+            {"span": [0, 2], "surface": "de",
+             "value": {"code": "de", "name": 1}}]})
+
+
+def test_validate_typed_slots_accepts_good_location_value():
+    validate_typed_slots({"location": [
+        {"span": [11, 17], "surface": "Lisbon",
+         "value": {"name": "Lisbon", "kind": "city"}}]})
+    validate_typed_slots({"location": [
+        {"span": [0, 6], "surface": "Neverland",
+         "value": {"name": "Neverland", "kind": None}}]})
+
+
+def test_validate_typed_slots_rejects_bad_location_value():
+    with pytest.raises(MalformedTypedSlots):  # empty name
+        validate_typed_slots({"location": [
+            {"span": [0, 1], "surface": "x",
+             "value": {"name": "", "kind": None}}]})
+    with pytest.raises(MalformedTypedSlots):  # kind outside the closed set
+        validate_typed_slots({"location": [
+            {"span": [0, 6], "surface": "Lisbon",
+             "value": {"name": "Lisbon", "kind": "planet"}}]})
+    with pytest.raises(MalformedTypedSlots):  # missing key
+        validate_typed_slots({"location": [
+            {"span": [0, 6], "surface": "Lisbon", "value": {"name": "Lisbon"}}]})
+
+
+def test_validate_typed_slots_accepts_good_timezone_value():
+    validate_typed_slots({"timezone": [
+        {"span": [0, 21], "surface": "Central European Time",
+         "value": {"tz": "Europe/Paris"}}]})
+
+
+def test_validate_typed_slots_rejects_bad_timezone_value():
+    with pytest.raises(MalformedTypedSlots):  # empty tz
+        validate_typed_slots({"timezone": [
+            {"span": [0, 3], "surface": "EST", "value": {"tz": ""}}]})
+    with pytest.raises(MalformedTypedSlots):  # extra key
+        validate_typed_slots({"timezone": [
+            {"span": [0, 3], "surface": "EST",
+             "value": {"tz": "America/Detroit", "name": "EST"}}]})
+
+
+def test_validate_typed_slots_accepts_rfc3339_in_lowercase():
+    # RFC 3339 is ABNF and its string literals are case-insensitive, so a
+    # lowercase 't' and 'z' give a conforming timestamp.
+    validate_typed_slots({"date": [
+        {"span": [17, 26], "surface": "tomorrow",
+         "value": "2026-04-12t00:00:00z"}]})
+    validate_typed_slots({"date": [
+        {"span": [17, 26], "surface": "tomorrow",
+         "value": "2026-04-12T00:00:00.5Z"}]})
+
+
+def test_validate_typed_slots_rejects_non_finite_numbers():
+    # Python's own json parses these by default and gives floats, which are
+    # Real; JSON has no such numbers.
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(MalformedTypedSlots):
+            validate_typed_slots({"number": [
+                {"span": [0, 3], "surface": "nan", "value": bad}]})
+        with pytest.raises(MalformedTypedSlots):
+            validate_typed_slots({"duration": [
+                {"span": [0, 3], "surface": "nan", "value": bad}]})
+    # The same value straight out of the stock parser.
+    parsed = json.loads('{"typed": NaN}')["typed"]
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"number": [
+            {"span": [0, 3], "surface": "NaN", "value": parsed}]})
+
+
+def test_validate_typed_slots_rejects_language_code_that_is_not_a_tag():
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"language": [
+            {"span": [0, 9], "surface": "gibberish",
+             "value": {"code": "not a tag!", "name": None}}]})
+    with pytest.raises(MalformedTypedSlots):  # empty
+        validate_typed_slots({"language": [
+            {"span": [0, 1], "surface": "x",
+             "value": {"code": "", "name": None}}]})
+
+
+def test_validate_typed_slots_accepts_well_formed_language_tags():
+    for code in ("de", "pt-br", "zh-hans-cn", "x-klingon"):
+        validate_typed_slots({"language": [
+            {"span": [0, 2], "surface": "s",
+             "value": {"code": code, "name": None}}]})
+
+
+def test_validate_typed_slots_rejects_tz_without_a_zone_name_shape():
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"timezone": [
+            {"span": [0, 6], "surface": "banana",
+             "value": {"tz": "banana"}}]})
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"timezone": [
+            {"span": [0, 3], "surface": "EST",
+             "value": {"tz": "Europe/"}}]})
+
+
+def test_validate_typed_slots_accepts_every_zone_name_in_the_database():
+    # The shape check must pass every name the installed database carries,
+    # including the area-less ones ('UTC') and the signed ones ('Etc/GMT+1').
+    zones = sorted(zoneinfo.available_timezones() - {"localtime"})
+    assert "UTC" in zones and "Etc/GMT+1" in zones
+    for tz in zones:
+        validate_typed_slots({"timezone": [
+            {"span": [0, 1], "surface": "s", "value": {"tz": tz}}]})
+
+
+def test_validate_typed_slots_rejects_two_timezone_entries_for_one_span():
+    # §5.6: one surface gives one entry with one zone.
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"timezone": [
+            {"span": [8, 11], "surface": "CET", "value": {"tz": "Europe/Paris"}},
+            {"span": [8, 11], "surface": "CET", "value": {"tz": "Europe/Berlin"}}]})
+
+
+def test_validate_typed_slots_accepts_one_surface_at_two_spans():
+    # Entries are computed over every candidate utterance and share one map,
+    # so the same abbreviation at two positions is two legitimate entries.
+    validate_typed_slots({"timezone": [
+        {"span": [3, 6], "surface": "EST", "value": {"tz": "America/Detroit"}},
+        {"span": [20, 23], "surface": "EST", "value": {"tz": "America/Detroit"}}]})
+
+
+def test_validate_typed_slots_accepts_two_surfaces_at_one_span():
+    # Entries are computed over every candidate utterance and share one map
+    # (§5.6), so the candidates "3 pm EST" and "3 pm CET" put two different
+    # surfaces at the same offsets. One entry per surface: conformant.
+    validate_typed_slots({"timezone": [
+        {"span": [5, 8], "surface": "EST", "value": {"tz": "America/Detroit"}},
+        {"span": [5, 8], "surface": "CET", "value": {"tz": "Europe/Paris"}}]})
+
+
+def test_validate_typed_slots_rejects_one_surface_twice_with_one_zone():
+    # The key is the (span, surface) pair, not the zone: the same occurrence
+    # listed twice is two entries for one surface even when the zones agree.
+    with pytest.raises(MalformedTypedSlots):
+        validate_typed_slots({"timezone": [
+            {"span": [8, 11], "surface": "CET", "value": {"tz": "Europe/Paris"}},
+            {"span": [8, 11], "surface": "CET", "value": {"tz": "Europe/Paris"}}]})
 
 
 def test_drop_unregistered_typed_slots_removes_unregistered_and_empty_keys(caplog):

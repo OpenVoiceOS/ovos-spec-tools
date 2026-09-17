@@ -34,6 +34,7 @@ code changes:
 from __future__ import annotations
 
 import logging
+import math
 import re
 from numbers import Real
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -54,11 +55,31 @@ __all__ = [
 ]
 
 # RFC 3339 timestamp, as OVOS-INTENT-1 §5.6 fixes for the `date` type: a
-# calendar date and time, offset either as `Z` or `+HH:MM` / `-HH:MM`.
+# calendar date and time, offset either as `Z` or `+HH:MM` / `-HH:MM`. RFC 3339
+# is an ABNF grammar and ABNF string literals are case-insensitive, so the date
+# and time separator and the UTC offset are accepted in either case:
+# `2026-04-12t00:00:00z` is a conforming timestamp.
 _RFC3339_RE = re.compile(
-    r"\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})\Z")
+    r"\A\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})\Z")
 # `color`'s `hex` field (§5.6): a lowercase `#rrggbb` string.
 _HEX_COLOR_RE = re.compile(r"\A#[0-9a-f]{6}\Z")
+# `location`'s `kind` field (§5.6): a place is a city, a country or a region.
+_LOCATION_KINDS = ("city", "country", "region")
+# `language`'s `code` field (§5.6): a BCP-47 language tag in lowercase. This
+# checks the tag is well formed (subtags of 1-8 alphanumerics, the primary
+# subtag alphabetic, or a private-use `x-` tag), never that a registry lists
+# it: a registry check would reject a tag the producer's registry has and this
+# consumer's does not.
+_BCP47_RE = re.compile(r"\A([a-z]{2,8}|x)(-[a-z0-9]{1,8})*\Z")
+# `timezone`'s `tz` field (§5.6): an IANA time zone name. This checks the name
+# shape only — `/`-separated components, each starting with a capital letter.
+# Every name in the 2026a database matches it (`localtime`, which is a local
+# symlink rather than a database name, does not), and it rejects strings that
+# cannot be a zone name at all. The full check needs the zone table, and a
+# table check belongs to a consumer that resolves the zone: this validator
+# rejecting a zone that the producer's tzdata has and this one's does not
+# would break the interoperation the value exists for.
+_IANA_TZ_RE = re.compile(r"\A[A-Z][A-Za-z0-9_+-]*(?:/[A-Z][A-Za-z0-9._+-]*)*\Z")
 
 
 class MalformedTypedSlots(ValueError):
@@ -537,7 +558,11 @@ def voc_match(utterance: str, voc_name: str, lang: str,
 def _validate_typed_slot_value(slot_type: str, value: Any) -> None:
     """Check ``value`` against the §5.6 normalized-value form for ``slot_type``."""
     if slot_type in ("number", "duration"):
-        if isinstance(value, bool) or not isinstance(value, Real):
+        # `math.isfinite` rejects NaN and the infinities: JSON has no such
+        # numbers, but Python's own `json` parses `NaN`, `Infinity` and
+        # `-Infinity` by default and gives floats, which are `Real`.
+        if isinstance(value, bool) or not isinstance(value, Real) or \
+                not math.isfinite(value):
             raise MalformedTypedSlots(
                 f"{slot_type!r} entry value {value!r} is not a JSON number "
                 f"(OVOS-INTENT-1 §5.6)")
@@ -559,6 +584,43 @@ def _validate_typed_slot_value(slot_type: str, value: Any) -> None:
             raise MalformedTypedSlots(
                 f"'color' entry name {value['name']!r} must be a string or "
                 f"null (OVOS-INTENT-1 §5.6)")
+    elif slot_type == "language":
+        if not isinstance(value, dict) or set(value) != {"code", "name"}:
+            raise MalformedTypedSlots(
+                f"'language' entry value {value!r} must be an object with "
+                f"exactly the keys 'code' and 'name' (OVOS-INTENT-1 §5.6)")
+        if not isinstance(value["code"], str) or \
+                not _BCP47_RE.match(value["code"]):
+            raise MalformedTypedSlots(
+                f"'language' entry code {value['code']!r} must be a "
+                f"well-formed BCP-47 tag in lowercase (OVOS-INTENT-1 §5.6)")
+        if value["name"] is not None and not isinstance(value["name"], str):
+            raise MalformedTypedSlots(
+                f"'language' entry name {value['name']!r} must be a string "
+                f"or null (OVOS-INTENT-1 §5.6)")
+    elif slot_type == "location":
+        if not isinstance(value, dict) or set(value) != {"name", "kind"}:
+            raise MalformedTypedSlots(
+                f"'location' entry value {value!r} must be an object with "
+                f"exactly the keys 'name' and 'kind' (OVOS-INTENT-1 §5.6)")
+        if not isinstance(value["name"], str) or not value["name"]:
+            raise MalformedTypedSlots(
+                f"'location' entry name {value['name']!r} must be a "
+                f"non-empty string (OVOS-INTENT-1 §5.6)")
+        if value["kind"] is not None and value["kind"] not in _LOCATION_KINDS:
+            raise MalformedTypedSlots(
+                f"'location' entry kind {value['kind']!r} must be one of "
+                f"{_LOCATION_KINDS} or null (OVOS-INTENT-1 §5.6)")
+    elif slot_type == "timezone":
+        if not isinstance(value, dict) or set(value) != {"tz"}:
+            raise MalformedTypedSlots(
+                f"'timezone' entry value {value!r} must be an object with "
+                f"exactly the key 'tz' (OVOS-INTENT-1 §5.6)")
+        if not isinstance(value["tz"], str) or not _IANA_TZ_RE.match(value["tz"]):
+            raise MalformedTypedSlots(
+                f"'timezone' entry tz {value['tz']!r} does not have the shape "
+                f"of an IANA zone name (OVOS-INTENT-1 §5.6). The zone table "
+                f"itself is not consulted here")
 
 
 def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
@@ -571,10 +633,22 @@ def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
     MUST carry exactly the three §5.6 keys ``span``, ``surface``, ``value``:
     ``span`` a two-integer ``[start, end]`` pair with ``start <= end``,
     ``surface`` a string, and ``value`` the normalized form §5.6 fixes for the
-    entry's type. A type's list MUST NOT be empty — "no empty typed slots
-    allowed, either extraction succeeds or no slot" (§5.6 amendment): a type
-    with nothing of that kind found is absent from the map entirely, not
-    present with an empty list. A map with no types at all stays valid.
+    entry's type. A type's list MUST NOT be empty — §5.6: "a transformer that
+    computes a type and finds nothing of that kind MUST omit the type rather
+    than list it with an empty array, and an orchestrator that receives an
+    empty list for a type MUST drop that type before carrying the map onward".
+    A map with no types at all stays valid.
+
+    Two ``timezone`` entries MUST NOT share a surface at one span, per §5.6:
+    "One surface gives one entry with one zone, also when the surface names
+    more than one zone." A surface is one occurrence of text, and §5.6 ties
+    it to its span by ``utterance[start:end] == surface``, so the
+    ``(span, surface)`` pair is the key. Two entries with the same surface at
+    different spans are legal: the same abbreviation at two positions is two
+    occurrences. Two entries with different surfaces at the same span are
+    legal too: entries are computed over every candidate utterance and share
+    one map, so two candidates can read two different zone names at the same
+    offsets.
 
     Args:
         typed_slots: the ``data.typed_slots`` map to validate.
@@ -612,6 +686,17 @@ def validate_typed_slots(typed_slots: Dict[str, List[Dict[str, Any]]]) -> None:
                     f"{slot_type!r} entry surface {entry['surface']!r} must "
                     f"be a string (OVOS-INTENT-1 §5.6)")
             _validate_typed_slot_value(slot_type, entry["value"])
+        if slot_type == "timezone":
+            seen_surfaces = set()
+            for entry in entries:
+                occurrence = (tuple(entry["span"]), entry["surface"])
+                if occurrence in seen_surfaces:
+                    raise MalformedTypedSlots(
+                        f"'timezone' has more than one entry for surface "
+                        f"{entry['surface']!r} at span {entry['span']!r} — "
+                        f"one surface gives one entry with one zone "
+                        f"(OVOS-INTENT-1 §5.6)")
+                seen_surfaces.add(occurrence)
 
 
 def drop_unregistered_typed_slots(
