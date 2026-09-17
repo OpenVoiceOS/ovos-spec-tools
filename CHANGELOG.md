@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.12.1a1) (2026-09-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.12.0a1...1.12.1a1)
+
+**Merged pull requests:**
+
+- fix: the malformed-field warning names the wire type it got [\#150](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/150) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+- Preload installed locale resources and keep user overrides live [\#95](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/95) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [1.12.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.12.0a1) (2026-09-09)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.11.2a1...1.12.0a1)
@@ -378,17 +387,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.15.0a1...0.16.0a1)
 
-**Merged pull requests:**
-
-- feat: plugin-agnostic IntentBuilder/Intent + voc\_match \(INTENT-4 keyword model, adapt-free\) [\#46](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/46) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.15.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.15.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.14.1a1...0.15.0a1)
-
-**Merged pull requests:**
-
-- feat: add fallback\_handlers to canonical Session \(OVOS-FALLBACK-1 registered field\) [\#45](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/45) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.14.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.14.1a1) (2026-06-27)
 
