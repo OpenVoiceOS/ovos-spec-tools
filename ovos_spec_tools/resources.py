@@ -23,7 +23,8 @@ serves every language the skill ships.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import (Callable, Dict, Iterator, List, Optional, Sequence, Set,
+                    Tuple, Union)
 
 from ovos_spec_tools.expansion import expand
 from ovos_spec_tools.language import (
@@ -510,9 +511,9 @@ class LocaleResources:
         self._expanded_resources: Dict[
             Tuple[str, str, str], Tuple[str, ...]
         ] = {}
+        #: languages already expanded by :meth:`_preload_expanded_resources`
+        self._preloaded_languages: Set[str] = set()
         self._snapshot_static_sources()
-        if self._user_source is None:
-            self._preload_expanded_resources()
 
     def _snapshot_static_sources(self) -> None:
         """Eagerly read and index installed skill/core resource files once.
@@ -580,21 +581,33 @@ class LocaleResources:
                     language_index[lang_dir.name] = resource_index
             self._static_index[source] = language_index
 
-    def _preload_expanded_resources(self) -> None:
-        """Expand valid installed resources without making unused faults fatal."""
-        requests = set()
+    def _preload_expanded_resources(self, lang: str) -> None:
+        """Expand one language's installed resources on its first use.
+
+        Expanding is the expensive half of a load, so doing it once per
+        language keeps it off the matching path — but a locale tree carries
+        every language its package ships, and a process answers in one or two
+        of them. Expanding the rest buys nothing and can dominate: for
+        ``ovos-ocp-pipeline-plugin`` (13 languages) 99% of the work went to
+        languages the process never asked for, ``it-IT`` alone being 79%.
+
+        Faults stay non-fatal here for the same reason they always were: a
+        malformed resource must not take down an unrelated first lookup. The
+        access that needs it still raises.
+        """
         expanded_roles = {".intent", ".entity", ".voc", ".blacklist"}
-        for language_index in self._static_index.values():
-            for lang, resources in language_index.items():
-                for base_name, extension in resources:
-                    if extension in expanded_roles:
-                        requests.add((base_name, extension, lang))
-        for base_name, extension, lang in sorted(requests):
+        requests = set()
+        for source in self._static_sources:
+            lang_name = self._static_lang_name(source, lang)
+            if lang_name is None:
+                continue
+            for base_name, extension in self._static_index[source][lang_name]:
+                if extension in expanded_roles:
+                    requests.add((base_name, extension, lang_name))
+        for base_name, extension, lang_name in sorted(requests):
             try:
-                self._load_expanded(base_name, extension, lang)
+                self._load_expanded(base_name, extension, lang_name)
             except (FileNotFoundError, ValueError):
-                # Construction must not turn an unused malformed locale into a
-                # process-wide startup failure. Access still raises the fault.
                 continue
 
     def _static_lang_name(self, source: Path, lang: str) -> Optional[str]:
@@ -864,7 +877,13 @@ class LocaleResources:
             return list(self._load_expanded_uncached(
                 base_name, extension, lang
             ))
-        cache_key = (base_name, extension, standardize_lang(lang))
+        standard = standardize_lang(lang)
+        if standard not in self._preloaded_languages:
+            # Mark first: the preload loads through this method, and must not
+            # re-enter for the language it is already expanding.
+            self._preloaded_languages.add(standard)
+            self._preload_expanded_resources(lang)
+        cache_key = (base_name, extension, standard)
         if cache_key not in self._expanded_resources:
             self._expanded_resources[cache_key] = self._load_expanded_uncached(
                 base_name, extension, lang

@@ -1,6 +1,8 @@
 """Conformance tests for the OVOS-INTENT-2 reference loader."""
 import pytest
 
+from ovos_spec_tools.expansion import MalformedTemplate
+
 from ovos_spec_tools import (
     LocaleResources,
     MalformedResource,
@@ -936,3 +938,52 @@ def test_unreadable_static_prompt_does_not_break_startup(tmp_path):
     assert resources.load_vocabulary("good", "en-US") == ["good"]
     with pytest.raises(UnicodeDecodeError):
         resources.load_prompt("bad", "fr-FR")
+
+
+# --- preload scope: only the language actually in use ------------------------
+
+def _two_language_tree(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "(yes|yeah|yep)\n")
+    _write(locale / "en-US" / "no.voc", "(no|nope)\n")
+    _write(locale / "it-IT" / "yes.voc", "(si|certo|va bene)\n")
+    return locale
+
+
+def test_preload_skips_languages_that_are_never_requested(tmp_path):
+    """A locale tree ships every language its package supports; a process
+    answers in one or two. Expanding the rest is pure waste -- 99% of it for
+    ovos-ocp-pipeline-plugin's 13-language tree."""
+    resources = LocaleResources(str(_two_language_tree(tmp_path)))
+
+    assert resources._expanded_resources == {}, "expanded before anything asked"
+
+    resources.voc_match("yes, please", "yes", "en-US")
+
+    langs = {lang for _, _, lang in resources._expanded_resources}
+    assert langs == {"en-US"}, f"also expanded {langs - {'en-US'}}"
+
+
+def test_preload_still_warms_the_language_in_use(tmp_path):
+    """Within the requested language the preload is unchanged: one lookup
+    warms every resource of that language, keeping file reads off the
+    matching path."""
+    resources = LocaleResources(str(_two_language_tree(tmp_path)))
+
+    resources.voc_match("yes, please", "yes", "en-US")
+
+    assert ("no", ".voc", "en-US") in resources._expanded_resources
+
+
+def test_preload_fault_in_one_language_leaves_another_usable(tmp_path):
+    """A malformed resource must not make an unrelated language's first
+    lookup fail; the access that needs it still raises."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "yes.voc", "yes\n")
+    _write(locale / "it-IT" / "broken.voc", "(unbalanced\n")
+
+    resources = LocaleResources(str(locale))
+
+    assert resources.voc_match("yes, please", "yes", "en-US")
+    with pytest.raises(MalformedTemplate):
+        resources.load_vocabulary("broken", "it-IT")
