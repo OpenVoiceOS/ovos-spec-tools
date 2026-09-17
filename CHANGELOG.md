@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.13.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.0a1) (2026-09-17)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.12.1a1...1.13.0a1)
+
+**Merged pull requests:**
+
+- feat: register language, location and timezone typed-slot types \(§5.6\) [\#151](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/151) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.12.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.12.1a1) (2026-09-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.12.0a1...1.12.1a1)
