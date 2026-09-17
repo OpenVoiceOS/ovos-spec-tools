@@ -34,6 +34,26 @@ class TestWireShape(unittest.TestCase):
         self.assertIsNone(s.lang)
         self.assertEqual(s.session_id, "abc")
 
+    def test_wrong_typed_lang_is_omitted_and_the_warning_names_the_type(self):
+        # §2: a value of the wrong wire type is malformed; behave as if the
+        # field were omitted and log the violation "naming the field and the
+        # wire type received". The type is named in JSON's vocabulary, the
+        # vocabulary §3 fixes the fields in, so an object reads as `object`
+        # and never as Python's `dict`.
+        for value, type_name in ((5, "number"), (["en-US"], "array"),
+                                 ({"tag": "en-US"}, "object"),
+                                 (True, "boolean")):
+            with self.subTest(value=value):
+                with self.assertLogs("ovos_spec_tools.session",
+                                     level="WARNING") as cm:
+                    s = Session.from_dict({"session_id": "abc", "lang": value})
+                self.assertIsNone(s.lang)
+                self.assertEqual(s.session_id, "abc")
+                self.assertNotIn("lang", s.to_dict())
+                logged = "\n".join(cm.output)
+                self.assertIn("`lang`", logged)
+                self.assertIn(type_name, logged)
+
     def test_explicit_null_on_registered_other_spec_field_treated_as_omitted(self):
         # §2.1 — null on a field claimed by another spec is also omitted.
         with self.assertLogs("ovos_spec_tools.session", level="WARNING"):
