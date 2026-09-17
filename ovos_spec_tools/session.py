@@ -885,7 +885,16 @@ class Session:
         therefore does not cost the whole session — only :class:`Session`
         itself validates cross-field rules (e.g. §3.2.2's ``secondary_langs``
         collision), so a combination that only the constructor rejects still
-        raises."""
+        raises.
+
+        This method does not fill deployment defaults. A field that the
+        payload omits, or that this method drops as malformed, stays ``None``
+        on the returned object. For example, ``from_dict({"lang": 5})`` gives
+        ``lang is None``, not the configured language. The deployment default
+        comes later, from the consumer: ``ovos-bus-client``'s ``Session``
+        reads it from the configuration when ``SessionManager.get`` or
+        ``Session.deserialize`` builds the session. If you read a Session
+        directly from this method, resolve a ``None`` language yourself."""
         if payload is None:
             return cls()
         if not isinstance(payload, dict):
