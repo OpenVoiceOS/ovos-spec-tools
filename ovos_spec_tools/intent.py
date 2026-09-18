@@ -36,6 +36,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+from functools import lru_cache
 from numbers import Real
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -497,6 +498,33 @@ def open_intent_envelope(message) -> Intent:
     return Intent(name, requires, at_least_one, optional, excludes)
 
 
+@lru_cache(maxsize=32)
+def _static_locale_resources(skill_locale: str,
+                             core_locale: Optional[str]) -> "LocaleResources":
+    """Return a shared :class:`LocaleResources` for installed locale trees.
+
+    :func:`voc_match` accepts plain directory paths as a convenience, but
+    constructing a :class:`~ovos_spec_tools.resources.LocaleResources` is not
+    cheap: it snapshots every resource file it can see and expands each one.
+    A pipeline that calls ``voc_match(..., locale=SOME_DIR)`` once per
+    utterance would pay that whole cost on every utterance.
+
+    Reusing the instance is safe for exactly these arguments. Skill and core
+    trees are installed with their owning package, so
+    :class:`LocaleResources` already snapshots them at construction and treats
+    them as static for the instance lifetime — a long-lived instance (the way
+    ``ovos-core``'s stop service holds one) sees the same contents. Only the
+    user-override tree is kept live, and a call that supplies one is *not*
+    routed here.
+
+    Two threads racing here may each build an instance; one is then discarded.
+    That wastes work but cannot corrupt state, so the cache stays lock-free.
+    """
+    from ovos_spec_tools.resources import LocaleResources
+
+    return LocaleResources(skill_locale=skill_locale, core_locale=core_locale)
+
+
 def voc_match(utterance: str, voc_name: str, lang: str,
               locale, *,
               exact: bool = False,
@@ -521,6 +549,18 @@ def voc_match(utterance: str, voc_name: str, lang: str,
             a sequence of such paths searched in override-precedence order
             (user, skill, core — see
             :class:`~ovos_spec_tools.resources.LocaleResources`).
+
+            A bare directory fills the **skill** slot, and skill trees are
+            installed with their owning package —
+            :class:`LocaleResources` already snapshots them at construction
+            and treats them as static for the instance lifetime. So a bare
+            directory is loaded once per process and shared between calls,
+            which is what keeps a per-utterance caller off a full re-expansion
+            of the tree. Two ways to opt out, both already supported: pass the
+            live tree as the first element of a sequence, which fills the
+            **user** slot and is never shared, or construct a
+            :class:`LocaleResources` yourself and pass the instance — this
+            function uses it as given and caches nothing.
         exact: require equality after normalization rather than whole-word
             substring containment.
         strip_diacritics: forwarded to the matcher.
@@ -535,7 +575,7 @@ def voc_match(utterance: str, voc_name: str, lang: str,
     if isinstance(locale, LocaleResources):
         resources = locale
     elif isinstance(locale, (str, bytes)) or hasattr(locale, "__fspath__"):
-        resources = LocaleResources(str(locale))
+        resources = _static_locale_resources(str(locale), None)
     else:  # a sequence of locale dirs, highest precedence first
         dirs = [str(p) for p in locale]
         if not dirs:
@@ -544,8 +584,9 @@ def voc_match(utterance: str, voc_name: str, lang: str,
         # LocaleResources searches in that same order. A single dir is the
         # skill locale; the spare slots stay empty.
         if len(dirs) == 1:
-            resources = LocaleResources(skill_locale=dirs[0])
+            resources = _static_locale_resources(dirs[0], None)
         else:
+            # A user-override tree is kept live, so it is never shared.
             resources = LocaleResources(
                 user_locale=dirs[0],
                 skill_locale=dirs[1],
