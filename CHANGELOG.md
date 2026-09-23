@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.13.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.0a2) (2026-09-23)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.0a1...1.13.0a2)
+
+**Merged pull requests:**
+
+- Expand only the language a process actually asks for [\#153](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/153) ([goldyfruit](https://github.com/goldyfruit))
+- Reuse one LocaleResources per installed locale tree in voc\_match [\#152](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/152) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [1.13.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.0a1) (2026-09-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.12.1a1...1.13.0a1)
@@ -382,10 +391,6 @@
 ## [0.16.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.1a2) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a1...0.16.1a2)
-
-**Merged pull requests:**
-
-- docs: make intent + bus-namespace docs timeless and standalone [\#50](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/50) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.16.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.1a1) (2026-06-27)
 
