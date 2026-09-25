@@ -22,11 +22,14 @@ serves every language the skill ships.
 """
 from __future__ import annotations
 
+import logging
+
 from pathlib import Path
 from typing import (Callable, Dict, Iterator, List, Optional, Sequence, Set,
                     Tuple, Union)
 
-from ovos_spec_tools.expansion import expand
+from ovos_spec_tools.expansion import (expand, bare_pipe_reason,
+                                       BARE_PIPE_ROLES)
 from ovos_spec_tools.language import (
     DEFAULT_MAX_LANGUAGE_DISTANCE,
     closest_lang,
@@ -51,6 +54,8 @@ __all__ = [
 
 # Resource roles, by file extension (OVOS-INTENT-2 §1). The five template
 # roles are line-oriented; `.prompt` is a single whole-file document (§4.4).
+_log = logging.getLogger(__name__)
+
 SLOT_BEARING_ROLES = (".intent", ".dialog")
 SLOT_FREE_ROLES = (".entity", ".voc", ".blacklist")
 PROMPT_ROLE = ".prompt"
@@ -97,6 +102,25 @@ def read_resource_file(path: Path) -> List[str]:
             continue
         templates.append(line)
     return templates
+
+
+def read_resource_file_numbered(path: Path) -> List[Tuple[int, str]]:
+    """The §3 reader, keeping each surviving line's 1-based file line number.
+
+    :func:`read_resource_file` drops blank and comment lines, so a template's
+    index in its list is not its line in the file. A diagnostic that says
+    ``file:line`` has to point at the line the author will open, so this
+    returns the number the reader saw rather than the position after
+    filtering. Same rules, same order, same strings.
+    """
+    text = path.read_text(encoding="utf-8-sig")  # utf-8-sig discards a BOM
+    numbered: List[Tuple[int, str]] = []
+    for number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        numbered.append((number, line))
+    return numbered
 
 
 def iter_locale_dirs(root: Path,
@@ -844,6 +868,48 @@ class LocaleResources:
             return utterance
         return strip_samples(utterance, samples)
 
+    def _bare_pipe_lines(self, path: Path, extension: str,
+                         templates: Sequence[str]) -> frozenset:
+        """WARN for every non-conformant template, and name the ones to skip.
+
+        The four input-direction roles are held to this (OVOS-INTENT-1 §2),
+        and ``.dialog`` with them: OVOS-INTENT-2 §4.2 makes each ``.dialog``
+        line a template whose metacharacters are structural, so a pipe there
+        is not punctuation either. ``.prompt`` is out, being a whole-file
+        document under §4.4 rather than a template.
+
+        The file is re-read, numbered, only when a fault is actually present,
+        so a clean load pays nothing for the diagnostic.
+        """
+        if extension not in BARE_PIPE_ROLES:
+            return frozenset()
+        faults = {template: reason for template in templates
+                  if (reason := bare_pipe_reason(template)) is not None}
+        if not faults:
+            return frozenset()
+        for number, line in read_resource_file_numbered(path):
+            if line in faults:
+                _log.warning("%s:%d: %r skipped -- %s",
+                             path, number, line, faults[line])
+        return frozenset(faults)
+
+    @staticmethod
+    def _all_malformed_error(path: Path, unit: str) -> "MalformedResource":
+        """The error for a file the §3.6 skip left with nothing.
+
+        One shape for every role in ``BARE_PIPE_ROLES``. An empty file already
+        raises under §5, "every file must contribute at least one template",
+        and a file whose every line the skip removed ends in that same state,
+        so it must not answer with an empty list instead: a caller cannot tell
+        that list from a file which legitimately has nothing to give, and the
+        only trace of the fault would be a WARN line nobody reads at install
+        time. §3.6 puts the duty to reject on the tool, and an empty list is
+        not a rejection.
+        """
+        return MalformedResource(
+            f"every {unit} in {path} is malformed (OVOS-INTENT-1 §3.6); "
+            f"the WARN lines above name each one")
+
     def _load_expanded_uncached(self, base_name: str, extension: str,
                                 lang: str) -> Tuple[str, ...]:
         """Load and expand one resource into an immutable snapshot value."""
@@ -859,8 +925,15 @@ class LocaleResources:
                 f"least one template (§5)")
         vocabularies = self.vocabularies(lang)
         slot_free = extension in SLOT_FREE_ROLES
+        malformed = self._bare_pipe_lines(path, extension, templates)
         samples: List[str] = []
         for template in templates:
+            if template in malformed:
+                # Skipped, not raised: a skill whose locale holds one bad line
+                # must still load with the rest of its resources, or a typo in
+                # one .entity takes the whole skill off the bus. The WARN names
+                # the file and the line so the author can fix it.
+                continue
             for sample in expand(template, vocabularies):
                 if slot_free and "{" in sample:
                     raise MalformedResource(
@@ -868,6 +941,10 @@ class LocaleResources:
                         f"template {template!r} contains a named slot")
                 if sample not in samples:
                     samples.append(sample)
+        if malformed and not samples:
+            # Every line was skipped, so this file contributes nothing. Same
+            # end state as the empty file rejected above, and the same clause.
+            raise self._all_malformed_error(path, "template")
         return tuple(samples)
 
     def _load_expanded(self, base_name: str, extension: str,
@@ -923,7 +1000,18 @@ class LocaleResources:
             raise MalformedResource(
                 f"empty resource file {path} — every file must contribute at "
                 f"least one template (§5)")
-        return list(phrases)
+        # A .dialog line is a template too (OVOS-INTENT-2 §4.2), so the §3.6
+        # bare-pipe rule reaches it. The bad phrase is skipped with a WARN
+        # naming file and line, as on the expanded roles: one typo must not
+        # take the whole file out. Nothing left to render is a different
+        # matter, and it is raised rather than returned empty, because a
+        # renderer would otherwise fail far from the cause. Every role in
+        # BARE_PIPE_ROLES raises there, through the one error below.
+        malformed = self._bare_pipe_lines(path, ".dialog", phrases)
+        kept = [phrase for phrase in phrases if phrase not in malformed]
+        if not kept:
+            raise self._all_malformed_error(path, "phrase")
+        return kept
 
     def load_prompt(self, base_name: str, lang: str) -> str:
         """Load a ``.prompt`` as its whole-file string (§4.4).

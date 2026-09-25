@@ -34,9 +34,99 @@ import re
 from typing import Iterator, Dict, List, Optional, Sequence, Tuple
 
 __all__ = ["expand", "fold_double_braces", "strip_type_prefixes",
-          "MalformedTemplate", "REGISTERED_TYPES"]
+          "MalformedTemplate", "REGISTERED_TYPES",
+          "INPUT_DIRECTION_ROLES", "BARE_PIPE_ROLES", "bare_pipe_reason"]
 
 _log = logging.getLogger(__name__)
+
+#: The four input-direction roles (OVOS-INTENT-1 §2): these are held to §2's
+#: normalized form, which forbids the grammar metacharacters as literal input.
+INPUT_DIRECTION_ROLES = (".intent", ".entity", ".voc", ".blacklist")
+
+#: The roles the bare-pipe rule applies to. ``.dialog`` is in the set although
+#: it is output-direction, because OVOS-INTENT-2 §4.2 says a ``.dialog``
+#: phrase "uses the metacharacters ``( ) [ ] { } |`` structurally and
+#: therefore cannot contain any of them as literal spoken text", and makes
+#: each line "a template using expansion". A pipe in a rendered phrase is
+#: therefore structural, not punctuation. ``.prompt`` is out: OVOS-INTENT-2
+#: §4.4 makes it a whole-file document, not a template.
+BARE_PIPE_ROLES = INPUT_DIRECTION_ROLES + (".dialog",)
+
+
+def bare_pipe_reason(template: str) -> Optional[str]:
+    """Say why *template* is non-conformant for a BARE_PIPE_ROLES role, or None.
+
+    A pipe outside a group is the case. OVOS-INTENT-1 §3.6 states the rule in
+    one bullet, by name, under "The following forms are **malformed**; a tool
+    MUST reject any template that contains one":
+
+    - **Pipe outside a group** — a ``|`` that is inside no group, where a
+      group is either ``( … )`` (§3.2) or ``[ … ]``, which §3.3 defines as the
+      group ``(x|)``. ``a|b`` written without either bracket is the malformed
+      form.
+
+    The derivation below is the background the bullet compresses, and it is
+    kept because it says WHY the form cannot be literal text:
+
+    - OVOS-INTENT-1 §3.2: "Parentheses enclose **branches** separated by the
+      pipe ``|``. A group's branches are its ``|``-separated segments". The
+      pipe is a branch separator inside a group, and §3.2 gives it no meaning
+      anywhere else.
+    - OVOS-INTENT-1 §3.1: "Any run of characters that is not a grammar token
+      is literal text." Read alone this makes a bare pipe literal text.
+    - OVOS-INTENT-1 §2, on the input-direction templates ``.intent``,
+      ``.entity``, ``.voc`` and ``.blacklist``: "The grammar metacharacters
+      ``( ) [ ] { } | < >`` **cannot occur as literal input**".
+
+    So the bare pipe is literal text of a character §2 forbids, and
+    OVOS-INTENT-1 §6.2 step 2 tells an engine to "verify the templates conform
+    to §2-§3". ``plata|argent`` in an ``.entity`` is malformed; the author
+    means either two lines or one group, ``(plata|argent)``.
+
+    A pipe inside ``(...)`` or ``[...]`` is a branch separator and is fine:
+    ``a [b|c] d`` is a well-formed optional group with branches. A pipe inside
+    ``{...}`` or ``<...>`` is not reported here, because the slot-name and
+    vocabulary-name rules (§3.4, §3.7) already reject it with a better message
+    and this must not report the same fault twice.
+
+    Args:
+        template: one template line, as the §3 reader returns it.
+
+    Returns:
+        A sentence naming the fault, for a caller to put after ``file:line``,
+        or ``None`` when the template has no bare pipe.
+    """
+    depth = 0          # ( ) and [ ] nesting: a pipe in here separates branches
+    in_name = 0        # { } and < >: another rule owns what is in here
+    for char in template:
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth = max(0, depth - 1)
+        elif char in "{<":
+            in_name += 1
+        elif char in "}>":
+            in_name = max(0, in_name - 1)
+        elif char == "|" and depth == 0 and in_name == 0:
+            return ("a pipe outside a group is not a branch separator and "
+                    "cannot be literal input: write two lines, or one group "
+                    "(a|b) (OVOS-INTENT-1 §3.6; §2, §3.1, §3.2)")
+    return None
+
+
+def _check_bare_pipe(template: str) -> None:
+    """Raise for a pipe outside a group, as §3.6 requires of every tool.
+
+    ``expand`` is the entry point every other consumer of this library calls,
+    and §3.6 puts the duty on the tool, not on one of its entry points: the
+    eight other malformed forms already raise from here, so the ninth does
+    too. ``lint`` and ``LocaleResources`` keep their own friendlier message
+    with a file and a line, and reach the same verdict.
+    """
+    reason = bare_pipe_reason(template)
+    if reason is not None:
+        raise MalformedTemplate(f"{template!r}: {reason}")
+
 
 # The seven registered typed-slot types (OVOS-INTENT-1 §5.6). Closed set: a
 # type outside it is unregistered and degrades to an untyped slot (§3.6).
@@ -116,6 +206,7 @@ def _expand(template: str,
 
     _check_balanced(template)
     _check_names(template)
+    _check_bare_pipe(template)
 
     # Slot-only template (§3.6): the whole template is a single named slot.
     if _SLOT_TOKEN_RE.fullmatch(template.strip()):
@@ -151,6 +242,7 @@ def _iter_expand(template: str,
     template = strip_type_prefixes(template)
     _check_balanced(template)
     _check_names(template)
+    _check_bare_pipe(template)
     if _SLOT_TOKEN_RE.fullmatch(template.strip()):
         raise MalformedTemplate(
             f"slot-only template {template!r}: a template must carry at least "
