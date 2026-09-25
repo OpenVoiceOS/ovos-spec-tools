@@ -468,3 +468,34 @@ def test_lint_slot_types_clean_returns_no_findings():
     findings = lint_slot_types("play.intent", {"length": "duration"},
                               ["play {duration:length}"])
     assert findings == []
+
+
+# --- §3.6 adjacent slots: .intent and .voc, never .dialog --------------------
+
+# OVOS-INTENT-1 §3.6 forbids adjacent slots so a matcher can delimit them.
+# §2 and §6 put a .dialog outside matching: it is output-direction and
+# caller-filled. The lint therefore checks adjacency on input-direction roles
+# only.
+
+def test_adjacent_slots_in_a_dialog_is_not_a_finding(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "wind.dialog",
+           "Wind is {speed} {speed_unit}.\n")
+    assert lint_locale(locale) == []
+
+
+def test_adjacent_slots_in_an_intent_is_still_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "wind.intent", "wind {speed} {speed_unit}\n")
+    errors = _errors(lint_locale(locale))
+    assert len(errors) == 1
+    assert "adjacent slots" in errors[0].message
+
+
+def test_a_dialog_with_adjacent_slots_keeps_its_other_findings(tmp_path):
+    """Control: skipping adjacency does not silence the rest of §3.6."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "wind.dialog",
+           "Wind is {speed} {speed} strong.\n")
+    assert any("repeated slot name" in f.message
+               for f in _errors(lint_locale(locale)))
