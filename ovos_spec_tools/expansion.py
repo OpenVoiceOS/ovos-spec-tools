@@ -34,9 +34,68 @@ import re
 from typing import Iterator, Dict, List, Optional, Sequence, Tuple
 
 __all__ = ["expand", "fold_double_braces", "strip_type_prefixes",
-          "MalformedTemplate", "REGISTERED_TYPES"]
+          "MalformedTemplate", "REGISTERED_TYPES",
+          "INPUT_DIRECTION_ROLES", "bare_pipe_reason"]
 
 _log = logging.getLogger(__name__)
+
+#: The four input-direction roles (OVOS-INTENT-1 §2). ``.dialog`` and
+#: ``.prompt`` are output-direction and are not held to §2's normalized form,
+#: which is why a pipe in a rendered phrase is ordinary punctuation.
+INPUT_DIRECTION_ROLES = (".intent", ".entity", ".voc", ".blacklist")
+
+
+def bare_pipe_reason(template: str) -> Optional[str]:
+    """Say why *template* is non-conformant for an input-direction role, or None.
+
+    A pipe outside a group is the case. Three clauses give the rule, and no
+    single clause states it, which is why nothing applied it before:
+
+    - OVOS-INTENT-1 §3.2: "Parentheses enclose **branches** separated by the
+      pipe ``|``. A group's branches are its ``|``-separated segments". The
+      pipe is a branch separator inside a group, and §3.2 gives it no meaning
+      anywhere else.
+    - OVOS-INTENT-1 §3.1: "Any run of characters that is not a grammar token
+      is literal text." Read alone this makes a bare pipe literal text.
+    - OVOS-INTENT-1 §2, on the input-direction templates ``.intent``,
+      ``.entity``, ``.voc`` and ``.blacklist``: "The grammar metacharacters
+      ``( ) [ ] { } | < >`` **cannot occur as literal input**".
+
+    So the bare pipe is literal text of a character §2 forbids, and
+    OVOS-INTENT-1 §6.2 step 2 tells an engine to "verify the templates conform
+    to §2-§3". ``plata|argent`` in an ``.entity`` is malformed; the author
+    means either two lines or one group, ``(plata|argent)``.
+
+    A pipe inside ``(...)`` or ``[...]`` is a branch separator and is fine:
+    ``a [b|c] d`` is a well-formed optional group with branches. A pipe inside
+    ``{...}`` or ``<...>`` is not reported here, because the slot-name and
+    vocabulary-name rules (§3.4, §3.7) already reject it with a better message
+    and this must not report the same fault twice.
+
+    Args:
+        template: one template line, as the §3 reader returns it.
+
+    Returns:
+        A sentence naming the fault, for a caller to put after ``file:line``,
+        or ``None`` when the template has no bare pipe.
+    """
+    depth = 0          # ( ) and [ ] nesting: a pipe in here separates branches
+    in_name = 0        # { } and < >: another rule owns what is in here
+    for char in template:
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth = max(0, depth - 1)
+        elif char in "{<":
+            in_name += 1
+        elif char in "}>":
+            in_name = max(0, in_name - 1)
+        elif char == "|" and depth == 0 and in_name == 0:
+            return ("a pipe outside a group is not a branch separator and "
+                    "cannot be literal input: write two lines, or one group "
+                    "(a|b) (OVOS-INTENT-1 §2, §3.1, §3.2; §6.2 step 2)")
+    return None
+
 
 # The seven registered typed-slot types (OVOS-INTENT-1 §5.6). Closed set: a
 # type outside it is unregistered and degrades to an untyped slot (§3.6).

@@ -73,6 +73,8 @@ from ovos_spec_tools.expansion import (
     expand,
     fold_double_braces,
     strip_type_prefixes,
+    bare_pipe_reason,
+    INPUT_DIRECTION_ROLES,
 )
 from ovos_spec_tools.resources import (
     PROMPT_ROLE,
@@ -80,6 +82,7 @@ from ovos_spec_tools.resources import (
     SLOT_FREE_ROLES,
     read_prompt_file,
     read_resource_file,
+    read_resource_file_numbered,
 )
 
 __all__ = [
@@ -137,14 +140,20 @@ class Finding:
         severity: :data:`ERROR` or :data:`WARNING`.
         path: the offending file or directory, as a string.
         message: a human-readable description, citing the spec clause violated.
+        line: the 1-based file line the finding points at, when the finding is
+            about one template rather than the file as a whole. Optional and
+            last, so every existing caller and every existing ``Finding(...)``
+            keeps working unchanged.
     """
 
     severity: str  # ERROR or WARNING
     path: str
     message: str
+    line: Optional[int] = None
 
     def __str__(self) -> str:
-        return f"{self.path}: {self.severity}: {self.message}"
+        where = self.path if self.line is None else f"{self.path}:{self.line}"
+        return f"{where}: {self.severity}: {self.message}"
 
 
 def declared_slots(templates: Sequence[str]) -> frozenset:
@@ -519,6 +528,20 @@ def _lint_file(path: Path,
             "empty file — every resource file must contribute at least one "
             "template (OVOS-INTENT-2 §5)"))
         return findings
+
+    # --- §2 normalized form: a pipe outside a group --------------------------
+    # OVOS-INTENT-1 §3.2 makes the pipe a branch separator inside a group and
+    # gives it no meaning outside one; §3.1 then makes a bare pipe literal
+    # text; §2 forbids that character as literal input in an input-direction
+    # template. §6.2 step 2 tells an engine to verify §2-§3. `plata|argent` in
+    # an .entity is therefore malformed, and the author means two lines or one
+    # group. Reported with the line, because the author has to open it.
+    if extension in INPUT_DIRECTION_ROLES:
+        for number, line in read_resource_file_numbered(path):
+            reason = bare_pipe_reason(line)
+            if reason is not None:
+                findings.append(Finding(
+                    ERROR, str(path), f"{reason}  [in: {line!r}]", number))
 
     # --- syntax (OVOS-INTENT-1) ---------------------------------------------
     slot_free = extension in SLOT_FREE_ROLES

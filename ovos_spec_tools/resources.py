@@ -22,11 +22,14 @@ serves every language the skill ships.
 """
 from __future__ import annotations
 
+import logging
+
 from pathlib import Path
 from typing import (Callable, Dict, Iterator, List, Optional, Sequence, Set,
                     Tuple, Union)
 
-from ovos_spec_tools.expansion import expand
+from ovos_spec_tools.expansion import (expand, bare_pipe_reason,
+                                       INPUT_DIRECTION_ROLES)
 from ovos_spec_tools.language import (
     DEFAULT_MAX_LANGUAGE_DISTANCE,
     closest_lang,
@@ -51,6 +54,8 @@ __all__ = [
 
 # Resource roles, by file extension (OVOS-INTENT-2 §1). The five template
 # roles are line-oriented; `.prompt` is a single whole-file document (§4.4).
+_log = logging.getLogger(__name__)
+
 SLOT_BEARING_ROLES = (".intent", ".dialog")
 SLOT_FREE_ROLES = (".entity", ".voc", ".blacklist")
 PROMPT_ROLE = ".prompt"
@@ -97,6 +102,25 @@ def read_resource_file(path: Path) -> List[str]:
             continue
         templates.append(line)
     return templates
+
+
+def read_resource_file_numbered(path: Path) -> List[Tuple[int, str]]:
+    """The §3 reader, keeping each surviving line's 1-based file line number.
+
+    :func:`read_resource_file` drops blank and comment lines, so a template's
+    index in its list is not its line in the file. A diagnostic that says
+    ``file:line`` has to point at the line the author will open, so this
+    returns the number the reader saw rather than the position after
+    filtering. Same rules, same order, same strings.
+    """
+    text = path.read_text(encoding="utf-8-sig")  # utf-8-sig discards a BOM
+    numbered: List[Tuple[int, str]] = []
+    for number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        numbered.append((number, line))
+    return numbered
 
 
 def iter_locale_dirs(root: Path,
@@ -844,6 +868,29 @@ class LocaleResources:
             return utterance
         return strip_samples(utterance, samples)
 
+    def _bare_pipe_lines(self, path: Path, extension: str,
+                         templates: Sequence[str]) -> frozenset:
+        """WARN for every non-conformant template, and name the ones to skip.
+
+        Only the input-direction roles are held to this (OVOS-INTENT-1 §2):
+        a pipe in a ``.dialog`` phrase is ordinary punctuation in text meant
+        for a person.
+
+        The file is re-read, numbered, only when a fault is actually present,
+        so a clean load pays nothing for the diagnostic.
+        """
+        if extension not in INPUT_DIRECTION_ROLES:
+            return frozenset()
+        faults = {template: reason for template in templates
+                  if (reason := bare_pipe_reason(template)) is not None}
+        if not faults:
+            return frozenset()
+        for number, line in read_resource_file_numbered(path):
+            if line in faults:
+                _log.warning("%s:%d: %r skipped -- %s",
+                             path, number, line, faults[line])
+        return frozenset(faults)
+
     def _load_expanded_uncached(self, base_name: str, extension: str,
                                 lang: str) -> Tuple[str, ...]:
         """Load and expand one resource into an immutable snapshot value."""
@@ -859,8 +906,15 @@ class LocaleResources:
                 f"least one template (§5)")
         vocabularies = self.vocabularies(lang)
         slot_free = extension in SLOT_FREE_ROLES
+        malformed = self._bare_pipe_lines(path, extension, templates)
         samples: List[str] = []
         for template in templates:
+            if template in malformed:
+                # Skipped, not raised: a skill whose locale holds one bad line
+                # must still load with the rest of its resources, or a typo in
+                # one .entity takes the whole skill off the bus. The WARN names
+                # the file and the line so the author can fix it.
+                continue
             for sample in expand(template, vocabularies):
                 if slot_free and "{" in sample:
                     raise MalformedResource(
