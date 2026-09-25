@@ -197,6 +197,14 @@ Validate every resource file under a locale (or single-language) directory.
 A dataclass with `severity` (`"error"` / `"warning"`), `path`, and `message`.
 `str(finding)` formats it as one line.
 
+### `lint_skill_source(path) -> list[Finding]`
+
+Reads a skill's Python source with `ast` — importing nothing — and reports a
+duplicate intent binding: several `@intent_handler` decorators stacked on one
+method, or a handler whose whole body is a call to another handler
+(OVOS-INTENT-2 §4.1). `path` is a directory to walk or a single `.py` file. A
+file that does not parse yields one warning and is skipped.
+
 ### `ovos-spec-lint` (command)
 
 CLI wrapper over `lint_locale`. `ovos-spec-lint <path> [--strict]
