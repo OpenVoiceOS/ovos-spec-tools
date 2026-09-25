@@ -24,7 +24,11 @@ Clause map (which spec rule each rule enforces):
 - *named slot in a slot-free role* → OVOS-INTENT-2 §4.3 — ``.entity`` / ``.voc``
   / ``.blacklist`` are slot-free.
 - *template syntax* → OVOS-INTENT-1 §3.6 (delegated to
-  :func:`~ovos_spec_tools.expansion.expand`).
+  :func:`~ovos_spec_tools.expansion.expand`). One form of §3.6 is scoped by
+  direction (§2): *adjacent slots* is reported for the input-direction roles
+  (``.intent``, ``.entity``, ``.voc``, ``.blacklist``) only. A ``.dialog`` and
+  a ``.prompt`` are output-direction and caller-filled (§5.1, §6), so two of
+  their slots may touch and the linter does not report the pair.
 - *slot-set consistency* → OVOS-INTENT-2 §4.2 (``.dialog`` only): a ``.dialog``
   whose phrases declare different slot sets is an ERROR (the caller fills the
   slots of the rendered phrase, so all phrases must expose the same slots).
@@ -68,6 +72,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from ovos_spec_tools.expansion import (
+    INPUT_DIRECTION,
+    OUTPUT_DIRECTION,
     REGISTERED_TYPES,
     MalformedTemplate,
     expand,
@@ -112,6 +118,10 @@ _VOCABULARY_REFERENCE_SINCE = 2  # the `<name>` inline vocabulary reference
 _PROMPT_ROLE_SINCE = 3      # the `.prompt` role
 # Roles introduced after V0, by the spec version that added them.
 _ROLE_SINCE = {".blacklist": _BLACKLIST_SINCE, PROMPT_ROLE: _PROMPT_ROLE_SINCE}
+
+# The output-direction roles of OVOS-INTENT-1 §2: a caller fills their slots
+# and a renderer reads them, so no matcher ever delimits two of their slots.
+_OUTPUT_DIRECTION_ROLES = (".dialog", PROMPT_ROLE)
 
 _BASE_NAME_RE = re.compile(r"[a-z0-9_]+")
 _SLOT_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
@@ -521,6 +531,14 @@ def _lint_file(path: Path,
         return findings
 
     # --- syntax (OVOS-INTENT-1) ---------------------------------------------
+    # The direction of the role (OVOS-INTENT-1 §2) selects which §3.6 forms
+    # apply. `.intent`, `.entity`, `.voc` and `.blacklist` are input-direction:
+    # an engine trains on them and a matcher fills their slots, so the
+    # adjacent-slot form applies. `.dialog` and `.prompt` are output-direction
+    # and caller-filled (§5.1, §6); the linter therefore does not report
+    # adjacent slots in them. Every other §3.6 form is reported in both.
+    direction = (OUTPUT_DIRECTION if extension in _OUTPUT_DIRECTION_ROLES
+                 else INPUT_DIRECTION)
     slot_free = extension in SLOT_FREE_ROLES
     slot_bearing = extension in SLOT_BEARING_ROLES
     slot_sets: List[frozenset] = []
@@ -532,7 +550,7 @@ def _lint_file(path: Path,
                 f"{_VOCABULARY_REFERENCE_SINCE}; a version-{spec_version} "
                 f"runtime will not expand this template  [in: {template!r}]"))
         try:
-            samples = expand(template, vocabularies)
+            samples = expand(template, vocabularies, direction=direction)
         except MalformedTemplate as exc:
             findings.append(Finding(
                 ERROR, str(path), f"{exc}  [in: {template!r}]"))

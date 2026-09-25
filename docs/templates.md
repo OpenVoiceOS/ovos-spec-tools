@@ -156,7 +156,7 @@ The malformed forms (OVOS-INTENT-1 §3.6):
 | Single-branch group | `(word)`, `()` | a group must offer a *choice* |
 | Empty sample | `[hello]`, `(|)` | a sample with no words trains nothing |
 | Slot-only template | `{name}` | a template needs anchoring literal text |
-| Adjacent slots | `{a} {b}` | no word between two slots to delimit them |
+| Adjacent slots (input direction only) | `{a} {b}` | no word between two slots to delimit them |
 | Repeated slot name | `{x} and {x}` | a slot is defined once per sample |
 | Undefined vocabulary | `<missing>` | no such vocabulary was supplied |
 | Cyclic vocabulary | `<a>`→`<b>`→`<a>` | resolution would not terminate |
@@ -165,6 +165,22 @@ Two are checked against the **expanded samples**, not the raw template:
 `{a} [x] {b}` is malformed because the empty-`x` branch yields the adjacent
 pair `{a} {b}`; and a template is malformed if *any* branch combination
 produces an empty sentence.
+
+One form holds in the **input direction** only (§2). The adjacent-slot rule
+exists so a matcher can tell where one slot's value ends and the next begins.
+A `.dialog` is output-direction: the caller gives one value per slot name and
+the renderer puts each value in place of its name, so nothing recovers a value
+from the rendered text (§5.1, §6). Two touching slots are therefore well formed
+in a `.dialog`, and `{speed} {speed_unit}` is a correct spoken line. Pass the
+direction to `expand` to read a template that way:
+
+```python
+expand("Wind is {speed} {speed_unit}.", direction="output")
+```
+
+`ovos-spec-lint` selects the direction from the file role, and the dialog
+renderer always reads a phrase in the output direction. Every other malformed
+form above holds in both directions.
 
 ## Templates as training data
 

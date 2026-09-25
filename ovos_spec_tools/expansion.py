@@ -26,6 +26,14 @@ alphanumeric word tokens separated by single spaces. This module does **not**
 normalize; it expands.
 
 Malformed templates (OVOS-INTENT-1 §3.6) raise :class:`MalformedTemplate`.
+
+One §3.6 form is scoped by **direction** (§2). The adjacent-slot form
+(``{a} {b}``) states its own reason — a matcher cannot delimit two touching
+values — so it holds for an **input-direction** template only (``.intent``,
+``.entity``, ``.voc``, ``.blacklist``). An **output-direction** template
+(``.dialog``) is caller-filled and never matched (§5.1, §6), so ``expand``
+accepts the pair when it is called with ``direction="output"``. Every other
+malformed form holds in both directions.
 """
 from __future__ import annotations
 
@@ -33,8 +41,9 @@ import logging
 import re
 from typing import Iterator, Dict, List, Optional, Sequence, Tuple
 
-__all__ = ["expand", "fold_double_braces", "strip_type_prefixes",
-          "MalformedTemplate", "REGISTERED_TYPES"]
+__all__ = ["expand", "iter_expand", "fold_double_braces",
+          "strip_type_prefixes", "MalformedTemplate", "REGISTERED_TYPES",
+          "DIRECTIONS", "INPUT_DIRECTION", "OUTPUT_DIRECTION"]
 
 _log = logging.getLogger(__name__)
 
@@ -65,6 +74,18 @@ _DOUBLE_SLOT_TOKEN_RE = re.compile(r"\{\{([^{}]*)\}\}")
 _TYPE_PREFIX_RE = re.compile(r"\A([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)\Z")
 # Two named slots in a sample with only whitespace between them.
 _ADJACENT_SLOTS_RE = re.compile(r"\}\s*\{")
+# The two template directions of OVOS-INTENT-1 §2: `input` is a template an
+# engine trains on and a matcher fills at match time (`.intent`, `.entity`,
+# `.voc`, `.blacklist`); `output` is a caller-filled template a renderer reads
+# (`.dialog`, and the `.prompt` role of OVOS-INTENT-2 §4.4). The §3.6
+# adjacent-slot rule states its own reason — "a matcher cannot tell where one
+# slot's value ends and the next begins" — so it holds for the input direction
+# only. §5.1 fills an output-direction slot from the caller, one value per slot
+# name, and nothing reads a value back out of the rendered text, so two touching
+# slots carry no ambiguity there. Every other §3.6 form is direction-neutral.
+INPUT_DIRECTION = "input"
+OUTPUT_DIRECTION = "output"
+DIRECTIONS = (INPUT_DIRECTION, OUTPUT_DIRECTION)
 
 
 class MalformedTemplate(ValueError):
@@ -77,7 +98,9 @@ class MalformedTemplate(ValueError):
 
 
 def expand(template: str,
-           vocabularies: Optional[Dict[str, Sequence[str]]] = None) -> List[str]:
+           vocabularies: Optional[Dict[str, Sequence[str]]] = None,
+           *,
+           direction: str = INPUT_DIRECTION) -> List[str]:
     """Expand a template to its sample set (OVOS-INTENT-1 §4).
 
     Args:
@@ -85,6 +108,10 @@ def expand(template: str,
         vocabularies: maps a vocabulary name to its members — a sequence of
             slot-free templates (the lines of a ``.voc``). Required only if
             ``template`` contains ``<name>`` references.
+        direction: ``"input"`` (the default) for a template a matcher fills, or
+            ``"output"`` for a caller-filled template a renderer reads (§2).
+            The adjacent-slot rule of §3.6 holds for the input direction only;
+            every other malformed form holds in both.
 
     Returns:
         The sample set: distinct sample sentences, in first-seen order. Each
@@ -93,15 +120,19 @@ def expand(template: str,
     Raises:
         MalformedTemplate: if the template (or a referenced vocabulary) is
             malformed per OVOS-INTENT-1 §3.6.
+        ValueError: if ``direction`` is neither ``"input"`` nor ``"output"``.
     """
-    return _expand(template, dict(vocabularies or {}), ())
+    return _expand(template, dict(vocabularies or {}), (), direction=direction)
 
 
 def _expand(template: str,
             vocabularies: Dict[str, Sequence[str]],
-            stack: Tuple[str, ...]) -> List[str]:
+            stack: Tuple[str, ...],
+            *,
+            direction: str = INPUT_DIRECTION) -> List[str]:
     """Expand ``template``; ``stack`` is the chain of vocabularies being
     resolved, for cycle detection."""
+    _check_direction(direction)
     if not isinstance(template, str):
         raise MalformedTemplate(f"template must be a string, got {type(template)!r}")
 
@@ -123,12 +154,14 @@ def _expand(template: str,
             f"slot-only template {template!r}: a template must carry at least "
             f"one literal word")
 
-    return list(_iter_expand(template, vocabularies, stack))
+    return list(_iter_expand(template, vocabularies, stack,
+                             direction=direction))
 
 
 def iter_expand(template: str,
-                vocabularies: Optional[Dict[str, Sequence[str]]] = None
-                ) -> Iterator[str]:
+                vocabularies: Optional[Dict[str, Sequence[str]]] = None,
+                *,
+                direction: str = INPUT_DIRECTION) -> Iterator[str]:
     """Lazily expand a template to its sample set (OVOS-INTENT-1 §4).
 
     Yields exactly the samples ``expand`` returns, in the same first-seen
@@ -137,14 +170,18 @@ def iter_expand(template: str,
     (``itertools.islice``) pays for N, not for the full product. Validation
     behaves as in ``expand``: template-level malformedness raises before the
     first yield; per-sample checks raise when the offending sample is
-    reached.
+    reached. ``direction`` reads as in ``expand``.
     """
-    yield from _iter_expand(template, dict(vocabularies or {}), ())
+    yield from _iter_expand(template, dict(vocabularies or {}), (),
+                            direction=direction)
 
 
 def _iter_expand(template: str,
                  vocabularies: Dict[str, Sequence[str]],
-                 stack: Tuple[str, ...]) -> Iterator[str]:
+                 stack: Tuple[str, ...],
+                 *,
+                 direction: str = INPUT_DIRECTION) -> Iterator[str]:
+    _check_direction(direction)
     if not isinstance(template, str):
         raise MalformedTemplate(f"template must be a string, got {type(template)!r}")
     template = fold_double_braces(template)
@@ -164,7 +201,7 @@ def _iter_expand(template: str,
         if sentence in seen:  # remove duplicates (§4.1)
             continue
         seen.add(sentence)
-        _check_sample(sentence, template)
+        _check_sample(sentence, template, direction=direction)
         yield sentence
 
 
@@ -360,12 +397,25 @@ def _iter_groups(template: str) -> Iterator[str]:
         yield from _iter_groups(prefix + branch + suffix)
 
 
-def _check_sample(sentence: str, template: str) -> None:
-    """Reject a sample that is malformed per §3.6."""
+def _check_direction(direction: str) -> None:
+    """Reject a direction that is neither of the two of §2."""
+    if direction not in DIRECTIONS:
+        raise ValueError(
+            f"direction must be one of {DIRECTIONS}, got {direction!r}")
+
+
+def _check_sample(sentence: str, template: str, *,
+                  direction: str = INPUT_DIRECTION) -> None:
+    """Reject a sample that is malformed per §3.6.
+
+    The adjacent-slot form is skipped in the output direction: it exists so a
+    matcher can delimit two values, and an output-direction template is
+    caller-filled and never matched (§2, §5.1, §6).
+    """
     if sentence == "":
         raise MalformedTemplate(
             f"template {template!r} yields an empty sample")
-    if _ADJACENT_SLOTS_RE.search(sentence):
+    if direction == INPUT_DIRECTION and _ADJACENT_SLOTS_RE.search(sentence):
         raise MalformedTemplate(
             f"adjacent slots in sample {sentence!r} of template {template!r}: "
             f"a literal word must separate any two slots")

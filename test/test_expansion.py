@@ -492,3 +492,31 @@ def test_inline_keywords_cycle_raises():
 def test_inline_keywords_no_refs():
     assert inline_keywords("hello world", {"x": ["y"]}) == "hello world"
 
+
+
+# --- §3.6 adjacent slots: input direction only --------------------------------
+
+# §3.6 forbids two touching slots because "a matcher cannot tell where one
+# slot's value ends and the next begins". That reason belongs to match-time
+# fill (§5.1), which §2 and §6 confine to the input direction. An
+# output-direction template is caller-filled and never matched, so the pair is
+# unambiguous there.
+
+@pytest.mark.parametrize("template", ["{a}{b}", "{a} {b}", "{{a}} {b}",
+                                      "{a} [foo] {b}"])
+def test_adjacent_slots_accepted_in_the_output_direction(template):
+    """§3.6 — adjacency is an input-direction rule; output renders it."""
+    assert expand(template, direction="output")
+
+
+def test_adjacent_slots_still_rejected_in_the_output_direction_control():
+    """Control: the other §3.6 forms still raise in the output direction."""
+    with pytest.raises(MalformedTemplate):
+        expand("{x} and {x}", direction="output")
+    with pytest.raises(MalformedTemplate):
+        expand("turn (on|off the lights", direction="output")
+
+
+def test_unknown_direction_is_rejected():
+    with pytest.raises(ValueError):
+        expand("hello {name}", direction="sideways")
