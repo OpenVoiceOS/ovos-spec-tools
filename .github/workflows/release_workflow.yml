@@ -2,7 +2,23 @@ name: Release Alpha and Propose Stable
 
 on:
   workflow_dispatch:
-  pull_request:
+  # pull_request_target, not pull_request: GitHub gives a pull_request run whose
+  # head repository is a fork a read-only GITHUB_TOKEN, and the permissions
+  # block below cannot raise it, so the version bump push to dev answers 403 and
+  # no alpha is published. Two merged fork pull requests failed that way here on
+  # 2026-09-23 (#152 and #153, runs 35870842741 and 35867914062), and a re-run
+  # does not help: it keeps the same fork context and the same read-only token.
+  #
+  # pull_request_target runs with the base repository's token at full write and
+  # with secrets. It is safe for this workflow because no job checks out fork
+  # code: publish-alpha.yml reads the base repository's dev, the gh-automations
+  # scripts, and the sha this run itself pushed, and the only event fields that
+  # reach a shell are the pull request number, the author login (compared, never
+  # interpolated) and the labels, which a fork author cannot set. The job also
+  # starts only when merged is true, so a maintainer has already reviewed and
+  # merged the code. The workflow file itself is read from the base branch, so a
+  # fork cannot edit it (T-4058, T-4367).
+  pull_request_target:
     types: [closed]
     branches: [dev]
 
