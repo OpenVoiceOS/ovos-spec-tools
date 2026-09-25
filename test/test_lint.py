@@ -8,6 +8,8 @@ from ovos_spec_tools.lint import (
     declared_slots,
     declared_slot_types,
     lint_locale,
+    lint_skill_source,
+    RX_SEVERITY,
     lint_required_slots,
     lint_slot_types,
     main,
@@ -79,10 +81,10 @@ def test_duplicate_resource_is_an_error(tmp_path):
 def test_legacy_extension_is_a_warning(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "x.voc", "yes\n")
-    _write(locale / "en-US" / "old.rx", ".*\n")
+    _write(locale / "en-US" / "old.value", "one\n")
     findings = lint_locale(locale)
     assert _errors(findings) == []
-    assert any(".rx" in f.message for f in _warnings(findings))
+    assert any(".value" in f.message for f in _warnings(findings))
 
 
 def test_blacklist_paired_with_intent_has_no_warning(tmp_path):
@@ -468,3 +470,192 @@ def test_lint_slot_types_clean_returns_no_findings():
     findings = lint_slot_types("play.intent", {"length": "duration"},
                               ["play {duration:length}"])
     assert findings == []
+
+
+# --- duplicate intent definitions (OVOS-INTENT-2 §4.1) ----------------------
+
+
+@pytest.mark.parametrize("name", [
+    "create_alarm_alt", "create_alarm_alias", "create_alarm_extra",
+    "create_alarm_2",
+])
+def test_duplicate_suffix_intent_is_an_error(tmp_path, name):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "create_alarm.intent", "set an alarm\n")
+    _write(locale / "en-US" / f"{name}.intent", "wake me up\n")
+    errors = _errors(lint_locale(locale))
+    assert len(errors) == 1
+    assert f"{name}.intent" in errors[0].path
+    assert "fold its templates into create_alarm.intent" in errors[0].message
+
+
+def test_duplicate_suffix_without_a_base_file_still_errors(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "create_alarm_alt.intent", "wake me up\n")
+    errors = _errors(lint_locale(locale))
+    assert len(errors) == 1
+    assert "there is no create_alarm.intent" in errors[0].message
+
+
+def test_the_suffix_rule_only_applies_to_intent_files(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "colour_alt.voc", "colour\ncolor\n")
+    assert _errors(lint_locale(locale)) == []
+
+
+@pytest.mark.parametrize("name", [
+    "alt", "alternative", "mp3", "altitude", "set_alarm", "x2y",
+])
+def test_an_ordinary_base_name_is_not_a_duplicate(tmp_path, name):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / f"{name}.intent", "do the thing\n")
+    assert _errors(lint_locale(locale)) == []
+
+
+def test_stacked_intent_handlers_are_an_error(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    @intent_handler('create_alarm_alt.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return 1\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "stacked on handle_create()" in errors[0].message
+    assert "create_alarm.intent" in errors[0].message
+    assert "create_alarm_alt.intent" in errors[0].message
+
+
+def test_a_handler_that_only_calls_another_is_an_error(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return self.do_work(message)\n"
+        "\n"
+        "    @intent_handler('create_alarm_alt.intent')\n"
+        "    def handle_create_alt(self, message):\n"
+        "        'Docstring only, then the call.'\n"
+        "        return self.handle_create(message)\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "handle_create_alt() does nothing but call handle_create()" \
+        in errors[0].message
+    assert "Fold the templates into create_alarm.intent" in errors[0].message
+
+
+def test_a_handler_that_calls_a_non_handler_is_not_flagged(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return self.do_work(message)\n"
+        "\n"
+        "    def do_work(self, message):\n"
+        "        return 1\n"))
+    assert _errors(lint_skill_source(tmp_path)) == []
+
+
+def test_a_handler_with_a_real_body_is_not_flagged(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('a.intent')\n"
+        "    def handle_a(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "    @intent_handler('b.intent')\n"
+        "    def handle_b(self, message):\n"
+        "        self.speak('hi')\n"
+        "        return self.handle_a(message)\n"))
+    assert _errors(lint_skill_source(tmp_path)) == []
+
+
+def test_a_decorated_function_without_a_resource_string_is_named_anyway(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler(IntentBuilder('x'))\n"
+        "    def handle_x(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "    @intent_handler('y.intent')\n"
+        "    def handle_y(self, message):\n"
+        "        return self.handle_x(message)\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "the resource on handle_x()" in errors[0].message
+
+
+def test_unparseable_python_warns_and_is_skipped(tmp_path):
+    _write(tmp_path / "skill" / "broken.py", "def (:\n")
+    findings = lint_skill_source(tmp_path)
+    assert _errors(findings) == []
+    assert any("cannot be parsed" in f.message for f in _warnings(findings))
+
+
+def test_a_tree_with_no_python_yields_nothing(tmp_path):
+    (tmp_path / "empty").mkdir()
+    assert lint_skill_source(tmp_path / "empty") == []
+
+
+def test_the_cli_checks_the_skill_source_beside_the_locale(tmp_path, capsys):
+    _write(tmp_path / "locale" / "en-US" / "create_alarm.intent", "wake me\n")
+    _write(tmp_path / "__init__.py", (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    @intent_handler('create_alarm_alt.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return 1\n"))
+    assert main([str(tmp_path / "locale")]) == 1
+    assert "stacked on handle_create()" in capsys.readouterr().out
+
+
+def test_an_empty_skill_source_switches_the_binding_check_off(tmp_path, capsys):
+    _write(tmp_path / "locale" / "en-US" / "create_alarm.intent", "wake me\n")
+    _write(tmp_path / "__init__.py", (
+        "class S:\n"
+        "    @intent_handler('a.intent')\n"
+        "    @intent_handler('b.intent')\n"
+        "    def handle(self, message):\n"
+        "        return 1\n"))
+    assert main([str(tmp_path / "locale"), "--skill-source", ""]) == 0
+
+
+# --- deprecated regex resources (Miro, 2026-09-25) --------------------------
+
+
+def test_an_rx_file_is_reported_with_its_own_message(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    _write(locale / "en-US" / "when.rx", ".*\n")
+    findings = [f for f in lint_locale(locale) if f.path.endswith("when.rx")]
+    assert len(findings) == 1
+    assert findings[0].severity == RX_SEVERITY
+    assert findings[0].message == (
+        "regex resources are deprecated; model the slot in an .intent file "
+        "(OVOS-INTENT-2 §1)")
+
+
+def test_an_rx_file_is_a_warning_while_two_skills_still_ship_them():
+    # Flip RX_SEVERITY to ERROR once the date-time and weather drop PRs merge.
+    assert RX_SEVERITY == WARNING
+
+
+def test_an_rx_file_does_not_also_raise_the_generic_legacy_warning(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    _write(locale / "en-US" / "when.rx", ".*\n")
+    assert not any("legacy file type" in f.message
+                   for f in lint_locale(locale))
+
+
+def test_strict_fails_a_tree_that_still_ships_an_rx(tmp_path, capsys):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    _write(locale / "en-US" / "when.rx", ".*\n")
+    assert main([str(locale), "--strict", "--skill-source", ""]) == 1
+    assert "regex resources are deprecated" in capsys.readouterr().out

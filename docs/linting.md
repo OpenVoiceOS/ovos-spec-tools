@@ -22,7 +22,9 @@ ovos-spec-lint path/to/locale
 ```
 
 The argument may be a whole `locale/` directory (every language subdirectory is
-checked) or a single `<lang>/` directory. Output is one line per finding:
+checked) or a single `<lang>/` directory. The parent of that target is also
+read as the skill's Python source, for the duplicate-binding rule below. Give
+`--skill-source` another path, or an empty one to switch that rule off. Output is one line per finding:
 
 ```
 locale/en-US/play.intent: error: single-branch group (button): ...
@@ -55,6 +57,12 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 - an `.entity` whose base name, which names a slot, begins with a digit.
 - the same `(role, base name)` appearing twice in one language tree.
 - a `<name>` reference to a vocabulary that does not exist.
+- a **duplicate intent definition** (OVOS-INTENT-2 §4.1). One intent has one
+  `.intent` file, and its alternative phrasings are that file's templates.
+  See [Duplicate intent definitions](#duplicate-intent-definitions).
+- an `.rx` regex resource, once `RX_SEVERITY` is raised to an error. It is a
+  warning while two skills still ship them. See
+  [Regex resources](#regex-resources).
 
 **Warnings**: suspicious but not fatal.
 
@@ -151,3 +159,54 @@ A malformed template now fails the build instead of failing a user's device.
 
 ---
 [← Bus namespaces](bus-namespaces.md) · [Home](README.md) · [API reference →](api-reference.md)
+
+## Duplicate intent definitions
+
+One intent has one `.intent` file. Its alternative phrasings are the lines of
+that file, not a second file beside it (OVOS-INTENT-2 §4.1). Two shapes break
+this, and the linter finds both.
+
+**A second file.** An `.intent` whose base name ends in `_alt`, `_alias`,
+`_extra` or `_2` to `_9`:
+
+```
+locale/en-US/create_alarm_alt.intent: error: duplicate intent definition:
+create_alarm_alt.intent names a second definition of 'create_alarm' — fold its
+templates into create_alarm.intent and delete this file. ...
+```
+
+**A second binding.** The files can look correct while the skill binds them
+to one handler. The linter reads the skill's Python with `ast` and imports
+nothing, so it needs no working install. Two cases are errors:
+
+```python
+@intent_handler("create_alarm.intent")
+@intent_handler("create_alarm_alt.intent")     # stacked on one method
+def handle_create_alarm(self, message): ...
+
+@intent_handler("create_alarm_alt.intent")
+def handle_create_alarm_alt(self, message):    # body is only a call
+    return self.handle_create_alarm(message)
+```
+
+A handler that calls another handler **and does anything else** is not
+flagged: it is a real intent that reuses code. Only a body that is nothing
+but the call is a second binding.
+
+To fix either one, put every phrasing in the base file as its own template
+line and delete the extra file and the extra handler.
+
+## Regex resources
+
+A `.rx` file is deprecated. The slot it captures belongs in an `.intent`
+template, which every engine reads:
+
+```
+locale/en-US/location.rx: warning: regex resources are deprecated; model the
+slot in an .intent file (OVOS-INTENT-2 §1)
+```
+
+The severity is the module constant `RX_SEVERITY`. It is a warning while two
+skills still ship regex resources, so the rule does not turn their builds red
+before they can drop the files. `--strict` fails on it today. When those
+skills no longer ship them, `RX_SEVERITY` becomes `ERROR`.
