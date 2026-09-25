@@ -141,10 +141,20 @@ def _freeze(value: Any) -> Any:
 class MalformedMessage(ValueError, AssertionError):
     """A serialized payload that does not conform to OVOS-MSG-1 §2 / §6.
 
-    Raised by :meth:`Message.deserialize` when the payload fails any
-    structural rule the spec calls out as ``MUST``: unknown top-level
-    keys (§2), missing ``type`` (§2), wrong value types, or unparsable
-    JSON (§6).
+    Raised by :meth:`Message.deserialize` when the payload fails a
+    structural rule the spec calls out as ``MUST``: unparsable JSON or a
+    root that is not a JSON object (§6), a missing ``type``, a ``type``
+    that is not a string (§2.1), or a present ``data`` / ``context``
+    that is not a JSON object (§2.2 / §2.3).
+
+    Unknown top-level keys are **not** a rejection ground. §2 says a
+    consumer "**MUST NOT** reject the Message on that ground alone, and
+    **MUST** ignore those keys", so :meth:`Message.deserialize` ignores
+    them.
+
+    An **empty** ``type`` is accepted here and rejected by
+    :meth:`Message.serialize`, which is the §7 producer gate — see the
+    note in :meth:`Message.__init__`.
 
     Inherits from both :class:`ValueError` (the correctly-typed
     exception class) **and** :class:`AssertionError` (the type raised by
