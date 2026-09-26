@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.13.1a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.1a3) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.1a2...1.13.1a3)
+
+**Merged pull requests:**
+
+- docs: Session.from\_dict does not fill deployment defaults [\#156](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/156) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [1.13.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.1a2) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.1a1...1.13.1a2)
+
 ## [1.13.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.1a1) (2026-09-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.0a2...1.13.1a1)
