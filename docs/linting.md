@@ -22,11 +22,13 @@ ovos-spec-lint path/to/locale
 ```
 
 The argument may be a whole `locale/` directory (every language subdirectory is
-checked) or a single `<lang>/` directory. Output is one line per finding:
+checked) or a single `<lang>/` directory. The parent of that target is also
+read as the skill's Python source, for the duplicate-binding rule below. Give
+`--skill-source` another path, or an empty one to switch that rule off. Output is one line per finding:
 
 ```
 locale/en-US/play.intent: error: single-branch group (button): ...
-locale/en-US/old.rx: warning: .rx is a legacy file type, not an OVOS-INTENT-2 role
+locale/en-US/old.rx: warning: regex resources are deprecated; model the slot in an .intent file (OVOS-INTENT-2 §1)
 locale/english: warning: directory name 'english' is not a BCP-47 language tag
 
 2 error(s), 1 warning(s)
@@ -55,6 +57,13 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 - an `.entity` whose base name, which names a slot, begins with a digit.
 - the same `(role, base name)` appearing twice in one language tree.
 - a `<name>` reference to a vocabulary that does not exist.
+- a **duplicate intent definition**. One intent has one `.intent` file, and
+  its alternative phrasings are that file's templates. A second template
+  registration on one method breaks OVOS-INTENT-3 §8. See
+  [Duplicate intent definitions](#duplicate-intent-definitions).
+- an `.rx` regex resource, once `RX_SEVERITY` is raised to an error. It is a
+  warning while skills still ship them. See
+  [Regex resources](#regex-resources).
 
 **Warnings**: suspicious but not fatal.
 
@@ -62,8 +71,8 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 - a language directory not named like a BCP-47 tag.
 
 - a language directory with no resource files.
-- a legacy file type (`.rx`, `.value`, `.list`, …), not one of the six
-  OVOS-INTENT-2 roles.
+- a legacy file type (`.value`, `.list`, …), not one of the OVOS-INTENT-2
+  roles. A `.rx` has its own message; see [Regex resources](#regex-resources).
 - a `.blacklist` with no matching `.intent` to suppress.
 - a file name that is not lowercase.
 
@@ -143,7 +152,7 @@ Add a step that lints the locale folder of any skill you maintain:
 - run: ovos-spec-lint locale
 ```
 
-A malformed template now fails the build instead of failing a user's device.
+A malformed template fails the build instead of failing a user's device.
 
 ## Next
 
@@ -151,3 +160,90 @@ A malformed template now fails the build instead of failing a user's device.
 
 ---
 [← Bus namespaces](bus-namespaces.md) · [Home](README.md) · [API reference →](api-reference.md)
+
+## Duplicate intent definitions
+
+One intent has one `.intent` file. Its alternative phrasings are the lines of
+that file, not a second file beside it. Two shapes break this, and the linter
+finds both. Both are errors, so a build fails without `--strict`: the rules
+keep the shape out rather than wait for it to come back.
+
+The two rules rest on different authority. The file rule is a project policy.
+OVOS-INTENT-2 §4.1 makes a file's base name the intent name, so two files are
+two conformant intent names and no clause forbids the second one. The binding
+rule enforces OVOS-INTENT-3 §8, which allows "at most one registration per
+method per intent".
+
+**A second file.** An `.intent` whose base name ends in `_alt`, `_alias`,
+`_extra` or `_2` to `_9`:
+
+```
+locale/en-US/create_alarm_alt.intent: error: duplicate intent definition:
+create_alarm_alt.intent names a second definition of 'create_alarm' — fold its
+templates into create_alarm.intent and delete this file. ...
+```
+
+**A second binding.** The files can look correct while the skill binds them
+to one handler. The linter reads the skill's Python with `ast` and imports
+nothing, so it needs no working install. Two cases are errors:
+
+```python
+@intent_handler("create_alarm.intent")
+@intent_handler("create_alarm_alt.intent")     # stacked on one method
+def handle_create_alarm(self, message): ...
+
+@intent_handler("create_alarm_alt.intent")
+def handle_create_alarm_alt(self, message):    # body is only a call
+    return self.handle_create_alarm(message)
+```
+
+A handler that calls another handler **and does anything else** is not
+flagged: it is a real intent that reuses code. The rule reads one shape only,
+a body whose single statement is a direct `self.<handler>(...)` call. It does
+not follow a lambda, a `functools.partial`, or a call through a local alias.
+
+A keyword registration beside a template one is not flagged either.
+OVOS-INTENT-3 §2 permits the pair: "An intent **MAY** carry one registration
+per method — two training-data representations of the same handler". So
+`@intent_handler(IntentBuilder(...))` and `@intent_handler("play.intent")` on
+one method are conformant, and only a second decorator that names a template
+resource is an error.
+
+Method names are matched inside one class body. Two classes in one module may
+each define `handle_play`, and neither sees the other.
+
+To fix either error, put every phrasing in the base file as its own template
+line and delete the extra file and the extra handler.
+
+**Why the file rule is not wider.** It keys on a closed list of suffixes, not
+on "any base name that is another intent's base plus a suffix". A name alone
+cannot tell a second spelling of one intent from a related but distinct one:
+`create_reminder_recurring`, `set_alarm_recurring` and `play_music_playlist`
+are all proper intent names under §4.1, which makes the base name the intent
+name. What decides the case is the binding, and the second rule reads it: if
+two files resolve to one handler, that is the error, whatever they are
+called.
+
+**What the source walk skips.** The walk reads the skill's own Python. It
+skips a directory named `test`, `tests`, `site-packages`, `build`, `dist`, or
+after a virtual environment (`.venv`, `venv`, `env`, `.env`, `virtualenv`,
+`.direnv`). Third-party code in a checked-out environment, and a skill's test
+fixtures, cannot fail the run.
+
+## Regex resources
+
+A `.rx` file is deprecated. The slot it captures belongs in an `.intent`
+template, which every engine reads:
+
+```
+locale/en-US/location.rx: warning: regex resources are deprecated; model the
+slot in an .intent file (OVOS-INTENT-2 §1)
+```
+
+The severity is the module constant `RX_SEVERITY`. It is a warning while
+skills still ship regex resources, so the rule does not fail a build for
+files the author cannot drop in the same commit. Two repositories hold them:
+`ovos-skill-weather`, 24 files, and `ovos-skill-easter-eggs`, 1 file, so 25
+files in 2 repositories. `--strict` fails on a `.rx` either way. When no
+skill ships one, `RX_SEVERITY` becomes `ERROR`. Count the org again before
+changing it; this paragraph is a census and a census ages.

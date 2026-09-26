@@ -18,6 +18,10 @@ Clause map (which spec rule each rule enforces):
   obeys the slot-name rule (not beginning with a digit).
 - *not-a-BCP-47 directory* → OVOS-INTENT-2 §2 — "Language directories are named
   with BCP-47 language tags".
+- *``.rx`` regex resource* → deprecated — a regex resource is not one of the
+  defined roles, and the slot it captures belongs in an ``.intent`` template.
+  Reported at :data:`RX_SEVERITY`, a WARNING while skills still ship them, an
+  ERROR once they do not.
 - *legacy extension / unknown role* → OVOS-INTENT-2 §1 + §5 — only the six
   defined roles exist; a loader "MUST NOT introduce additional resource file
   roles". Legacy Mycroft types are flagged, not parsed.
@@ -31,6 +35,16 @@ Clause map (which spec rule each rule enforces):
   ``.intent`` templates MAY declare different slot sets — their union is the
   intent's slot set (OVOS-INTENT-2 §4.1, OVOS-INTENT-3 §5.1) — and are NOT
   flagged.
+- *duplicate intent definition* → two shapes, and they rest on different
+  authority. The file rule (in :func:`lint_locale`) flags an ``.intent`` base
+  name ending in ``_alt``, ``_alias``, ``_extra`` or ``_2``..``_9``: a project
+  policy that keeps one intent's phrasings in one file. No clause forbids the
+  second file — under OVOS-INTENT-2 §4.1 the base name is the intent name, so
+  the two files are two conformant intent names. The source rule (in
+  :func:`lint_skill_source`) flags a second template registration on one
+  method — several resource-naming ``@intent_handler`` decorators, or a
+  handler whose whole body calls another handler — which OVOS-INTENT-3 §8
+  refuses: "at most one registration per method per intent".
 - *unpaired ``.blacklist``* → OVOS-INTENT-2 §4.3 — a ``.blacklist`` pairs
   by base name with either an ``.intent`` (match suppression: "paired by base
   name with exactly one ``.intent``") or an ``.entity`` / ``{slot}`` /
@@ -53,7 +67,9 @@ Exposed as the ``ovos-spec-lint`` command::
     ovos-spec-lint path/to/locale
 
 The argument may be a ``locale/`` directory (every language subdirectory is
-checked) or a single ``<lang>/`` directory.
+checked) or a single ``<lang>/`` directory. The parent of that target is also
+read as the skill's Python source, for the duplicate-binding rule; give
+``--skill-source`` another path, or an empty one to switch that rule off.
 
 The ``--spec-version`` option additionally flags features newer than a target
 OVOS spec version, for skills that must run on older deployments:
@@ -66,6 +82,7 @@ OVOS spec version, for skills that must run on older deployments:
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import sys
 from dataclasses import dataclass
@@ -93,6 +110,8 @@ from ovos_spec_tools.resources import (
 __all__ = [
     "Finding",
     "lint_locale",
+    "lint_skill_source",
+    "RX_SEVERITY",
     "declared_slots",
     "declared_slot_types",
     "validate_required_slots",
@@ -125,10 +144,42 @@ _BASE_NAME_RE = re.compile(r"[a-z0-9_]+")
 _SLOT_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
 _LANG_TAG_RE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]+)*")
 _SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+# A base name that ends this way names a SECOND definition of an intent the
+# tree already defines: `create_alarm_alt.intent` beside `create_alarm.intent`.
+# This is a project policy and not a spec rule. OVOS-INTENT-2 §4.1 makes the
+# base name the intent name, so both files are conformant intent names, and no
+# clause of OVOS-INTENT-1 to -4 forbids the second one. The policy keeps one
+# intent's phrasings in one file, where a reader finds them.
+#
+# The suffix list is closed on purpose, and it is NOT widened to "any base
+# that is another intent's base plus a suffix". A name alone cannot tell a
+# second spelling of one intent from a related but distinct intent:
+# `set_alarm_recurring`, `play_music_playlist` and `create_reminder_recurring`
+# are all well-formed intent names. A wider rule would make every such pair an
+# error and would be wrong more often than right.
+#
+# What decides those cases is not the name but the binding: if both files
+# resolve to one handler, `lint_skill_source` reports it under OVOS-INTENT-3
+# §8. The source rule is the instrument for that shape, and the file rule
+# keeps the suffixes that can only mean "another copy".
+_DUPLICATE_SUFFIX_RE = re.compile(r"^(?P<base>[a-z0-9_]*[a-z0-9])"
+                                  r"_(?:alt|alias|extra|[2-9])$")
 _TYPED_SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)\}")
 
 ERROR = "error"
 WARNING = "warning"
+
+# The severity of a `.rx` regex resource. A regex resource is deprecated: a
+# skill models the slot in an `.intent` file instead.
+#
+# It stays a WARNING while skills still ship regex resources, so the rule does
+# not fail a build for files the author cannot drop in the same commit. Two
+# repositories hold them: ovos-skill-weather, 24 files, and
+# ovos-skill-easter-eggs, 1 file. Change this to ERROR when no skill ships a
+# `.rx`, and re-count the org first rather than trusting this line. The census
+# is in knowledge/wiki/audits/ci/rx-files.md. `--strict` fails on it either
+# way.
+RX_SEVERITY = WARNING
 
 
 @dataclass
@@ -388,6 +439,13 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
             continue
         if path.suffix in ROLE_EXTENSIONS:
             role_files.append(path)
+        elif path.suffix == ".rx":
+            # A regex resource is deprecated: the slot it captures belongs in
+            # an .intent template, which every engine reads. See RX_SEVERITY.
+            findings.append(Finding(
+                RX_SEVERITY, str(path),
+                "regex resources are deprecated; model the slot in an "
+                ".intent file (OVOS-INTENT-2 §1)"))
         elif path.suffix in LEGACY_EXTENSIONS:
             # §1 defines exactly six roles; §5 forbids a loader inventing more.
             # Legacy Mycroft types are flagged (not parsed) so an author knows
@@ -415,6 +473,29 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
                 f"must be unique per language tree)"))
         else:
             first_seen[key] = path
+
+    # A duplicate intent definition: a second .intent file for an intent the
+    # tree already defines. A project policy; see _DUPLICATE_SUFFIX_RE.
+    intent_stems = {stem for (ext, stem) in first_seen if ext == ".intent"}
+    for path in role_files:
+        if path.suffix != ".intent":
+            continue
+        match = _DUPLICATE_SUFFIX_RE.fullmatch(path.stem)
+        if match is None:
+            continue
+        base = match.group("base")
+        target = f"{base}.intent"
+        if base in intent_stems:
+            where = f"fold its templates into {target} and delete this file"
+        else:
+            where = (f"there is no {target} in this tree: rename this file to "
+                     f"the intent it defines, or fold it into the file that "
+                     f"defines it")
+        findings.append(Finding(
+            ERROR, str(path),
+            f"duplicate intent definition: {path.name} names a second "
+            f"definition of {base!r} — {where}. One intent has one .intent "
+            f"file and its alternatives are its templates"))
 
     # Per-role spec-version gate (a role newer than the target is flagged),
     # plus the `.blacklist` pairing check (§4.3).
@@ -608,6 +689,170 @@ def _lint_file(path: Path,
     return findings
 
 
+_HANDLER_DECORATORS = ("intent_handler", "intent_file_handler")
+# A directory whose Python is not the skill's own source: a checked-out
+# virtual environment, vendored third-party code, or the skill's test tree.
+# A finding in any of them is about somebody else's file.
+_SKIPPED_DIRS = {".git", ".venv", "venv", "env", ".env", "virtualenv",
+                 ".direnv", "site-packages", "test", "tests", "build", "dist",
+                 "node_modules", "__pycache__", ".tox", ".eggs"}
+
+
+def _decorator_name(node: ast.expr) -> Optional[str]:
+    """The bare name of a decorator, whether it is called or not."""
+    if isinstance(node, ast.Call):
+        node = node.func
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
+
+
+def _decorator_resource(node: ast.expr) -> Optional[str]:
+    """The resource string an ``@intent_handler("x.intent")`` names."""
+    if isinstance(node, ast.Call) and node.args:
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            return first.value
+    return None
+
+
+def _intent_decorators(func: ast.AST) -> List[ast.expr]:
+    """Every ``@intent_handler``-family decorator on ``func``."""
+    return [d for d in getattr(func, "decorator_list", [])
+            if _decorator_name(d) in _HANDLER_DECORATORS]
+
+
+def _delegates_to(func: ast.AST) -> Optional[str]:
+    """The method name ``func`` does nothing but call, if that is all it does.
+
+    A handler whose whole body is ``return self.other(message)`` (or the bare
+    call) is not a second intent: it is a second binding to the first one.
+    A docstring before the call is ignored, and nothing else is allowed.
+    """
+    body = list(getattr(func, "body", []))
+    if body and isinstance(body[0], ast.Expr) \
+            and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:]
+    if len(body) != 1:
+        return None
+    statement = body[0]
+    if isinstance(statement, ast.Return):
+        call = statement.value
+    elif isinstance(statement, ast.Expr):
+        call = statement.value
+    else:
+        return None
+    if not isinstance(call, ast.Call):
+        return None
+    target = call.func
+    if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) \
+            and target.value.id == "self":
+        return target.attr
+    return None
+
+
+def _handler_scopes(tree: ast.Module) -> List[List[ast.stmt]]:
+    """Every name scope that can hold intent handlers.
+
+    A method name is only a name inside its own class, so two classes in one
+    module may each define ``handle_play`` without defining one intent twice.
+    The module body is a scope of its own, for a plain decorated function.
+    """
+    scopes = [tree.body]
+    scopes.extend(node.body for node in ast.walk(tree)
+                  if isinstance(node, ast.ClassDef))
+    return scopes
+
+
+def lint_skill_source(path) -> List[Finding]:
+    """Lint the Python source of a skill for duplicate intent definitions.
+
+    The locale linter sees files and cannot see a binding: two ``.intent``
+    files stacked on one method, or a handler that only calls another, define
+    one intent twice as surely as an ``_alt`` resource does. This reads the
+    decorators instead, with :mod:`ast`, and imports nothing.
+
+    Args:
+        path: a directory to walk, or a single ``.py`` file.
+
+    Returns:
+        Every :class:`Finding`, in file order. A file that does not parse
+        yields one :data:`WARNING` and is skipped — a syntax error is the
+        business of a Python linter, not of this one.
+    """
+    root = Path(path)
+    if root.is_file():
+        sources = [root]
+    elif root.is_dir():
+        sources = [f for f in sorted(root.rglob("*.py"))
+                   if not _SKIPPED_DIRS & set(f.relative_to(root).parts)]
+    else:
+        return [Finding(ERROR, str(root), "not a file or a directory")]
+
+    findings: List[Finding] = []
+    for source in sources:
+        try:
+            tree = ast.parse(source.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, SyntaxError) as exc:
+            findings.append(Finding(
+                WARNING, str(source), f"cannot be parsed, so it was not "
+                                      f"checked for duplicate intents: {exc}"))
+            continue
+
+        for scope in _handler_scopes(tree):
+            handlers: Dict[str, List[ast.expr]] = {}
+            functions: Dict[str, ast.AST] = {}
+            for node in scope:
+                if not isinstance(node, (ast.FunctionDef,
+                                         ast.AsyncFunctionDef)):
+                    continue
+                decorators = _intent_decorators(node)
+                if not decorators:
+                    continue
+                functions[node.name] = node
+                handlers[node.name] = decorators
+                # Only a decorator that names a template resource counts. A
+                # keyword registration beside a template one is the pair
+                # OVOS-INTENT-3 §2 permits: "An intent MAY carry one
+                # registration per method — two training-data representations
+                # of the same handler".
+                templates = [r for r in
+                             (_decorator_resource(d) for d in decorators) if r]
+                if len(templates) > 1:
+                    listed = ", ".join(templates)
+                    findings.append(Finding(
+                        ERROR, str(source),
+                        f"duplicate intent definition: {len(templates)} "
+                        f"template registrations are stacked on "
+                        f"{node.name}() ({listed}) — OVOS-INTENT-3 §8 allows "
+                        f"at most one registration per method per intent. "
+                        f"Fold the templates into one .intent file and keep "
+                        f"one decorator"))
+
+            for name, node in functions.items():
+                delegate = _delegates_to(node)
+                if delegate is None or delegate not in handlers \
+                        or delegate == name:
+                    continue
+                mine = next((r for r in
+                             (_decorator_resource(d) for d in handlers[name])
+                             if r), f"the resource on {name}()")
+                theirs = next((r for r in
+                               (_decorator_resource(d)
+                                for d in handlers[delegate])
+                               if r), f"the resource on {delegate}()")
+                findings.append(Finding(
+                    ERROR, str(source),
+                    f"duplicate intent definition: {name}() does nothing but "
+                    f"call {delegate}(), so {mine} and {theirs} define one "
+                    f"intent twice. Fold the templates into {theirs} and "
+                    f"delete {name}() (OVOS-INTENT-3 §8)"))
+    return findings
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """Entry point for the ``ovos-spec-lint`` command.
 
@@ -627,6 +872,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "locale", help="path to a locale/ directory, or a <lang>/ directory")
     parser.add_argument(
+        "--skill-source", default=None,
+        help="path to the skill's Python source, checked for duplicate "
+             "intent bindings. Default: the parent of the locale target, "
+             "when it holds Python files. Pass an empty value to skip.")
+    parser.add_argument(
         "--strict", action="store_true",
         help="exit non-zero if there are warnings as well as errors")
     parser.add_argument(
@@ -638,6 +888,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     findings = lint_locale(args.locale, spec_version=args.spec_version)
+
+    source = args.skill_source
+    if source is None:
+        # The fleet runs `ovos-spec-lint locale`, from the skill root. Take
+        # that root, so the binding check needs no workflow change; a tree
+        # with no Python in it is not a skill and is left alone.
+        parent = Path(args.locale).resolve().parent
+        if parent.is_dir() and any(parent.rglob("*.py")):
+            source = str(parent)
+    if source:
+        findings.extend(lint_skill_source(source))
     errors = [f for f in findings if f.severity == ERROR]
     warnings = [f for f in findings if f.severity == WARNING]
 

@@ -8,6 +8,8 @@ from ovos_spec_tools.lint import (
     declared_slots,
     declared_slot_types,
     lint_locale,
+    lint_skill_source,
+    RX_SEVERITY,
     lint_required_slots,
     lint_slot_types,
     main,
@@ -79,10 +81,10 @@ def test_duplicate_resource_is_an_error(tmp_path):
 def test_legacy_extension_is_a_warning(tmp_path):
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "x.voc", "yes\n")
-    _write(locale / "en-US" / "old.rx", ".*\n")
+    _write(locale / "en-US" / "old.value", "one\n")
     findings = lint_locale(locale)
     assert _errors(findings) == []
-    assert any(".rx" in f.message for f in _warnings(findings))
+    assert any(".value" in f.message for f in _warnings(findings))
 
 
 def test_blacklist_paired_with_intent_has_no_warning(tmp_path):
@@ -468,3 +470,431 @@ def test_lint_slot_types_clean_returns_no_findings():
     findings = lint_slot_types("play.intent", {"length": "duration"},
                               ["play {duration:length}"])
     assert findings == []
+
+
+# --- duplicate intent definitions (OVOS-INTENT-3 §8, project policy) --------
+
+
+@pytest.mark.parametrize("name", [
+    "create_alarm_alt", "create_alarm_alias", "create_alarm_extra",
+    "create_alarm_2",
+])
+def test_duplicate_suffix_intent_is_an_error(tmp_path, name):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "create_alarm.intent", "set an alarm\n")
+    _write(locale / "en-US" / f"{name}.intent", "wake me up\n")
+    errors = _errors(lint_locale(locale))
+    assert len(errors) == 1
+    assert f"{name}.intent" in errors[0].path
+    assert "fold its templates into create_alarm.intent" in errors[0].message
+
+
+def test_duplicate_suffix_without_a_base_file_still_errors(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "create_alarm_alt.intent", "wake me up\n")
+    errors = _errors(lint_locale(locale))
+    assert len(errors) == 1
+    assert "there is no create_alarm.intent" in errors[0].message
+
+
+def test_the_suffix_rule_only_applies_to_intent_files(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "colour_alt.voc", "colour\ncolor\n")
+    assert _errors(lint_locale(locale)) == []
+
+
+@pytest.mark.parametrize("name", [
+    "alt", "alternative", "mp3", "altitude", "set_alarm", "x2y",
+])
+def test_an_ordinary_base_name_is_not_a_duplicate(tmp_path, name):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / f"{name}.intent", "do the thing\n")
+    assert _errors(lint_locale(locale)) == []
+
+
+@pytest.mark.parametrize("name", [
+    "create_reminder_recurring", "set_alarm_recurring", "play_music_playlist",
+])
+def test_a_base_plus_any_suffix_is_not_a_duplicate_by_name(tmp_path, name):
+    """The decision, pinned: the file rule is NOT widened to any base that is
+    another intent's base plus a suffix.
+
+    A name cannot tell a second spelling of one intent from a distinct one,
+    and OVOS-INTENT-2 §4.1 makes the base name the intent name, so each of
+    these is a proper intent. The binding decides that case, and the source
+    rule reads it.
+    """
+    base = name.rsplit("_", 1)[0]
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / f"{base}.intent", "do the thing\n")
+    _write(locale / "en-US" / f"{name}.intent", "do the other thing\n")
+    assert _errors(lint_locale(locale)) == []
+
+
+def test_the_binding_is_what_catches_that_shape(tmp_path):
+    """The other half of the decision above, and the control for it: the two
+    files the name rule leaves alone ARE an error when one handler serves
+    both, which is the alerts#292 shape."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "create_reminder.intent", "remind me\n")
+    _write(locale / "en-US" / "create_reminder_recurring.intent",
+           "remind me every day\n")
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('create_reminder.intent')\n"
+        "    @intent_handler('create_reminder_recurring.intent')\n"
+        "    def handle_create_reminder(self, message):\n"
+        "        return 1\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "create_reminder_recurring.intent" in errors[0].message
+
+
+def test_stacked_intent_handlers_are_an_error(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    @intent_handler('create_alarm_alt.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return 1\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "stacked on handle_create()" in errors[0].message
+    assert "create_alarm.intent" in errors[0].message
+    assert "create_alarm_alt.intent" in errors[0].message
+
+
+def test_a_handler_that_only_calls_another_is_an_error(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return self.do_work(message)\n"
+        "\n"
+        "    @intent_handler('create_alarm_alt.intent')\n"
+        "    def handle_create_alt(self, message):\n"
+        "        'Docstring only, then the call.'\n"
+        "        return self.handle_create(message)\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "handle_create_alt() does nothing but call handle_create()" \
+        in errors[0].message
+    assert "Fold the templates into create_alarm.intent" in errors[0].message
+
+
+def test_a_handler_that_calls_a_non_handler_is_not_flagged(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return self.do_work(message)\n"
+        "\n"
+        "    def do_work(self, message):\n"
+        "        return 1\n"))
+    assert _errors(lint_skill_source(tmp_path)) == []
+
+
+def test_a_handler_with_a_real_body_is_not_flagged(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('a.intent')\n"
+        "    def handle_a(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "    @intent_handler('b.intent')\n"
+        "    def handle_b(self, message):\n"
+        "        self.speak('hi')\n"
+        "        return self.handle_a(message)\n"))
+    assert _errors(lint_skill_source(tmp_path)) == []
+
+
+def test_a_decorated_function_without_a_resource_string_is_named_anyway(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler(IntentBuilder('x'))\n"
+        "    def handle_x(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "    @intent_handler('y.intent')\n"
+        "    def handle_y(self, message):\n"
+        "        return self.handle_x(message)\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "the resource on handle_x()" in errors[0].message
+
+
+def test_unparseable_python_warns_and_is_skipped(tmp_path):
+    _write(tmp_path / "skill" / "broken.py", "def (:\n")
+    findings = lint_skill_source(tmp_path)
+    assert _errors(findings) == []
+    assert any("cannot be parsed" in f.message for f in _warnings(findings))
+
+
+def test_a_tree_with_no_python_yields_nothing(tmp_path):
+    (tmp_path / "empty").mkdir()
+    assert lint_skill_source(tmp_path / "empty") == []
+
+
+def test_the_cli_checks_the_skill_source_beside_the_locale(tmp_path, capsys):
+    _write(tmp_path / "locale" / "en-US" / "create_alarm.intent", "wake me\n")
+    _write(tmp_path / "__init__.py", (
+        "class S:\n"
+        "    @intent_handler('create_alarm.intent')\n"
+        "    @intent_handler('create_alarm_alt.intent')\n"
+        "    def handle_create(self, message):\n"
+        "        return 1\n"))
+    assert main([str(tmp_path / "locale")]) == 1
+    assert "stacked on handle_create()" in capsys.readouterr().out
+
+
+def test_an_empty_skill_source_switches_the_binding_check_off(tmp_path, capsys):
+    _write(tmp_path / "locale" / "en-US" / "create_alarm.intent", "wake me\n")
+    _write(tmp_path / "__init__.py", (
+        "class S:\n"
+        "    @intent_handler('a.intent')\n"
+        "    @intent_handler('b.intent')\n"
+        "    def handle(self, message):\n"
+        "        return 1\n"))
+    assert main([str(tmp_path / "locale"), "--skill-source", ""]) == 0
+
+
+# --- deprecated regex resources ---------------------------------------------
+
+
+def test_an_rx_file_is_reported_with_its_own_message(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    _write(locale / "en-US" / "when.rx", ".*\n")
+    findings = [f for f in lint_locale(locale) if f.path.endswith("when.rx")]
+    assert len(findings) == 1
+    assert findings[0].severity == RX_SEVERITY
+    assert findings[0].message == (
+        "regex resources are deprecated; model the slot in an .intent file "
+        "(OVOS-INTENT-2 §1)")
+
+
+def test_an_rx_file_is_a_warning_while_two_skills_still_ship_them():
+    # RX_SEVERITY becomes ERROR once no skill ships a .rx file.
+    assert RX_SEVERITY == WARNING
+
+
+def test_an_rx_file_does_not_also_raise_the_generic_legacy_warning(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    _write(locale / "en-US" / "when.rx", ".*\n")
+    assert not any("legacy file type" in f.message
+                   for f in lint_locale(locale))
+
+
+def test_strict_fails_a_tree_that_still_ships_an_rx(tmp_path, capsys):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "x.voc", "yes\n")
+    _write(locale / "en-US" / "when.rx", ".*\n")
+    assert main([str(locale), "--strict", "--skill-source", ""]) == 1
+    assert "regex resources are deprecated" in capsys.readouterr().out
+
+
+# --- the name scope of the binding rule -------------------------------------
+
+
+def test_two_classes_may_each_define_a_method_of_the_same_name(tmp_path):
+    """A method name is a name inside its own class body."""
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class Music:\n"
+        "    @intent_handler('music_play.intent')\n"
+        "    def handle_play(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "class Video:\n"
+        "    @intent_handler('video_play.intent')\n"
+        "    def handle_play(self, message):\n"
+        "        return 2\n"))
+    assert lint_skill_source(tmp_path) == []
+
+
+def test_a_delegate_is_not_matched_across_a_class_boundary(tmp_path):
+    """Unrelated.handle_thing carries no decorator and is Unrelated's own
+    helper. Matching it against Outer.handle_thing advises deleting a working
+    handler."""
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class Outer:\n"
+        "    @intent_handler('outer.intent')\n"
+        "    def handle_thing(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "class Unrelated:\n"
+        "    @intent_handler('unrelated.intent')\n"
+        "    def handle_other(self, message):\n"
+        "        return self.handle_thing(message)\n"
+        "\n"
+        "    def handle_thing(self, message):\n"
+        "        return 2\n"))
+    assert lint_skill_source(tmp_path) == []
+
+
+def test_a_delegate_inside_one_class_is_still_an_error(tmp_path):
+    """The control for the two tests above: the same shape, one class."""
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('outer.intent')\n"
+        "    def handle_thing(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "    @intent_handler('other.intent')\n"
+        "    def handle_other(self, message):\n"
+        "        return self.handle_thing(message)\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "handle_other() does nothing but call handle_thing()" \
+        in errors[0].message
+
+
+def test_a_module_level_handler_is_read_in_the_module_scope(tmp_path):
+    """Scoping per class must not drop a plain decorated function."""
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "@intent_handler('a.intent')\n"
+        "@intent_handler('b.intent')\n"
+        "def handle_a(message):\n"
+        "    return 1\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert "stacked on handle_a() (a.intent, b.intent)" in errors[0].message
+
+
+# --- a keyword registration beside a template one (OVOS-INTENT-3 §2) --------
+
+
+def test_a_keyword_and_a_template_registration_on_one_method_are_permitted(
+        tmp_path):
+    """OVOS-INTENT-3 §2: "An intent MAY carry one registration per method —
+    two training-data representations of the same handler"."""
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler(IntentBuilder('PlayIntent').require('Play'))\n"
+        "    @intent_handler('play.intent')\n"
+        "    def handle_play(self, message):\n"
+        "        return 1\n"))
+    assert lint_skill_source(tmp_path) == []
+
+
+def test_two_template_registrations_on_one_method_are_refused(tmp_path):
+    """The other half of §2: a second template registration for one intent is
+    refused by OVOS-INTENT-3 §8."""
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('play.intent')\n"
+        "    @intent_handler('play_alt.intent')\n"
+        "    def handle_play(self, message):\n"
+        "        return 1\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert errors[0].message == (
+        "duplicate intent definition: 2 template registrations are stacked "
+        "on handle_play() (play.intent, play_alt.intent) — OVOS-INTENT-3 §8 "
+        "allows at most one registration per method per intent. Fold the "
+        "templates into one .intent file and keep one decorator")
+
+
+def test_two_keyword_registrations_on_one_method_are_not_counted(tmp_path):
+    """Neither decorator names a template resource, so the template rule has
+    nothing to count and the advice would be impossible to follow."""
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler(IntentBuilder('A').require('A'))\n"
+        "    @intent_handler(IntentBuilder('B').require('B'))\n"
+        "    def handle_play(self, message):\n"
+        "        return 1\n"))
+    assert lint_skill_source(tmp_path) == []
+
+
+# --- the clause citations ---------------------------------------------------
+
+
+def test_the_file_rule_cites_no_clause(tmp_path):
+    """OVOS-INTENT-2 §4.1 makes the base name the intent name; it does not
+    forbid a second file. The file rule is a project policy."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "create_alarm.intent", "wake me\n")
+    _write(locale / "en-US" / "create_alarm_alt.intent", "wake me up\n")
+    errors = [f for f in _errors(lint_locale(locale))
+              if "duplicate intent definition" in f.message]
+    assert len(errors) == 1
+    assert "OVOS-INTENT" not in errors[0].message
+
+
+def test_the_binding_rule_cites_the_registration_clause(tmp_path):
+    source = tmp_path / "skill" / "__init__.py"
+    _write(source, (
+        "class S:\n"
+        "    @intent_handler('a.intent')\n"
+        "    def handle_a(self, message):\n"
+        "        return 1\n"
+        "\n"
+        "    @intent_handler('b.intent')\n"
+        "    def handle_b(self, message):\n"
+        "        return self.handle_a(message)\n"))
+    errors = _errors(lint_skill_source(tmp_path))
+    assert len(errors) == 1
+    assert errors[0].message.endswith("(OVOS-INTENT-3 §8)")
+    assert "§4.1" not in errors[0].message
+
+
+# --- what the source walk skips ---------------------------------------------
+
+
+@pytest.mark.parametrize("skipped", [
+    "test", "tests", "env/lib/python3.11/site-packages", ".venv", "venv",
+    ".env", "virtualenv", ".direnv", "build", "dist",
+])
+def test_the_source_walk_skips_foreign_python(tmp_path, skipped):
+    """A finding in a checked-out environment, in vendored code, or in the
+    skill's test fixtures is about somebody else's file."""
+    stacked = ("class S:\n"
+               "    @intent_handler('a.intent')\n"
+               "    @intent_handler('b.intent')\n"
+               "    def handle_a(self, message):\n"
+               "        return 1\n")
+    _write(tmp_path / skipped / "mod.py", stacked)
+    assert lint_skill_source(tmp_path) == []
+
+
+def test_the_source_walk_still_reads_the_skill_itself(tmp_path):
+    """The control: the same file outside a skipped directory is reported."""
+    _write(tmp_path / "ovos_skill_x" / "__init__.py",
+           ("class S:\n"
+            "    @intent_handler('a.intent')\n"
+            "    @intent_handler('b.intent')\n"
+            "    def handle_a(self, message):\n"
+            "        return 1\n"))
+    assert len(_errors(lint_skill_source(tmp_path))) == 1
+
+
+def test_the_cli_exit_matches_the_base_run_when_a_venv_is_present(
+        tmp_path, capsys):
+    """`ovos-spec-lint locale` from a repository root must not fail a build
+    because a virtual environment or a test tree is checked out beside it."""
+    _write(tmp_path / "locale" / "en-US" / "play.intent", "play {query}\n")
+    stacked = ("class S:\n"
+               "    @intent_handler('a.intent')\n"
+               "    @intent_handler('b.intent')\n"
+               "    def handle_a(self, message):\n"
+               "        return 1\n")
+    _write(tmp_path / "test" / "test_fake.py", stacked)
+    _write(tmp_path / "env" / "lib" / "python3.11" / "site-packages"
+           / "third" / "mod.py", stacked)
+    target = str(tmp_path / "locale")
+    assert main([target]) == 0
+    assert main([target, "--skill-source", ""]) == 0
