@@ -141,10 +141,20 @@ def _freeze(value: Any) -> Any:
 class MalformedMessage(ValueError, AssertionError):
     """A serialized payload that does not conform to OVOS-MSG-1 §2 / §6.
 
-    Raised by :meth:`Message.deserialize` when the payload fails any
-    structural rule the spec calls out as ``MUST``: unknown top-level
-    keys (§2), missing ``type`` (§2), wrong value types, or unparsable
-    JSON (§6).
+    Raised by :meth:`Message.deserialize` when the payload fails a
+    structural rule the spec calls out as ``MUST``: unparsable JSON or a
+    root that is not a JSON object (§6), a missing ``type``, a ``type``
+    that is not a string (§2.1), or a present ``data`` / ``context``
+    that is not a JSON object (§2.2 / §2.3).
+
+    Unknown top-level keys are **not** a rejection ground. §2 says a
+    consumer "**MUST NOT** reject the Message on that ground alone, and
+    **MUST** ignore those keys", so :meth:`Message.deserialize` ignores
+    them.
+
+    An **empty** ``type`` is accepted here and rejected by
+    :meth:`Message.serialize`, which is the §7 producer gate — see the
+    note in :meth:`Message.__init__`.
 
     Inherits from both :class:`ValueError` (the correctly-typed
     exception class) **and** :class:`AssertionError` (the type raised by
@@ -379,10 +389,11 @@ class Message:
             absent ``data`` / ``context`` defaulted to ``{}`` (§2).
 
         Raises :class:`MalformedMessage` per the §7 ``MUST reject``
-        conformance rules: unparsable JSON, non-object root, unknown
-        top-level keys, missing ``type``, or wrong value types — including
-        a present-but-non-object ``data`` / ``context`` (``[]``, ``0``,
-        ``false``, …), which §6 forbids silently coercing to ``{}``.
+        conformance rules: unparsable JSON, non-object root, missing
+        ``type``, or wrong value types — including a present-but-non-object
+        ``data`` / ``context`` (``[]``, ``0``, ``false``, …), which §6
+        forbids silently coercing to ``{}``. Unknown top-level keys are
+        **not** a rejection ground (§2) — they are ignored.
         """
         if isinstance(payload, (bytes, bytearray)):
             payload = payload.decode("utf-8")
@@ -397,13 +408,10 @@ class Message:
         if not isinstance(obj, dict):
             raise MalformedMessage(
                 "Message payload must be a JSON object (§2)")
-        # §2: "Other top-level keys MUST NOT appear; consumers MUST
-        # reject any Message with unknown top-level keys."
-        unknown = set(obj.keys()) - {"type", "data", "context"}
-        if unknown:
-            raise MalformedMessage(
-                f"unknown top-level keys {sorted(unknown)!r} — §2 "
-                "forbids any key other than 'type', 'data', 'context'")
+        # §2: producers MUST NOT emit any top-level key beyond 'type',
+        # 'data', 'context', but a consumer that receives one anyway
+        # "MUST NOT reject the Message on that ground alone, and MUST
+        # ignore those keys."
         if "type" not in obj:
             raise MalformedMessage("missing required key 'type' (§2)")
         # §2.2/§2.3: when present, ``data`` and ``context`` MUST be JSON
@@ -466,8 +474,12 @@ class Message:
         - new ``destination`` := old ``source`` (§5.2 step 1, when set);
         - new ``source`` := old ``destination`` — if the old
           ``destination`` was an array, the **first** entry is chosen
-          (§5.2 step 2: the choice is implementation-defined and consumers
-          MUST NOT rely on a particular member);
+          (§5.2 step 2). The array-of-strings form itself has **no MSG-1
+          clause**: §3.2/§3.3 type both routing keys as ``string``, and
+          §3.3 names "one consumer or all of them" as the only forms —
+          "there is no multi-address form." This is pre-existing,
+          unchanged behaviour, kept because real producers on the fleet
+          emit it (T-2238, filed against architecture; not a §5.2 rule);
         - every other context key, including ``session`` (§4), is preserved
           unchanged (§5.2 step 3).
 
@@ -501,12 +513,31 @@ class Message:
         explicit_session = bool(context) and "session" in context
         if context:
             new_context.update(context)
+        # §3.3: "no identifier is ever the empty string. A consumer that
+        # receives one MUST treat the field as absent". Drop an empty-string
+        # or ``None`` peer BEFORE the swap, so §5.2 step 3 sees it as absent
+        # and it is never emitted. The array-of-strings form has no MSG-1
+        # clause of its own (T-2238, filed against architecture), but each
+        # member is still an identifier under §3.3, so an empty member is
+        # dropped the same as a scalar ``""`` would be.
+        for key in ("source", "destination"):
+            value = new_context.get(key)
+            if isinstance(value, list):
+                value = [v for v in value if v not in ("", None)]
+                if value:
+                    new_context[key] = value
+                else:
+                    new_context.pop(key, None)
+            elif value is None or value == "":
+                new_context.pop(key, None)
         # §5.2 swap. Read both sides BEFORE writing to avoid clobbering.
         src = new_context.get("source")
         dst = new_context.get("destination")
         if dst is not None:
-            # array-of-strings form: producer chooses one; consumers
-            # MUST NOT rely on a particular member being chosen (§5.2)
+            # pre-existing array-of-strings handling, not a §5.2 clause
+            # (T-2238): producer picks a member; an empty list cannot reach
+            # here since nothing above empties one, so ``dst[0]`` is safe
+            # only when ``dst`` is a non-empty list — guard it explicitly.
             new_context["source"] = (
                 dst[0] if isinstance(dst, list) and dst else dst)
         if src is not None:
@@ -529,11 +560,34 @@ class Message:
         correlate ``<request>.response`` against an outstanding request in
         the same ``session`` (§5.4).
 
+        §5.3 defines the shorthand "only where the arithmetic is
+        unambiguous": ``T`` **MUST NOT** already end in ``.response``
+        (that would mint ``<x>.response.response``, "which no
+        specification defines"), and **MUST NOT** contain a ``:`` (a
+        dispatch topic "has no ``.response`` counterpart"). Where either
+        condition fails, "the answering component names the answering
+        topic explicitly and derives via ``reply`` instead" — so this
+        method raises rather than mint an undefined topic.
+
         Args:
             data: payload of the response (``D'``); ``None`` → ``{}``.
             context: optional context keys overlaid before the §5.2 swap.
 
         Returns:
             A new Message whose ``type`` is ``self.msg_type + ".response"``.
+
+        Raises:
+            ValueError: if ``self.msg_type`` already ends in
+                ``.response``, or contains a ``:`` (§5.3).
         """
+        if self.msg_type.endswith(".response"):
+            raise ValueError(
+                f"{self.msg_type!r} already ends in '.response' — the "
+                "'.response' shorthand is undefined here (§5.3); name "
+                "the answering topic explicitly and use reply() instead")
+        if ":" in self.msg_type:
+            raise ValueError(
+                f"{self.msg_type!r} is a dispatch topic (contains ':') — "
+                "it has no '.response' counterpart (§5.3); name the "
+                "answering topic explicitly and use reply() instead")
         return self.reply(self.msg_type + ".response", data, context)
