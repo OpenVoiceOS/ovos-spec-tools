@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.13.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.1a1) (2026-09-26)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.0a2...1.13.1a1)
+
+**Merged pull requests:**
+
+- docs: lint.py clause map names both halves of the .blacklist pairing \(OVOS-INTENT-2 §4.3\) [\#157](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/157) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+- fix: Message ignores unknown keys, drops empty routing keys, guards response\(\) \(OVOS-MSG-1\) [\#149](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/149) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.13.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.0a2) (2026-09-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.0a1...1.13.0a2)
@@ -371,10 +380,6 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.1a1...0.17.2a1)
 
-**Merged pull requests:**
-
-- fix: reject malformed keyword intents at build/emit \(INTENT-3 §4.2\) [\#54](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/54) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.17.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.1a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.0a1...0.17.1a1)
@@ -382,11 +387,6 @@
 ## [0.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.16.1a2...0.17.0a1)
-
-**Merged pull requests:**
-
-- feat: bridge AUDIO-1 §7 output topics in MIGRATION\_MAP [\#55](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/55) ([JarbasAl](https://github.com/JarbasAl))
-- fix: enforce OVOS-MSG-1 §2.1 type syntax on serialize [\#53](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/53) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.16.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.16.1a2) (2026-06-27)
 
