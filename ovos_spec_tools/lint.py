@@ -31,8 +31,13 @@ Clause map (which spec rule each rule enforces):
   ``.intent`` templates MAY declare different slot sets — their union is the
   intent's slot set (OVOS-INTENT-2 §4.1, OVOS-INTENT-3 §5.1) — and are NOT
   flagged.
-- *blacklist with no matching ``.intent``* → OVOS-INTENT-2 §4.3 — a
-  ``.blacklist`` "is paired by base name with exactly one ``.intent``".
+- *unpaired ``.blacklist``* → OVOS-INTENT-2 §4.3 — a ``.blacklist`` pairs
+  by base name with either an ``.intent`` (match suppression: "paired by base
+  name with exactly one ``.intent``") or an ``.entity`` / ``{slot}`` /
+  vocabulary (slot-value exclusion: "its phrase set lists values that MUST
+  NOT fill that slot"). A ``.blacklist`` that matches neither is inert and
+  is flagged; ``{slot}`` names declared inline in an ``.intent`` template
+  count as a pairing target.
 - *required slot declared by no template* → OVOS-INTENT-3 §5.3 — "A required
   slot MUST be declared by at least one template in the intent … a tool MUST
   reject the definition at registration time." This is an intent-**definition**
