@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.14.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a1) (2026-09-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.1a3...1.14.0a1)
+
+**Merged pull requests:**
+
+- feat: reject a pipe outside a group in an input-direction template [\#159](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/159) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.13.1a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.13.1a3) (2026-09-26)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.1a2...1.13.1a3)
@@ -383,10 +391,6 @@
 ## [0.17.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.3a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.2a1...0.17.3a1)
-
-**Merged pull requests:**
-
-- fix: warn \(not raise\) on malformed intent at build/emit \(INTENT-3 §4.2\) [\#59](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/59) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.17.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.2a1) (2026-06-27)
 
