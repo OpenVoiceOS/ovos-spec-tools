@@ -78,6 +78,8 @@ from ovos_spec_tools.expansion import (
     expand,
     fold_double_braces,
     strip_type_prefixes,
+    bare_pipe_reason,
+    BARE_PIPE_ROLES,
 )
 from ovos_spec_tools.resources import (
     PROMPT_ROLE,
@@ -85,6 +87,7 @@ from ovos_spec_tools.resources import (
     SLOT_FREE_ROLES,
     read_prompt_file,
     read_resource_file,
+    read_resource_file_numbered,
 )
 
 __all__ = [
@@ -142,14 +145,20 @@ class Finding:
         severity: :data:`ERROR` or :data:`WARNING`.
         path: the offending file or directory, as a string.
         message: a human-readable description, citing the spec clause violated.
+        line: the 1-based file line the finding points at, when the finding is
+            about one template rather than the file as a whole. Optional and
+            last, so every existing caller and every existing ``Finding(...)``
+            keeps working unchanged.
     """
 
     severity: str  # ERROR or WARNING
     path: str
     message: str
+    line: Optional[int] = None
 
     def __str__(self) -> str:
-        return f"{self.path}: {self.severity}: {self.message}"
+        where = self.path if self.line is None else f"{self.path}:{self.line}"
+        return f"{where}: {self.severity}: {self.message}"
 
 
 def declared_slots(templates: Sequence[str]) -> frozenset:
@@ -525,6 +534,23 @@ def _lint_file(path: Path,
             "template (OVOS-INTENT-2 §5)"))
         return findings
 
+    # --- §3.6 malformed form: a pipe outside a group -------------------------
+    # OVOS-INTENT-1 §3.6 names the form: a `|` inside no group, where a group
+    # is `( ... )` or `[ ... ]`. `plata|argent` in an .entity is malformed,
+    # and the author means two lines or one group. The four input-direction
+    # roles are held to it under §2, and .dialog with them, because
+    # OVOS-INTENT-2 §4.2 makes a .dialog line a template whose metacharacters
+    # are structural. Reported with the line, because the author has to open
+    # it.
+    bare_pipe_lines = set()
+    if extension in BARE_PIPE_ROLES:
+        for number, line in read_resource_file_numbered(path):
+            reason = bare_pipe_reason(line)
+            if reason is not None:
+                bare_pipe_lines.add(line)
+                findings.append(Finding(
+                    ERROR, str(path), f"{reason}  [in: {line!r}]", number))
+
     # --- syntax (OVOS-INTENT-1) ---------------------------------------------
     slot_free = extension in SLOT_FREE_ROLES
     slot_bearing = extension in SLOT_BEARING_ROLES
@@ -536,6 +562,11 @@ def _lint_file(path: Path,
                 f"an inline vocabulary reference <…> requires spec version "
                 f"{_VOCABULARY_REFERENCE_SINCE}; a version-{spec_version} "
                 f"runtime will not expand this template  [in: {template!r}]"))
+        if template in bare_pipe_lines:
+            # Already reported above, with the line number this loop does not
+            # have. ``expand`` raises for the same fault (OVOS-INTENT-1 §3.6),
+            # and one fault must not be reported twice.
+            continue
         try:
             samples = expand(template, vocabularies)
         except MalformedTemplate as exc:
