@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.14.0a6](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a6) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a5...1.14.0a6)
+
+## [1.14.0a5](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a5) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a4...1.14.0a5)
+
+## [1.14.0a4](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a4) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a3...1.14.0a4)
+
+**Merged pull requests:**
+
+- translate\(kab\): update single\_branch.intent [\#173](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/173) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+
 ## [1.14.0a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a3) (2026-10-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a2...1.14.0a3)
@@ -370,10 +386,6 @@
 ## [1.2.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.1a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.0a1...1.2.1a1)
-
-**Merged pull requests:**
-
-- fix: default session single source of truth \(sessions dict\) [\#69](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/69) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.2.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.0a1) (2026-06-29)
 
