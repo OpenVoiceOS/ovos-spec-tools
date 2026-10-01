@@ -1,0 +1,17 @@
+name: License Check
+
+on:
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  license_check:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/license-check.yml@dev
+    with:
+      # pilosus/action-pip-license-checker queries PyPI metadata for each
+      # installed package. The PyPI release of ovos-spec-tools predates the
+      # SPDX License classifier in pyproject.toml, so the package audits
+      # itself as "Error" (unknown). Run in warn-only mode until the next
+      # alpha republishes — transitive dependencies still get reported.
+      warn_only: true
