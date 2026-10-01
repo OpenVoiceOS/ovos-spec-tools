@@ -1,12 +1,11 @@
 # Changelog
 
-## [1.14.0a4](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a4) (2026-10-01)
+## [1.14.0a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a3) (2026-10-01)
 
-[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a2...1.14.0a4)
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a2...1.14.0a3)
 
 **Merged pull requests:**
 
-- translate\(kab\): update single\_branch.intent [\#173](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/173) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
 - translate\(kab\): update unbalanced.intent [\#172](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/172) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
 
 ## [1.14.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a2) (2026-10-01)
