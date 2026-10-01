@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.14.0a8](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a8) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a7...1.14.0a8)
+
+**Merged pull requests:**
+
+- translate\(kab\): update agenda.dialog [\#171](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/171) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+
+## [1.14.0a7](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a7) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a6...1.14.0a7)
+
 ## [1.14.0a6](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a6) (2026-10-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a5...1.14.0a6)
@@ -371,17 +383,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.2a1...1.2.3a1)
 
-**Merged pull requests:**
-
-- fix: reply/response honour an explicit session in context= [\#73](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/73) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [1.2.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.2a1) (2026-06-29)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.1a1...1.2.2a1)
-
-**Merged pull requests:**
-
-- fix: default session folds like any session \(drop owner-only reservation\) [\#71](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/71) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.2.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.1a1) (2026-06-29)
 
