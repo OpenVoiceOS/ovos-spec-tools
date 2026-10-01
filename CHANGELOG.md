@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.14.0a4](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a4) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a2...1.14.0a4)
+
+**Merged pull requests:**
+
+- translate\(kab\): update single\_branch.intent [\#173](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/173) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+- translate\(kab\): update unbalanced.intent [\#172](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/172) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+
+## [1.14.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a2) (2026-10-01)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a1...1.14.0a2)
+
+**Merged pull requests:**
+
+- translate\(kab\): update greet.intent [\#170](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/170) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+- translate\(kab\): update greeting.voc [\#169](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/169) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+- translate\(kab\): update weather.dialog [\#168](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/168) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+- translate\(kab\): update play.intent [\#167](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/167) ([ovos-localize[bot]](https://github.com/apps/ovos-localize))
+
 ## [1.14.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a1) (2026-09-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.13.1a3...1.14.0a1)
