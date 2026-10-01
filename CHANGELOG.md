@@ -360,33 +360,17 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.1.0a1...1.2.0a1)
 
-**Merged pull requests:**
-
-- feat: SessionManager singleton registry + forward/reply session stamping [\#67](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/67) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [1.1.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.1.0a1) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.0.0a1...1.1.0a1)
-
-**Merged pull requests:**
-
-- feat: complete SpecMessage with all spec-defined bus topics [\#65](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/65) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.0.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.0.0a1) (2026-06-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.18.0a1...1.0.0a1)
 
-**Breaking changes:**
-
-- fix!: drop handler-trio from the namespace migration bridge \(orchestrator-owned\) [\#63](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/63) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [0.18.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.18.0a1) (2026-06-27)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/0.17.3a1...0.18.0a1)
-
-**Merged pull requests:**
-
-- feat: make Session and Message hashable [\#61](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/61) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [0.17.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/0.17.3a1) (2026-06-27)
 
