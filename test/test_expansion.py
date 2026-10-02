@@ -492,3 +492,57 @@ def test_inline_keywords_cycle_raises():
 def test_inline_keywords_no_refs():
     assert inline_keywords("hello world", {"x": ["y"]}) == "hello world"
 
+
+# --- §3.6 adjacent slots: input direction only --------------------------------
+
+# §3.6 forbids two touching slots because "a matcher cannot tell where one
+# slot's value ends and the next begins". That reason belongs to match-time
+# fill (§5.1), which §2 and §6 confine to the input direction. An
+# output-direction template is caller-filled and never matched, so the pair is
+# unambiguous there.
+
+@pytest.mark.parametrize("template,expected", [
+    ("{a}{b}", ["{a}{b}"]),
+    ("{a} {b}", ["{a} {b}"]),
+    ("{{a}} {b}", ["{a} {b}"]),
+    ("{a} [foo] {b}", ["{a} foo {b}", "{a} {b}"]),
+])
+def test_adjacent_slots_accepted_in_the_output_direction(template, expected):
+    """§3.6 — adjacency is an input-direction rule; output renders it."""
+    assert expand(template, direction="output") == expected
+
+
+def test_other_malformed_forms_still_raise_in_the_output_direction():
+    """Control: the other §3.6 forms still raise in the output direction."""
+    with pytest.raises(MalformedTemplate):
+        expand("{x} and {x}", direction="output")
+    with pytest.raises(MalformedTemplate):
+        expand("turn (on|off the lights", direction="output")
+
+
+def test_unknown_direction_is_rejected():
+    with pytest.raises(ValueError):
+        expand("hello {name}", direction="sideways")
+
+
+def test_direction_reaches_a_referenced_vocabulary():
+    """A `<name>` member is expanded in the direction the caller named.
+
+    A vocabulary is slot-free (OVOS-INTENT-2 §4.3), so a member carrying two
+    slots is a slot-freeness fault. The adjacent-slot rule of §3.6 must not
+    pre-empt it in the output direction.
+    """
+    with pytest.raises(MalformedTemplate) as output_error:
+        expand("say <u>", {"u": ["{p} {q} y"]}, direction="output")
+    assert "not slot-free" in str(output_error.value)
+    assert "adjacent slots" not in str(output_error.value)
+
+    with pytest.raises(MalformedTemplate) as input_error:
+        expand("say <u>", {"u": ["{p} {q} y"]})
+    assert "adjacent slots" in str(input_error.value)
+
+
+def test_direction_reaches_a_slot_free_referenced_vocabulary():
+    """A slot-free member resolves in both directions, to the same samples."""
+    assert expand("say <u> {a}{b}", {"u": ["now"]},
+                  direction="output") == ["say now {a}{b}"]

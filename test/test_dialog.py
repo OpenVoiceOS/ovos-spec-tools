@@ -243,3 +243,10 @@ def test_render_consistent_dialog_still_works(tmp_path):
     renderer = DialogRenderer(res, "g")
     assert renderer.render("en-US", {"name": "Sam"}) in (
         "hello Sam", "hi there Sam")
+
+
+def test_render_fills_two_adjacent_slots(tmp_path):
+    """§3.6 adjacency is an input-direction rule: a .dialog renders the pair."""
+    assert render(["Wind is {speed} {speed_unit}."],
+                  {"speed": "20", "speed_unit": "km/h"}) == \
+        "Wind is 20 km/h."
