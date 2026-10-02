@@ -23,6 +23,9 @@ serves every language the skill ships.
 from __future__ import annotations
 
 import logging
+import string
+import unicodedata
+from functools import lru_cache
 
 from pathlib import Path
 from typing import (Callable, Dict, Iterator, List, Optional, Sequence, Set,
@@ -279,6 +282,94 @@ def keyword_form(template_line: str,
     return options[0], options[1:]
 
 
+# A mark INSIDE one word. OVOS-INTENT-2 §4.3 reads the same either way for
+# these (architecture, T-7149), so they are deleted and the word survives
+# whole: the apostrophe family, because §2's "punctuation and apostrophe
+# stripping" sentence shows the authors expect `don't` to fold to one word and
+# because ASR output carries an apostrophe inconsistently; the interpuncts,
+# which are intra-word by definition (Catalan `pàl·lid`); and every `Pc`
+# connector, whose Unicode category means exactly "connects two things into
+# one", which is also what keeps `look_alike` one token. The geresh family
+# joins them, because it writes a sound the Hebrew alphabet lacks inside a word
+# and because it marks an acronym inside one word. Every `Pd` dash joins them
+# too, decided by Unicode category, so a dash a later Unicode version adds
+# needs no edit here: `x-ray` and `e-mail` match the unhyphenated spelling an
+# ASR writes, and a downstream content filter reads `por-n` as one word.
+_INTRA_WORD_MARKS = frozenset(
+    "\u055a"   # ՚ Armenian apostrophe
+    "\u05f3"   # ׳ Hebrew geresh
+    "\u05f4"   # ״ Hebrew gershayim
+    "\u0387"   # · Greek ano teleia, which NFD-decomposes to U+00B7
+    "\u0027"   # ' apostrophe
+    "\u2019"   # ’ right single quotation mark, the typographic apostrophe
+    "\u02bc"   # ʼ modifier letter apostrophe
+    "\u00b7"   # · middle dot
+    "\u2027"   # ‧ hyphenation point
+)
+
+
+@lru_cache(maxsize=None)
+def _punctuation_fold(char: str) -> Optional[str]:
+    """How *char* folds: ``None`` to delete it, ``" "`` to separate, else keep.
+
+    OVOS-INTENT-2 §4.3 defines occurrence over **words**:
+
+        A blacklist phrase **occurs** in an utterance when its words appear
+        there as a **contiguous sequence of whole words** — a token
+        subsequence, not a raw substring (the phrase ``art`` does not occur
+        within the word ``start``).
+
+    OVOS-INTENT-3 §4.1 adopts the identical notion for vocabularies. The rule
+    is about words, so a fold MUST NOT let a dropped character join two words
+    into one token (architecture, T-7149). Deleting the comma in
+    ``بله،ممنون`` fuses two words into ``بلهممنون`` and the tool then reports
+    that ``ممنون`` does not occur — the ``start`` answer for a text that is not
+    ``start``. A missed blacklist phrase defeats a hard, score-independent
+    rejection, and a missed slot-value exclusion turns into a ``MUST NOT bind``
+    the engine violates, so this is conformance and not a preference.
+
+    Therefore a word-separating mark becomes a **space**, and the caller
+    collapses runs of whitespace. Deletion is kept only for a mark that lives
+    inside one word (:data:`_INTRA_WORD_MARKS`, the ``Pc`` connectors and the
+    ``Pd`` dashes), where §4.3's answer is the same either way. A dash is a
+    deletion because the hyphenated and the unhyphenated spelling of one word
+    must match each other: an ASR writes ``xray`` where a template carries
+    ``x-ray``, and a downstream content filter reads ``por-n`` as one word.
+    U+2212 MINUS SIGN is ``Sm`` and is outside this test, so arithmetic text
+    keeps it.
+
+    U+0387 GREEK ANO TELEIA is listed in :data:`_INTRA_WORD_MARKS` beside
+    U+00B7 MIDDLE DOT, which it canonically decomposes to. The caller runs the
+    NFD diacritic pass first, so without that entry the ``strip_diacritics``
+    flag would decide how this one character folds.
+
+    The two tests that decide "is this punctuation at all" are unioned,
+    because neither alone is the clause:
+
+    - every Unicode ``P*`` category (``Pc Pd Ps Pe Pi Pf Po``), which is
+      punctuation in any script, so ``؟`` (U+061F), ``۔`` (U+06D4), ``।``
+      (U+0964), ``。`` (U+3002) and ``？`` (U+FF1F) are covered;
+    - :data:`string.punctuation`, which adds the ASCII characters Unicode
+      files under ``S*`` rather than ``P*`` — ``$ + < = > ^ | ~ `` — and
+      OVOS-INTENT-1 §2 names ``( ) [ ] { } | < >`` itself as characters that
+      "**cannot occur as literal input**".
+
+    A character outside both is kept, and two kinds rely on that. A combining
+    mark is ``M*`` and belongs to the diacritic fold. A format character is
+    ``Cf``: U+200C, the zero-width non-joiner, is orthographic in Persian and
+    Urdu, where ``می‌کنم`` is two parts a reader needs kept apart, so folding
+    it would join words the language separates.
+    """
+    if char in _INTRA_WORD_MARKS:
+        return None
+    category = unicodedata.category(char)
+    if category in ("Pc", "Pd"):
+        return None
+    if category.startswith("P") or char in string.punctuation:
+        return " "
+    return char
+
+
 def normalize_for_match(text: str, *,
                         strip_diacritics: bool = True,
                         strip_punct: bool = True) -> str:
@@ -290,9 +381,15 @@ def normalize_for_match(text: str, *,
     - ``strip_diacritics=True`` (default) decomposes combining marks (NFD)
       and drops them — ``"olá"`` becomes ``"ola"``, ``"über"`` becomes
       ``"uber"`` — so the comparison is accent-insensitive.
-    - ``strip_punct=True`` (default) removes ASCII punctuation outside
-      ``{slot}`` spans. A whole ``{...}`` span, including its interior, is
-      preserved verbatim so a slot marker survives a pre-render pass intact.
+    - ``strip_punct=True`` (default) folds punctuation of any script outside
+      ``{slot}`` spans, per :func:`_punctuation_fold`: a word-separating mark
+      becomes a **space** and runs of whitespace are then collapsed, so
+      ``yes,please`` folds to ``yes please`` and the two words stay two words
+      (OVOS-INTENT-2 §4.3). A mark inside one word is deleted instead — an
+      apostrophe, a ``Pc`` connector or a ``Pd`` dash — so ``don't`` folds to
+      ``dont`` and ``x-ray`` folds to ``xray``. A whole
+      ``{...}`` span, including its interior, is preserved verbatim so a slot
+      marker survives a pre-render pass intact.
       This matters because the slot-name charset (OVOS-INTENT-1 §3.4,
       ``[a-z][a-z0-9_]*``) includes ``_``, which is itself ASCII punctuation
       (in ``string.punctuation``) — stripping it out of ``{requested_color}``
@@ -310,13 +407,16 @@ def normalize_for_match(text: str, *,
     Args:
         text: the string to normalize.
         strip_diacritics: fold combining marks via NFD decomposition.
-        strip_punct: drop ASCII punctuation outside ``{...}`` spans.
+        strip_punct: fold punctuation of any script outside ``{...}`` spans
+            (word separators to a space, intra-word marks deleted).
 
     Returns:
-        The normalized, lowercased, whitespace-trimmed string.
+        The normalized, lowercased, whitespace-trimmed string. It is
+        single-spaced when ``strip_punct`` is true, outside a ``{...}`` span;
+        with ``strip_punct=False`` an interior run of whitespace survives as
+        the input wrote it.
     """
     import re
-    import unicodedata
     text = text.strip().lower()
     if strip_diacritics:
         # Shield {...} spans from diacritic folding too, for consistency with
@@ -333,14 +433,20 @@ def normalize_for_match(text: str, *,
             for part in parts
         )
     if strip_punct:
-        import string
-        rm_chars = set(string.punctuation)
         parts = re.split(r"(\{[^{}]*\})", text)
         text = "".join(
             part if part.startswith("{") and part.endswith("}") else
-            "".join(c for c in part if c not in rm_chars)
+            # §4.3 counts words, so the space a separator left is
+            # load-bearing; collapse the runs it created (and any the input
+            # already had) so the result is the single-space form
+            # OVOS-INTENT-1 §2 describes. The collapse is per part, because a
+            # {...} span keeps its interior verbatim.
+            re.sub(r"\s+", " ",
+                   "".join(folded for c in part
+                           if (folded := _punctuation_fold(c)) is not None))
             for part in parts
         )
+        text = text.strip()
     return text
 
 
