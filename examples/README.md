@@ -42,7 +42,7 @@ dirty-locale/locale/
     ├── Bad-Name.intent          base name outside the allowed charset
     ├── 2nd.entity               .entity base name begins with a digit
     ├── refs.intent              <name> reference to a vocabulary that does not exist
-    ├── old.rx                   a legacy file type, not an OVOS-INTENT-2 role
+    ├── old.rx                   a deprecated regex resource
     ├── sub1/menu.intent  ┐      same (role, base name) twice in one
     └── sub2/menu.intent  ┘      language tree
 ```
@@ -52,7 +52,7 @@ dirty-locale/locale/
 ```console
 $ ovos-spec-lint examples/dirty-locale/locale
 examples/dirty-locale/locale/stray.intent: warning: resource file is not inside a language directory
-examples/dirty-locale/locale/en-US/old.rx: warning: .rx is a legacy file type, not an OVOS-INTENT-2 resource role
+examples/dirty-locale/locale/en-US/old.rx: warning: regex resources are deprecated; model the slot in an .intent file (OVOS-INTENT-2 §1)
 examples/dirty-locale/locale/en-US/sub2/menu.intent: error: duplicate .intent resource 'menu' — also at examples/dirty-locale/locale/en-US/sub1/menu.intent
 examples/dirty-locale/locale/en-US/2nd.entity: error: .entity base name '2nd' names a slot and must not begin with a digit
 examples/dirty-locale/locale/en-US/Bad-Name.intent: error: base name 'Bad-Name' must be lowercase ASCII letters, digits and underscores only
@@ -80,7 +80,7 @@ also exit non-zero on the warnings alone.
 |------|----------|------|
 | `stray.intent` | warning | a resource file must live inside a `<lang>/` directory (OVOS-INTENT-2 §2) |
 | `english/` | warning | a language directory is named with a BCP-47 tag (§2) |
-| `old.rx` | warning | `.rx` is a legacy type, not one of the five OVOS-INTENT-2 roles |
+| `old.rx` | warning | a regex resource is deprecated, so the slot belongs in an `.intent` template (OVOS-INTENT-2 §1) |
 | `Bad-Name.intent` | warning | file names are lowercase |
 | `unbalanced.intent` | error | unbalanced metacharacters (OVOS-INTENT-1 §3.6) |
 | `single_branch.intent` | error | a group must have at least two branches (§3.6) |
