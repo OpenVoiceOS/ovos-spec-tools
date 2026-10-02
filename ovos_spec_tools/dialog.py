@@ -28,7 +28,8 @@ import random as _random
 import re
 from typing import Dict, Optional, Protocol, Sequence
 
-from ovos_spec_tools.expansion import MalformedTemplate, expand
+from ovos_spec_tools.expansion import (OUTPUT_DIRECTION, MalformedTemplate,
+                                       expand)
 
 __all__ = [
     "render",
@@ -216,8 +217,14 @@ def _render_phrase(phrase: str,
 
     Expansion keeps slots opaque (OVOS-INTENT-1 §4), so it runs first and a
     slot value can never be parsed as grammar.
+
+    A ``.dialog`` phrase is output-direction, so it expands with the
+    adjacent-slot rule of §3.6 off: the caller supplies one value per slot name
+    and nothing reads a value back out of the rendered text, so ``{speed}
+    {speed_unit}`` is well formed here (§2, §5.1, §6).
     """
-    variant = chooser.choice(expand(phrase, vocabularies))
+    variant = chooser.choice(
+        expand(phrase, vocabularies, direction=OUTPUT_DIRECTION))
     return _fill_slots(variant, slots, entities, chooser)
 
 
