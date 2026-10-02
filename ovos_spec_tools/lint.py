@@ -24,7 +24,12 @@ Clause map (which spec rule each rule enforces):
 - *named slot in a slot-free role* → OVOS-INTENT-2 §4.3 — ``.entity`` / ``.voc``
   / ``.blacklist`` are slot-free.
 - *template syntax* → OVOS-INTENT-1 §3.6 (delegated to
-  :func:`~ovos_spec_tools.expansion.expand`).
+  :func:`~ovos_spec_tools.expansion.expand`). Two forms of §3.6 are scoped by
+  direction (§2): *adjacent slots* and *slot-only template* are reported for
+  the input-direction roles (``.intent``, ``.entity``, ``.voc``,
+  ``.blacklist``) only. A ``.dialog`` is output-direction and caller-filled
+  (§5.1, §6), so two of its slots may touch, a phrase may be a single slot, and
+  the linter reports neither.
 - *slot-set consistency* → OVOS-INTENT-2 §4.2 (``.dialog`` only): a ``.dialog``
   whose phrases declare different slot sets is an ERROR (the caller fills the
   slots of the rendered phrase, so all phrases must expose the same slots).
@@ -73,6 +78,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from ovos_spec_tools.expansion import (
+    INPUT_DIRECTION,
+    INPUT_DIRECTION_ROLES,
+    OUTPUT_DIRECTION,
     REGISTERED_TYPES,
     MalformedTemplate,
     expand,
@@ -552,6 +560,14 @@ def _lint_file(path: Path,
                     ERROR, str(path), f"{reason}  [in: {line!r}]", number))
 
     # --- syntax (OVOS-INTENT-1) ---------------------------------------------
+    # The direction of the role (OVOS-INTENT-1 §2) selects which §3.6 forms
+    # apply. `.intent`, `.entity`, `.voc` and `.blacklist` are input-direction:
+    # an engine trains on them and a matcher fills their slots, so the
+    # adjacent-slot and slot-only forms apply. `.dialog` is output-direction and
+    # caller-filled (§5.1, §6); the linter therefore reports neither in it.
+    # Every other §3.6 form is reported in both.
+    direction = (INPUT_DIRECTION if extension in INPUT_DIRECTION_ROLES
+                 else OUTPUT_DIRECTION)
     slot_free = extension in SLOT_FREE_ROLES
     slot_bearing = extension in SLOT_BEARING_ROLES
     slot_sets: List[frozenset] = []
@@ -568,7 +584,7 @@ def _lint_file(path: Path,
             # and one fault must not be reported twice.
             continue
         try:
-            samples = expand(template, vocabularies)
+            samples = expand(template, vocabularies, direction=direction)
         except MalformedTemplate as exc:
             findings.append(Finding(
                 ERROR, str(path), f"{exc}  [in: {template!r}]"))
