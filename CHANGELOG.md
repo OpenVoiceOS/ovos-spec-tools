@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.15.0a1) (2026-10-06)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a8...1.15.0a1)
+
+**Merged pull requests:**
+
+- feat: Arabic varieties fall back to Modern Standard Arabic [\#181](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/181) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [1.14.0a8](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.14.0a8) (2026-10-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a7...1.14.0a8)
@@ -374,10 +382,6 @@
 ## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.3.0a1) (2026-07-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.2.3a1...1.3.0a1)
-
-**Merged pull requests:**
-
-- feat: bridge per-skill `<skill_id>:stop` to legacy `<skill_id>.stop` [\#75](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/75) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.2.3a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.2.3a1) (2026-06-29)
 
