@@ -87,6 +87,20 @@ _NORM_REGION = {
 }
 
 
+# The individual languages of the ISO 639-3 `ara` macrolanguage (SIL
+# macrolanguage mappings; ajp and bbz are retired codes). A request for one of
+# them, or for `ar` with any region, in Arabic script, falls back to the bare
+# Modern Standard Arabic entry (`ar` or `arb`) when nothing closer is
+# available, since speakers of every variety expect MSA from a voice
+# assistant. Other macrolanguages get no such rule: Cantonese does not fall
+# back to Mandarin.
+_ARABIC_VARIETIES = frozenset(
+    "ar aao abh abv acm acq acw acx acy adf aeb aec afb ajp apc apd arb arq ars "
+    "ary arz auz avl ayh ayl ayn ayp bbz pga shu ssh".split())
+_MSA = ("ar", "arb")
+_ARABIC_FALLBACK_DISTANCE = 5
+
+
 def standardize_lang(tag: str) -> str:
     """Normalize a BCP-47 language tag for comparison.
 
@@ -202,6 +216,10 @@ def lang_distance(desired: str, supported: str) -> int:
         large value (``>= 100`` under the coarse measure) for a different
         primary language.
 
+    An individual Arabic language (``arz``, ``apc``, ...) or ``ar`` with any
+    region, in Arabic script, measured against bare ``ar`` or ``arb``, is at
+    most 5.
+
     Uses ``langcodes.tag_distance`` when available, and a coarse same-language
     measure otherwise.
     """
@@ -213,7 +231,13 @@ def lang_distance(desired: str, supported: str) -> int:
     if a.lower() == b.lower():
         return 0
     distance = _langcodes_distance(a, b)
-    return distance if distance is not None else _coarse_distance(a, b)
+    if distance is None:
+        distance = _coarse_distance(a, b)
+    scripts = [t.lower() for t in a.split("-")[1:] if len(t) == 4 and t.isalpha()]
+    if (b.lower() in _MSA and a.split("-")[0].lower() in _ARABIC_VARIETIES
+            and scripts in ([], ["arab"])):
+        distance = min(distance, _ARABIC_FALLBACK_DISTANCE)
+    return distance
 
 
 def lang_matches(a: str, b: str,

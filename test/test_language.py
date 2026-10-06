@@ -150,7 +150,7 @@ def test_lang_matches_exact_only_when_max_distance_zero():
 
 # --- the distance-10 boundary ------------------------------------------------
 
-MACROLANGUAGE_PAIRS = [("arz", "ar"), ("wuu", "zh")]
+MACROLANGUAGE_PAIRS = [("wuu", "zh")]
 REGIONAL_PAIRS = [("ar-SA", "ar", 4), ("en-AU", "en-GB", 3), ("pt-BR", "pt-PT", 5)]
 UNRELATED_PAIRS = [("en", "zh", 134), ("es", "fr", 84),
                    ("fr-CH", "de-CH", 80), ("af", "nl", 24)]
@@ -191,3 +191,66 @@ def test_threshold_is_inclusive_on_both_sides():
     assert lang_matches("en-US", "en-GB", max_distance=4) is False
     assert closest_lang("en-US", ["en-GB"], max_distance=5) == "en-GB"
     assert closest_lang("en-US", ["en-GB"], max_distance=4) is None
+
+
+# --- Arabic varieties fall back to Modern Standard Arabic ---------------------
+
+ARABIC_REQUESTS = ["ar", "ar-SA", "ar-EG", "ar-MA", "arz", "apc", "ary", "acm",
+                   "afb", "aeb", "ajp", "pga", "ssh", "arq"]
+
+
+@pytest.mark.parametrize("tag", ARABIC_REQUESTS)
+@pytest.mark.parametrize("langcodes_present", [True, False])
+def test_arabic_request_falls_back_to_msa(tag, langcodes_present, monkeypatch):
+    if langcodes_present:
+        pytest.importorskip("langcodes")
+    else:
+        monkeypatch.setattr(language, "_langcodes_distance", lambda a, b: None)
+    assert lang_distance(tag, "arb") <= 5
+    assert closest_lang(tag, ["arb", "en-US"], max_distance=5) == "arb"
+
+
+def test_arabic_variety_file_beats_msa():
+    assert closest_lang("arz", ["arb", "arz"]) == "arz"
+    assert closest_lang("ar-MA", ["arb", "ar-MA"]) == "ar-MA"
+
+
+def test_msa_request_does_not_fall_back_to_a_variety():
+    pytest.importorskip("langcodes")
+    assert closest_lang("arb", ["arz"], max_distance=5) is None
+
+
+def test_arabic_does_not_reach_other_languages():
+    assert closest_lang("arz", ["en-US", "zh-CN"]) is None
+    assert closest_lang("en-US", ["arb"]) is None
+
+
+def test_cantonese_does_not_reach_mandarin():
+    pytest.importorskip("langcodes")
+    assert closest_lang("yue", ["zh-CN"], max_distance=5) is None
+    assert closest_lang("yue", ["zh-CN"]) is None
+
+
+def test_arabic_variety_prefers_its_own_region_over_another():
+    pytest.importorskip("langcodes")
+    assert closest_lang("ary", ["ar-EG", "ar-MA"]) == "ar-MA"
+    assert closest_lang("arz", ["ar-MA", "ar-EG"]) == "ar-EG"
+
+
+def test_arabic_variety_prefers_msa_over_a_foreign_region():
+    pytest.importorskip("langcodes")
+    assert closest_lang("ary", ["ar-EG", "arb"]) == "arb"
+    assert closest_lang("apc", ["ar-SA", "arb"]) == "arb"
+
+
+def test_arabic_fallback_distance_is_exactly_five():
+    pytest.importorskip("langcodes")
+    assert lang_distance("arz", "arb") == 5
+
+
+def test_arabizi_is_not_pulled_to_msa(monkeypatch):
+    pytest.importorskip("langcodes")
+    capped = lang_distance("ar-Latn", "ar")
+    monkeypatch.setattr(language, "_ARABIC_FALLBACK_DISTANCE", 0)
+    assert lang_distance("ar-Latn", "ar") == capped
+    assert lang_distance("arz-Arab", "arb") == 0
