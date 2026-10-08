@@ -42,9 +42,12 @@ transport-layer ``Message`` subclass) builds on.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Union
+
+_log = logging.getLogger(__name__)
 
 __all__ = ["Message", "MalformedMessage", "DEFAULT_SESSION_ID"]
 
@@ -564,10 +567,11 @@ class Message:
         unambiguous": ``T`` **MUST NOT** already end in ``.response``
         (that would mint ``<x>.response.response``, "which no
         specification defines"), and **MUST NOT** contain a ``:`` (a
-        dispatch topic "has no ``.response`` counterpart"). Where either
-        condition fails, "the answering component names the answering
-        topic explicitly and derives via ``reply`` instead" — so this
-        method raises rather than mint an undefined topic.
+        dispatch topic "has no ``.response`` counterpart"). In those two
+        cases the shorthand is undefined: this method logs a warning and
+        derives the ``<T>.response`` topic anyway, so deployed callers keep
+        working. Conforming callers name the answering topic explicitly and
+        use :meth:`reply`.
 
         Args:
             data: payload of the response (``D'``); ``None`` → ``{}``.
@@ -575,19 +579,16 @@ class Message:
 
         Returns:
             A new Message whose ``type`` is ``self.msg_type + ".response"``.
-
-        Raises:
-            ValueError: if ``self.msg_type`` already ends in
-                ``.response``, or contains a ``:`` (§5.3).
         """
         if self.msg_type.endswith(".response"):
-            raise ValueError(
-                f"{self.msg_type!r} already ends in '.response' — the "
-                "'.response' shorthand is undefined here (§5.3); name "
-                "the answering topic explicitly and use reply() instead")
-        if ":" in self.msg_type:
-            raise ValueError(
-                f"{self.msg_type!r} is a dispatch topic (contains ':') — "
-                "it has no '.response' counterpart (§5.3); name the "
-                "answering topic explicitly and use reply() instead")
+            _log.warning(
+                "%r already ends in '.response' — the '.response' shorthand "
+                "is undefined here (OVOS-MSG-1 §5.3); name the answering "
+                "topic explicitly and use reply() instead", self.msg_type)
+        elif ":" in self.msg_type:
+            _log.warning(
+                "%r is a dispatch topic (contains ':') — it has no "
+                "'.response' counterpart (OVOS-MSG-1 §5.3); name the "
+                "answering topic explicitly and use reply() instead",
+                self.msg_type)
         return self.reply(self.msg_type + ".response", data, context)
