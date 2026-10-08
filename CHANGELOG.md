@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.15.1a1) (2026-10-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.15.0a1...1.15.1a1)
+
+**Merged pull requests:**
+
+- fix: Message.response\(\) warns on an undefined §5.3 shorthand instead of raising [\#183](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/183) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.15.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.15.0a1) (2026-10-06)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.14.0a8...1.15.0a1)
@@ -374,10 +382,6 @@
 ## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.4.0a1) (2026-07-02)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.3.0a1...1.4.0a1)
-
-**Merged pull requests:**
-
-- feat: OVOS-CONTEXT-1 gating & decay helpers \(shared\) [\#77](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/77) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.3.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.3.0a1) (2026-07-02)
 
