@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.15.2a1) (2026-10-08)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.15.1a1...1.15.2a1)
+
+**Merged pull requests:**
+
+- fix: the adjacent-slot rule of §3.6 is input-direction only [\#161](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/161) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.15.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.15.1a1) (2026-10-08)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.15.0a1...1.15.1a1)
@@ -367,17 +375,9 @@
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.4.1a1...1.5.0a1)
 
-**Merged pull requests:**
-
-- feat: context\_slot\_candidates — CONTEXT-1 §7 pre-match slot injection [\#79](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/79) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [1.4.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.4.1a1) (2026-07-03)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.4.0a1...1.4.1a1)
-
-**Merged pull requests:**
-
-- fix: recognize .blacklist paired with .entity/{slot} for slot-value exclusion [\#80](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/80) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.4.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.4.0a1) (2026-07-02)
 
