@@ -1,9 +1,11 @@
 """Tests for the locale resource linter (`ovos-spec-lint`)."""
 import pytest
 
-from ovos_spec_tools.expansion import MalformedTemplate
+from ovos_spec_tools.expansion import INPUT_DIRECTION_ROLES, MalformedTemplate
 from ovos_spec_tools.lint import (
     ERROR,
+    PROMPT_ROLE,
+    ROLE_EXTENSIONS,
     WARNING,
     declared_slots,
     declared_slot_types,
@@ -468,3 +470,84 @@ def test_lint_slot_types_clean_returns_no_findings():
     findings = lint_slot_types("play.intent", {"length": "duration"},
                               ["play {duration:length}"])
     assert findings == []
+
+
+# --- §3.6 adjacent slots: .intent and .voc, never .dialog --------------------
+
+# OVOS-INTENT-1 §3.6 forbids adjacent slots so a matcher can delimit them.
+# §2 and §6 put a .dialog outside matching: it is output-direction and
+# caller-filled. The lint therefore checks adjacency on input-direction roles
+# only.
+
+def test_adjacent_slots_in_a_dialog_is_not_a_finding(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "wind.dialog",
+           "Wind is {speed} {speed_unit}.\n")
+    assert lint_locale(locale) == []
+
+
+def test_adjacent_slots_in_an_intent_is_still_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "wind.intent", "wind {speed} {speed_unit}\n")
+    errors = _errors(lint_locale(locale))
+    assert len(errors) == 1
+    assert "adjacent slots" in errors[0].message
+
+
+def test_a_slot_only_dialog_is_not_a_finding(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "day.dialog", "{s}\n")
+    assert lint_locale(locale) == []
+
+
+def test_a_slot_only_intent_is_still_an_error(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "day.intent", "{s}\n")
+    errors = _errors(lint_locale(locale))
+    assert len(errors) == 1
+    assert "slot-only template" in errors[0].message
+
+
+def test_a_dialog_with_adjacent_slots_keeps_its_other_findings(tmp_path):
+    """Control: skipping adjacency does not silence the rest of §3.6."""
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / "wind.dialog",
+           "Wind is {speed} {speed} strong.\n")
+    assert any("repeated slot name" in f.message
+               for f in _errors(lint_locale(locale)))
+
+
+@pytest.mark.parametrize("name,content,expected_substring", [
+    ("bare_pipe", "Wind is {speed}|blowing hard.\n",
+     "a pipe outside a group"),
+    ("repeated_slot_name", "Wind is {speed} {speed} strong.\n",
+     "repeated slot name"),
+    ("unbalanced_group", "Wind is (gusty {speed}.\n",
+     "unbalanced metacharacters"),
+])
+def test_a_dialog_still_rejects_the_other_malformed_forms(
+        tmp_path, name, content, expected_substring):
+    """§3.6 forms other than adjacency hold in the output direction too.
+
+    A `.dialog` is output-direction (§2), so the linter skips only the
+    adjacent-slot and slot-only forms for it. Every other §3.6 form still raises, through
+    `lint_locale`'s public call, which carries no `direction` keyword of its
+    own and so cannot pass by a signature fluke.
+    """
+    locale = tmp_path / "locale"
+    _write(locale / "en-US" / f"wind_{name}.dialog", content)
+    errors = _errors(lint_locale(locale))
+    assert any(expected_substring in e.message for e in errors)
+
+
+def test_output_direction_roles_equal_the_non_prompt_roles():
+    """The role set the direction line reads for OUTPUT_DIRECTION.
+
+    `_lint_file` runs only for `extension in ROLE_EXTENSIONS`, and `.prompt`
+    returns before the direction line (OVOS-INTENT-2 §4.4). The five
+    extensions that reach the direction line are therefore exactly
+    `INPUT_DIRECTION_ROLES + (".dialog",)`: the four input-direction roles of
+    §2, plus `.dialog`.
+    """
+    reaches_direction_line = set(ROLE_EXTENSIONS) - {PROMPT_ROLE}
+    assert reaches_direction_line == set(INPUT_DIRECTION_ROLES) | {".dialog"}
