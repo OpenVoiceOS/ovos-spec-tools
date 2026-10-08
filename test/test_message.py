@@ -5,6 +5,7 @@ Each test class targets one numbered section of the spec
 ``SHOULD`` rule they pin so failures point at the spec sentence.
 """
 import json
+import logging
 
 import pytest
 
@@ -389,20 +390,43 @@ class TestResponse:
         assert r.context["source"] == "B"
         assert r.context["destination"] == "A"
 
-    def test_response_rejects_already_suffixed_topic(self):
-        """§5.3: 'T MUST NOT already end in .response' — suffixing again
-        produces ``<x>.response.response``, 'which no specification
-        defines.'"""
-        m = Message("ovos.test.response")
-        with pytest.raises(ValueError):
-            m.response()
+    def test_response_to_suffixed_topic_warns_and_derives(self, caplog):
+        """§5.3: 'T MUST NOT already end in .response' — the shorthand is
+        undefined, so the method warns and still derives the legacy topic."""
+        m = Message("ovos.test.response", {},
+                    {"source": "A", "destination": "B"})
+        with caplog.at_level(logging.WARNING, logger="ovos_spec_tools.message"):
+            r = m.response()
+        assert r.msg_type == "ovos.test.response.response"
+        assert r.context["source"] == "B"
+        assert r.context["destination"] == "A"
+        assert len(caplog.records) == 1
+        text = caplog.records[0].getMessage()
+        assert "ovos.test.response" in text and "§5.3" in text
+        assert "reply()" in text
 
-    def test_response_rejects_dispatch_topic(self):
+    def test_response_to_dispatch_topic_warns_and_derives(self, caplog):
         """§5.3: 'T ... MUST NOT contain a `:`. A dispatch topic (§2.1.1)
         has no `.response` counterpart.'"""
-        m = Message("skill:intent")
-        with pytest.raises(ValueError):
-            m.response()
+        m = Message("question:query", {},
+                    {"source": "A", "destination": "B"})
+        with caplog.at_level(logging.WARNING, logger="ovos_spec_tools.message"):
+            r = m.response({"answer": "x"})
+        assert r.msg_type == "question:query.response"
+        assert r.data == {"answer": "x"}
+        assert r.context["source"] == "B"
+        assert r.context["destination"] == "A"
+        assert len(caplog.records) == 1
+        text = caplog.records[0].getMessage()
+        assert "question:query" in text and "§5.3" in text
+        assert "reply()" in text
+
+    def test_response_to_plain_dotted_topic_does_not_warn(self, caplog):
+        m = Message("ovos.intent.list")
+        with caplog.at_level(logging.WARNING, logger="ovos_spec_tools.message"):
+            r = m.response()
+        assert r.msg_type == "ovos.intent.list.response"
+        assert caplog.records == []
 
 
 # --- §4 session carrier -----------------------------------------------------
