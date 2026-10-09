@@ -678,9 +678,173 @@ def test_normalize_for_match_still_strips_non_slot_underscore():
     assert normalize_for_match("look_alike text") == "lookalike text"
 
 
+def test_normalize_for_match_strips_non_ascii_terminal_punctuation():
+    """OVOS-INTENT-1 §2: the text reaching an engine carries "**alphanumeric
+    word tokens** separated by **single spaces**" and "**no punctuation**".
+
+    The clause names no script. ``string.punctuation`` holds ASCII only, so
+    every non-ASCII terminal mark stayed glued to the word it followed: an
+    fa-IR ``.intent`` line authored ``hava chetore؟`` normalized to the token
+    ``chetore؟``, which matched only an utterance that carried the mark, and
+    ASR hands over no mark at all.
+    """
+    from ovos_spec_tools import normalize_for_match
+    # '?' is the control: the ASCII twin of every case below already folded.
+    assert normalize_for_match("hava chetore?") == "hava chetore"
+    assert normalize_for_match("hava chetore\u061f") == "hava chetore"      # fa/ar ؟
+    assert normalize_for_match("bale\u060c merci") == "bale merci"          # ar ،
+    assert normalize_for_match("salam\u06d4") == "salam"                    # ur ۔
+    assert normalize_for_match("namaste\u0964") == "namaste"                # hi ।
+    assert normalize_for_match("ima nanji\u3002") == "ima nanji"            # ja 。
+    assert normalize_for_match("ima nanji\uff1f") == "ima nanji"            # fullwidth ？
+    assert normalize_for_match("ti wra einai\u037e") == "ti wra einai"      # el ;
+    assert normalize_for_match("\u00bfque hora es?") == "que hora es"       # es ¿
+    assert normalize_for_match("what time is it\u2026") == "what time is it"
+    # adjacent, as a quote is authored: each mark leaves a space, the
+    # collapse joins the run into one, and the trim drops the ends.
+    assert normalize_for_match("\u00abalarm\u00bb") == "alarm"             # « »
+
+
+def test_normalize_for_match_separates_two_words_joined_by_a_mark():
+    """OVOS-INTENT-2 §4.3, adopted for vocabularies by OVOS-INTENT-3 §4.1:
+
+        A blacklist phrase **occurs** in an utterance when its words appear
+        there as a **contiguous sequence of whole words** — a token
+        subsequence, not a raw substring (the phrase ``art`` does not occur
+        within the word ``start``).
+
+    §4.3 counts words, so a fold must not let a dropped mark join two of them
+    into one token (architecture, T-7149). A word-separating mark becomes a
+    space; the whitespace collapse then gives §2's single-space form.
+    """
+    from ovos_spec_tools import normalize_for_match
+    # ASCII, which the first cut of this change deliberately left fused
+    assert normalize_for_match("yes,please") == "yes please"
+    assert normalize_for_match("hola,mundo") == "hola mundo"
+    # ar: a comma with no space either side
+    assert normalize_for_match("bale\u060cmamnun") == "bale mamnun"
+    # ja: a terminal mark between two words, which is the ordinary CJK shape
+    assert normalize_for_match("\u4eca\u4f55\u6642\u3002\u4eca\u65e5") == "\u4eca\u4f55\u6642 \u4eca\u65e5"
+    # es: the opening mark attaches to the word that follows it
+    assert normalize_for_match("\u00bfque hora es?") == "que hora es"
+    # a run of marks and spaces collapses to one space, never to none
+    assert normalize_for_match("yes , ,  please") == "yes please"
+    assert normalize_for_match("yes\u060c\u061fmamnun") == "yes mamnun"
+
+
+def test_normalize_for_match_deletes_a_mark_inside_one_word():
+    """The other half of the T-7149 ruling: for a mark inside a single word
+    §4.3 reads the same either way, so it is deleted and the word survives
+    whole. §2's "punctuation and apostrophe stripping" shows the authors expect
+    that for an apostrophe, and ASR output carries one inconsistently, so
+    substituting would stop a template matching the utterance.
+    """
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("don't stop") == "dont stop"
+    assert normalize_for_match("don\u2019t stop") == "dont stop"
+    assert normalize_for_match("p\u00e0l\u00b7lid") == "pallid"      # ca interpunct
+    # a Pc connector connects by definition, so it does not separate
+    assert normalize_for_match("look_alike text") == "lookalike text"
+
+
+def test_utterance_contains_sees_a_word_a_mark_was_glued_to():
+    """The clause-level test: §4.3 occurrence is what observes the fold.
+
+    A fold that deleted the mark fused the two words, and the tool then
+    reported that the phrase does not occur — the ``start`` answer for a text
+    that is not ``start``. A missed blacklist phrase defeats a hard,
+    score-independent rejection, so this is conformance, not a preference.
+    """
+    from ovos_spec_tools import utterance_contains
+    assert utterance_contains("yes,please", ["yes"]) is True
+    assert utterance_contains("bale\u060cmamnun", ["mamnun"]) is True
+    assert utterance_contains("\u4eca\u4f55\u6642\u3002\u4eca\u65e5", ["\u4eca\u65e5"]) is True
+    assert utterance_contains("\u00bfque hora es?", ["hora"]) is True
+    # §4.3's own counterexample still holds: a fragment inside a word does not
+    # occur. This is the control that keeps the test above from passing for the
+    # wrong reason, by proving the occurrence rule is still whole-word.
+    assert utterance_contains("start", ["art"]) is False
+    assert utterance_contains("lookalike", ["look"]) is False
+
+
+def test_normalize_for_match_deletes_a_dash_inside_one_word():
+    """A dash is intra-word for matching, so it is deleted and not separated.
+
+    An ASR writes ``xray`` and a template carries ``x-ray``, so the two
+    spellings of one word have to fold together. Every ``Pd`` dash is decided
+    by Unicode category, so a dash a later Unicode version adds needs no edit.
+    U+2212 MINUS SIGN is ``Sm`` and stays as it is.
+    """
+    from ovos_spec_tools import normalize_for_match, utterance_contains
+    assert utterance_contains("x-ray", ["xray"]) is True
+    assert utterance_contains("e-mail", ["email"]) is True
+    assert utterance_contains("well-known", ["wellknown"]) is True
+    for dash in "\u002d\u2010\u2011\u2012\u2013\u2014\u2015":
+        assert normalize_for_match("x" + dash + "ray") == "xray"
+    assert normalize_for_match("5\u22123") == "5\u22123"
+
+
+def test_normalize_for_match_folds_ano_teleia_the_same_on_both_arms():
+    """U+0387 GREEK ANO TELEIA decomposes to U+00B7 MIDDLE DOT under NFD.
+
+    The diacritic pass runs before the punctuation fold, so U+0387 has to be
+    in the intra-word set itself. Otherwise the ``strip_diacritics`` flag
+    decides how one punctuation character folds.
+    """
+    from ovos_spec_tools import normalize_for_match
+    with_nfd = normalize_for_match("nai\u0387ochi")
+    without_nfd = normalize_for_match("nai\u0387ochi", strip_diacritics=False)
+    assert with_nfd == without_nfd
+    assert with_nfd == "naiochi"
+
+
+def test_normalize_for_match_keeps_a_script_apostrophe_word_whole():
+    """A geresh, a gershayim and an Armenian apostrophe sit inside one word.
+
+    The Hebrew geresh writes a sound the alphabet lacks; the gershayim marks an
+    acronym. Both are intra-word, so the word survives whole and a ``.voc``
+    entry matches the spelling without the mark.
+    """
+    from ovos_spec_tools import normalize_for_match, utterance_contains
+    # U+05F3 geresh: "giraffe"
+    assert normalize_for_match("\u05d2\u05f3\u05d9\u05e8\u05e4\u05d4") == \
+        "\u05d2\u05d9\u05e8\u05e4\u05d4"
+    # U+05F4 gershayim, inside an acronym
+    assert normalize_for_match("\u05e6\u05d4\u05f4\u05dc") == "\u05e6\u05d4\u05dc"
+    # U+055A Armenian apostrophe
+    assert normalize_for_match("ba\u055ani") == "bani"
+    assert utterance_contains("ba\u055ani", ["bani"]) is True
+
+def test_normalize_for_match_keeps_zero_width_non_joiner():
+    """U+200C is ``Cf``, not punctuation, and it is orthographic in Persian
+    and Urdu: ``می‌کنم`` is two parts a reader needs kept apart. Folding it
+    with the punctuation would join words the language separates, so the
+    punctuation test reads the Unicode category rather than "not alphanumeric".
+    """
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("mi\u200ckonam") == "mi\u200ckonam"
+    # the mark beside it still folds, so the kept character is the only
+    # thing this asserts.
+    assert normalize_for_match("mi\u200ckonam\u061f") == "mi\u200ckonam"
+
+
+def test_normalize_for_match_keeps_non_ascii_letters_and_digits():
+    """The fold drops punctuation, never a word character of another script.
+    Arabic-Indic digits are ``Nd`` and Persian letters are ``Lo``; both are the
+    alphanumeric tokens §2 asks for and both survive.
+    """
+    from ovos_spec_tools import normalize_for_match
+    assert normalize_for_match("\u0633\u0627\u0639\u062a \u0663") == "\u0633\u0627\u0639\u062a \u0663"
+    # with a terminal Arabic mark, which folds while the digit stays
+    assert (normalize_for_match("\u0633\u0627\u0639\u062a \u0663\u061f")
+            == "\u0633\u0627\u0639\u062a \u0663")
+
+
 def test_normalize_for_match_keeps_punct_when_disabled():
     from ovos_spec_tools import normalize_for_match
     assert normalize_for_match("yes, please!", strip_punct=False) == "yes, please!"
+    assert (normalize_for_match("hava chetore\u061f", strip_punct=False)
+            == "hava chetore\u061f")
 
 
 def test_normalize_for_match_keeps_diacritics_when_disabled():
