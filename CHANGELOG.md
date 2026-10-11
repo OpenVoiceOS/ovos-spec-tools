@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.16.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.16.0a1) (2026-10-11)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.15.2a1...1.16.0a1)
+
+**Merged pull requests:**
+
+- feat: the .required role, required keywords and derived required slots [\#186](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/186) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.15.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.15.2a1) (2026-10-08)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.15.1a1...1.15.2a1)
