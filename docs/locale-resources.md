@@ -24,7 +24,8 @@ my-skill/
     │   ├── confirm.dialog
     │   ├── media.entity
     │   ├── yes.voc
-    │   └── trailers.blacklist
+    │   ├── play.blacklist
+    │   └── play.required
     ├── pt-PT/
     │   └── …
     └── de-DE/
@@ -39,7 +40,7 @@ resource.
 A resource is identified by its **`(role, base name)`** pair,
 so `confirm.intent` and `confirm.dialog` are two distinct resources.
 
-## The six roles
+## The seven roles
 
 The file extension is a resource's **role**:
 
@@ -50,15 +51,16 @@ The file extension is a resource's **role**:
 | Entity | `.entity` | no | example values for a slot |
 | Vocabulary | `.voc` | no | a named keyword / phrase set |
 | Blacklist | `.blacklist` | no | phrases that suppress an intent |
+| Required | `.required` | no | keywords of which one must occur for an intent to match |
 
 | Role | Extension | Slots? | What it is |
 |------|-----------|--------|------------|
 | Prompt | `.prompt` | yes | a whole-file prompt for a language model |
 
-The first five are **lists of templates** ([chapter 2](templates.md)), one
+The first six are **lists of templates** ([chapter 2](templates.md)), one
 per line, with `#` comment lines and blank lines ignored. `.intent` and
-`.dialog` are **slot-bearing** (they may use `{name}`). `.entity`, `.voc` and
-`.blacklist` are **slot-free**.
+`.dialog` are **slot-bearing** (they may use `{name}`). `.entity`, `.voc`,
+`.blacklist` and `.required` are **slot-free**.
 
 `.prompt` is the exception: not a template list but **one whole-file document**
 read verbatim. Every line, including `#` and blank lines, is kept. It carries
@@ -66,6 +68,60 @@ read verbatim. Every line, including `#` and blank lines, is kept. It carries
 
 Legacy OVOS file types (`.rx`, `.value`, `.list`, …) are deliberately *not*
 roles here. The linter flags them ([chapter 7](linting.md)).
+
+## Required keywords and required slots
+
+A `.blacklist` and a `.required` of the same base name as an `.intent` both
+constrain that intent alone (OVOS-INTENT-2 §4.3, §4.5). Both use the same
+occurrence rule: a phrase occurs when its words appear in the utterance as a
+contiguous sequence of whole words. The phrase `art` does not occur in
+`start`. The logic is inverted:
+
+| File | The intent is rejected when |
+|------|-----------------------------|
+| `play.blacklist` | **any** listed phrase occurs |
+| `play.required` | **no** listed keyword occurs |
+
+Both are hard rejections. The intent score has no effect on them.
+
+A `.required` anchors an intent to words that the utterance must contain. An
+intent about one philosopher names that person in its templates, but a
+sentence-embedding engine also matches the same question about another
+person. A `.required` that lists the name forms stops this:
+
+```
+# philosopher_dates.required
+aristotle
+aristoteles
+(the stagirite|the philosopher of stagira)
+```
+
+```python
+from ovos_spec_tools import LocaleResources, required_keywords_reject
+
+keywords = res.load_required_keywords("philosopher_dates", "en-US")
+required_keywords_reject("when was aristotle born", keywords)  # False
+required_keywords_reject("when was einstein born", keywords)   # True
+```
+
+`load_required_keywords` returns the union of the sample sets of all lines.
+That set is the `required_keywords` field of the intent registration
+(OVOS-INTENT-4 §6.1). An empty set is no requirement, so
+`required_keywords_reject` never rejects with it. A `.required` has no slot
+role: it pairs only with an `.intent`, and a `{slot}` in it is malformed.
+
+Required **slots** need no file. A slot is required when it occurs in every
+expanded sample of the `.intent` (OVOS-INTENT-3 §5.3). A slot in an optional
+group `[x]`, in only some branches of an alternative, or in only some lines is
+not required. `derive_required_slots` computes the set for the
+`required_slots` field of the registration:
+
+```python
+from ovos_spec_tools import derive_required_slots
+
+derive_required_slots(["play {query} [on {engine}]",
+                       "i want to hear {query}"])   # frozenset({'query'})
+```
 
 ## Loading with `LocaleResources`
 
@@ -89,7 +145,7 @@ in the same process sees the tree as it is then. `LocaleResources` reads and
 indexes those trees at construction and retains their raw lines, dialogs, and
 prompts in memory. When
 no user resource tree is configured, it also pre-expands valid intent, entity,
-vocabulary, and blacklist resources. This avoids filesystem discovery and
+vocabulary, blacklist, and required-keyword resources. This avoids filesystem discovery and
 parsing in the runtime intent path. Recreate the instance after installing or
 editing skill/core resources; there is intentionally no refresh operation for
 package-owned data. A file that cannot be read at construction (invalid UTF-8,
@@ -113,6 +169,7 @@ The load methods:
 | `load_entity(name, lang)` | the expanded value set |
 | `load_vocabulary(name, lang)` | the expanded phrase set |
 | `load_blacklist(name, lang)` | the expanded phrase set |
+| `load_required_keywords(name, lang)` | the expanded keyword set |
 
 | Method | Returns |
 |--------|---------|
@@ -121,7 +178,7 @@ The load methods:
 | `vocabularies(lang)` | every `.voc`, as a `name → templates` dict |
 | `entities(lang)` | every `.entity`, as a `name → values` dict |
 
-`.intent`, `.entity`, `.voc`, and `.blacklist` are expanded at load time. A
+`.intent`, `.entity`, `.voc`, `.blacklist`, and `.required` are expanded at load time. A
 `.dialog` is **not**. Its phrases are returned verbatim, because expansion
 happens once per spoken response, on the single phrase chosen
 ([chapter 4](dialog.md)).
@@ -139,8 +196,8 @@ A missing resource raises `FileNotFoundError`. A malformed one raises
   one template").
 - a **duplicate `(role, base name)`** in one language tree, §2 ("MUST NOT share
   a base name anywhere within one language directory tree").
-- a **named slot in a slot-free role**, §4.3 (`.entity`/`.voc`/`.blacklist`
-  are the slot-free format).
+- a **named slot in a slot-free role**, §4.3 and §4.5
+  (`.entity`/`.voc`/`.blacklist`/`.required` are the slot-free format).
 
 ## Override precedence
 

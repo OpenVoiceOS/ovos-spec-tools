@@ -42,6 +42,7 @@ Methods, each takes a resource base name and a BCP-47 `lang`:
 | `load_entity(name, lang)` | expanded value set |
 | `load_vocabulary(name, lang)` | expanded phrase set |
 | `load_blacklist(name, lang)` | expanded phrase set |
+| `load_required_keywords(name, lang)` | expanded keyword set, the `required_keywords` of the registration |
 | `load_dialog(name, lang)` | raw phrase strings (not expanded) |
 | `load_prompt(name, lang)` | the whole `.prompt` file, as one string |
 | `vocabularies(lang)` | `name -> templates` for every `.voc` |
@@ -186,11 +187,24 @@ returned unchanged.
 
 ## Linting — [chapter 7](linting.md)
 
-### `lint_locale(path, spec_version=2) -> list[Finding]`
+### `lint_locale(path, spec_version=4) -> list[Finding]`
 
 Validate every resource file under a locale (or single-language) directory.
-`spec_version` (0, 1, or 2) flags features newer than that target, see
+`spec_version` (0 to 4) flags features newer than that target, see
 [chapter 7](linting.md).
+
+### `derive_required_slots(templates) -> frozenset`
+
+The required slots of an intent (OVOS-INTENT-3 §5.3): the slots that occur in
+every expanded sample of its templates. A slot in an optional group `[x]`, in
+only some branches of an alternative, or in only some templates is not
+required. A producer fills the `required_slots` field of the registration
+(OVOS-INTENT-4 §6.1) with this value.
+
+```python
+derive_required_slots(["play {query} [on {engine}]",
+                       "i want to hear {query}"])   # frozenset({"query"})
+```
 
 ### `Finding`
 
@@ -200,7 +214,7 @@ A dataclass with `severity` (`"error"` / `"warning"`), `path`, and `message`.
 ### `ovos-spec-lint` (command)
 
 CLI wrapper over `lint_locale`. `ovos-spec-lint <path> [--strict]
-[--spec-version {0,1,2}]`. Exit code is non-zero on errors (with `--strict`,
+[--spec-version {0,1,2,3,4}]`. Exit code is non-zero on errors (with `--strict`,
 on warnings too).
 
 ## Package

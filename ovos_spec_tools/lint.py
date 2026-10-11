@@ -18,17 +18,17 @@ Clause map (which spec rule each rule enforces):
   obeys the slot-name rule (not beginning with a digit).
 - *not-a-BCP-47 directory* → OVOS-INTENT-2 §2 — "Language directories are named
   with BCP-47 language tags".
-- *legacy extension / unknown role* → OVOS-INTENT-2 §1 + §5 — only the six
+- *legacy extension / unknown role* → OVOS-INTENT-2 §1 + §5 — only the seven
   defined roles exist; a loader "MUST NOT introduce additional resource file
   roles". Legacy Mycroft types are flagged, not parsed.
-- *named slot in a slot-free role* → OVOS-INTENT-2 §4.3 — ``.entity`` / ``.voc``
-  / ``.blacklist`` are slot-free.
+- *named slot in a slot-free role* → OVOS-INTENT-2 §4.3, §4.5 — ``.entity`` /
+  ``.voc`` / ``.blacklist`` / ``.required`` are slot-free.
 - *template syntax* → OVOS-INTENT-1 §3.6 (delegated to
   :func:`~ovos_spec_tools.expansion.expand`). Two forms of §3.6 are scoped by
   direction (§2): *adjacent slots* and *slot-only template* are reported for
   the input-direction roles (``.intent``, ``.entity``, ``.voc``,
-  ``.blacklist``) only. A ``.dialog`` is output-direction and caller-filled
-  (§5.1, §6), so two of its slots may touch, a phrase may be a single slot, and
+  ``.blacklist``, ``.required``) only. A ``.dialog`` is output-direction and
+  caller-filled (§5.1, §6), so two of its slots may touch, a phrase may be a single slot, and
   the linter reports neither.
 - *slot-set consistency* → OVOS-INTENT-2 §4.2 (``.dialog`` only): a ``.dialog``
   whose phrases declare different slot sets is an ERROR (the caller fills the
@@ -43,15 +43,22 @@ Clause map (which spec rule each rule enforces):
   NOT fill that slot"). A ``.blacklist`` that matches neither is inert and
   is flagged; ``{slot}`` names declared inline in an ``.intent`` template
   count as a pairing target.
-- *required slot declared by no template* → OVOS-INTENT-3 §5.3 — "A required
-  slot MUST be declared by at least one template in the intent … a tool MUST
-  reject the definition at registration time." This is an intent-**definition**
-  rule, not a single-file rule: ``required_slots`` lives above the raw
-  ``.intent`` file. The locale linter (which sees only files) cannot enforce
-  it; the check is exposed as :func:`validate_required_slots` (raises) and
-  :func:`lint_required_slots` (returns a :class:`Finding`) for the
-  registration/loading path that has both the ``required_slots`` list and the
-  templates in hand.
+- *unpaired ``.required``* → OVOS-INTENT-2 §4.5 — "A ``.required`` pairs only
+  with an ``.intent``"; one with no ``.intent`` of its base name constrains
+  nothing and is flagged.
+- *sample with no required keyword* → OVOS-INTENT-2 §4.5 — "A sample with no
+  slots and no required keyword can never match. A linter **SHOULD** flag each
+  such sample." Each one is a :data:`WARNING` on the ``.intent``; the file is
+  not malformed on its account.
+- *required slot declared by no template* → OVOS-INTENT-3 §5.3 — "A
+  ``required_slots`` entry that no template declares is malformed: the intent
+  can never match, and a tool MUST reject the definition at registration
+  time." This is a registration rule, not a single-file rule: a locale has no
+  ``required_slots`` list, because the required slots follow from the
+  templates (:func:`derive_required_slots`). The check is exposed as
+  :func:`validate_required_slots` (raises) and :func:`lint_required_slots`
+  (returns a :class:`Finding`) for the registration path that has both the
+  ``required_slots`` list and the templates in hand.
 
 Exposed as the ``ovos-spec-lint`` command::
 
@@ -66,7 +73,8 @@ OVOS spec version, for skills that must run on older deployments:
 - **0** — the legacy, undocumented Mycroft/OVOS de-facto behaviour;
 - **1** — the formalized specs; adds the ``.blacklist`` role;
 - **2** — adds ``<name>`` inline vocabulary references;
-- **3** — adds the ``.prompt`` role.
+- **3** — adds the ``.prompt`` role;
+- **4** — adds the ``.required`` role.
 """
 from __future__ import annotations
 
@@ -85,6 +93,7 @@ from ovos_spec_tools.expansion import (
     MalformedTemplate,
     expand,
     fold_double_braces,
+    iter_expand,
     strip_type_prefixes,
     bare_pipe_reason,
     BARE_PIPE_ROLES,
@@ -96,6 +105,7 @@ from ovos_spec_tools.resources import (
     read_prompt_file,
     read_resource_file,
     read_resource_file_numbered,
+    utterance_contains,
 )
 
 __all__ = [
@@ -103,6 +113,7 @@ __all__ = [
     "lint_locale",
     "declared_slots",
     "declared_slot_types",
+    "derive_required_slots",
     "validate_required_slots",
     "lint_required_slots",
     "validate_slot_types",
@@ -110,7 +121,7 @@ __all__ = [
     "main",
 ]
 
-# The six OVOS-INTENT-2 resource roles.
+# The seven OVOS-INTENT-2 resource roles.
 ROLE_EXTENSIONS = SLOT_BEARING_ROLES + SLOT_FREE_ROLES + (PROMPT_ROLE,)
 # File types OVOS-INTENT-2 deliberately does not define — flagged, not parsed.
 LEGACY_EXTENSIONS = (".rx", ".value", ".list", ".word", ".template", ".qml")
@@ -121,19 +132,23 @@ LEGACY_EXTENSIONS = (".rx", ".value", ".list", ".word", ".template", ".qml")
 # introduction will silently ignore (a forward-compatibility lint, not a
 # conformance check). Mapping: V1 = the formalized OVOS-INTENT-1/2 (adds the
 # `.blacklist` role over the legacy V0 set), V2 = the `<name>` inline vocabulary
-# reference (OVOS-INTENT-1 §3.7), V3 = the `.prompt` role (OVOS-INTENT-2 §4.4).
-DEFAULT_SPEC_VERSION = 3
+# reference (OVOS-INTENT-1 §3.7), V3 = the `.prompt` role (OVOS-INTENT-2 §4.4),
+# V4 = the `.required` role (OVOS-INTENT-2 §4.5).
+DEFAULT_SPEC_VERSION = 4
 _BLACKLIST_SINCE = 1        # the `.blacklist` role
 _VOCABULARY_REFERENCE_SINCE = 2  # the `<name>` inline vocabulary reference
 _PROMPT_ROLE_SINCE = 3      # the `.prompt` role
+_REQUIRED_ROLE_SINCE = 4    # the `.required` role
 # Roles introduced after V0, by the spec version that added them.
-_ROLE_SINCE = {".blacklist": _BLACKLIST_SINCE, PROMPT_ROLE: _PROMPT_ROLE_SINCE}
+_ROLE_SINCE = {".blacklist": _BLACKLIST_SINCE, PROMPT_ROLE: _PROMPT_ROLE_SINCE,
+               ".required": _REQUIRED_ROLE_SINCE}
 
 _BASE_NAME_RE = re.compile(r"[a-z0-9_]+")
 _SLOT_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
 _LANG_TAG_RE = re.compile(r"[a-z]{2,3}(-[A-Za-z0-9]+)*")
 _SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*)\}")
 _TYPED_SLOT_RE = re.compile(r"\{([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)\}")
+_VOCABULARY_REFERENCE_RE = re.compile(r"<([^<>]*)>")
 
 ERROR = "error"
 WARNING = "warning"
@@ -146,7 +161,8 @@ class Finding:
     Severity is :data:`ERROR` for a spec **MUST** violation (a malformed
     template, a duplicate ``(role, base name)``, an empty file, a slot in a
     slot-free role) and :data:`WARNING` for a **SHOULD**/advisory issue (a
-    legacy file type, a non-BCP-47 directory name, an unpaired ``.blacklist``).
+    legacy file type, a non-BCP-47 directory name, an unpaired ``.blacklist``
+    or ``.required``, a sample that can never meet its ``.required``).
     Only errors fail a non-``--strict`` run.
 
     Attributes:
@@ -192,21 +208,58 @@ def declared_slots(templates: Sequence[str]) -> frozenset:
     return frozenset(slots)
 
 
+def derive_required_slots(templates: Sequence[str]) -> frozenset:
+    """The required slots of an intent, derived from its templates.
+
+    OVOS-INTENT-3 §5.3: "a slot is required when it appears in **every**
+    expanded sample of the intent". Each template is expanded (OVOS-INTENT-1
+    §4) and the result is the intersection of the slot sets of all samples.
+    A slot inside an optional group ``[x]``, in only some branches of an
+    alternative, or in only some templates is absent from at least one
+    sample, so it is not required. A producer fills the ``required_slots``
+    field of the registration (OVOS-INTENT-4 §6.1) from this value.
+
+    A vocabulary is slot-free (OVOS-INTENT-2 §4.3), so its members cannot
+    change which slots a sample carries. Each ``<name>`` reference therefore
+    expands to one stand-in word, and no ``.voc`` is needed.
+
+    Args:
+        templates: the template lines of one ``.intent``, or its expanded
+            samples; a sample expands to itself.
+
+    Returns:
+        The frozen set of bare slot names present in every sample. An intent
+        with no templates, or with no slot common to every sample, has none.
+
+    Raises:
+        MalformedTemplate: a template is malformed (OVOS-INTENT-1 §3.6).
+    """
+    required: Optional[frozenset] = None
+    for template in templates:
+        stand_ins = {name: ["vocabulary"]
+                     for name in _VOCABULARY_REFERENCE_RE.findall(template)}
+        for sample in iter_expand(template, stand_ins):
+            slots = frozenset(_SLOT_RE.findall(sample))
+            required = slots if required is None else required & slots
+    return required or frozenset()
+
+
 def validate_required_slots(
         required_slots: Sequence[str],
         templates: Sequence[str]) -> None:
     """Verify every required slot is declared by at least one template (§5.3).
 
-    OVOS-INTENT-3 §5.3 makes this a **MUST** at registration time: "A required
-    slot MUST be declared by at least one template in the intent. Declaring a
-    required slot that no template mentions is malformed: the intent can never
-    match, and a tool MUST reject the definition at registration time."
+    OVOS-INTENT-3 §5.3 makes this a **MUST** at registration time: "A
+    ``required_slots`` entry that no template declares is malformed: the
+    intent can never match, and a tool MUST reject the definition at
+    registration time." A producer that fills ``required_slots`` with
+    :func:`derive_required_slots` always passes this check.
 
-    ``required_slots`` is an intent-**definition** field — it lives above the
-    raw ``.intent`` file, alongside the templates. This validator is the place
-    that sees both together; call it when registering or loading an intent
-    definition so a malformed one (a required slot no template can fill) is
-    rejected before it can silently never fire.
+    ``required_slots`` is a registration field (OVOS-INTENT-4 §6.1) — it
+    lives above the raw ``.intent`` file, alongside the templates. This
+    validator is the place that sees both together; call it when registering
+    or loading an intent definition so a malformed one (a required slot no
+    template can fill) is rejected before it can silently never fire.
 
     Args:
         required_slots: the slot names the intent declares as required.
@@ -397,7 +450,7 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
         if path.suffix in ROLE_EXTENSIONS:
             role_files.append(path)
         elif path.suffix in LEGACY_EXTENSIONS:
-            # §1 defines exactly six roles; §5 forbids a loader inventing more.
+            # §1 defines exactly seven roles; §5 forbids a loader inventing more.
             # Legacy Mycroft types are flagged (not parsed) so an author knows
             # the file will be silently ignored by a conformant loader.
             findings.append(Finding(
@@ -454,6 +507,15 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
                 f"blacklist {path.stem!r} has no matching {path.stem}.intent "
                 f"to suppress nor {path.stem}.entity/{{{path.stem}}} slot to "
                 f"exclude (OVOS-INTENT-2 §4.3)"))
+        if path.suffix == ".required" and path.stem not in intent_names:
+            # §4.5: "A .required pairs only with an .intent". Unlike a
+            # .blacklist it has no slot-value role, so an .entity or {slot}
+            # of its base name gives it nothing to constrain.
+            findings.append(Finding(
+                WARNING, str(path),
+                f"required {path.stem!r} has no matching {path.stem}.intent "
+                f"to constrain; a .required pairs only with an .intent "
+                f"(OVOS-INTENT-2 §4.5)"))
 
     # Vocabularies, for resolving <name> references during expansion.
     vocabularies: Dict[str, List[str]] = {}
@@ -466,6 +528,48 @@ def _lint_language_tree(language_dir: Path, spec_version: int) -> List[Finding]:
 
     for path in role_files:
         findings.extend(_lint_file(path, vocabularies, spec_version))
+    for (ext, stem), path in first_seen.items():
+        intent_path = first_seen.get((".intent", stem))
+        if ext == ".required" and intent_path is not None:
+            findings.extend(_lint_required_samples(
+                intent_path, path, vocabularies))
+    return findings
+
+
+def _lint_required_samples(intent_path: Path, required_path: Path,
+                           vocabularies: Dict[str, Sequence[str]]
+                           ) -> List[Finding]:
+    """Flag each sample of an ``.intent`` that its ``.required`` rejects.
+
+    OVOS-INTENT-2 §4.5: "A sample with no slots and no required keyword can
+    never match. A linter **SHOULD** flag each such sample. The file is not
+    malformed on its account." A sample with a slot is not flagged, because a
+    slot value can supply the keyword at match time. A file that does not
+    read or expand cleanly is skipped here; :func:`_lint_file` reports it.
+    """
+    try:
+        keywords = [keyword
+                    for template in read_resource_file(required_path)
+                    for keyword in expand(template, vocabularies)]
+        numbered = read_resource_file_numbered(intent_path)
+    except (OSError, UnicodeError, MalformedTemplate):
+        return []
+    if not keywords or any("{" in keyword for keyword in keywords):
+        return []
+    findings: List[Finding] = []
+    for number, template in numbered:
+        try:
+            samples = expand(template, vocabularies)
+        except MalformedTemplate:
+            continue
+        for sample in samples:
+            if "{" in sample or utterance_contains(sample, keywords):
+                continue
+            findings.append(Finding(
+                WARNING, str(intent_path),
+                f"sample has no slot and no keyword of "
+                f"{required_path.name}, so the intent can never match it "
+                f"(OVOS-INTENT-2 §4.5)  [in: {sample!r}]", number))
     return findings
 
 
@@ -545,7 +649,7 @@ def _lint_file(path: Path,
     # --- §3.6 malformed form: a pipe outside a group -------------------------
     # OVOS-INTENT-1 §3.6 names the form: a `|` inside no group, where a group
     # is `( ... )` or `[ ... ]`. `plata|argent` in an .entity is malformed,
-    # and the author means two lines or one group. The four input-direction
+    # and the author means two lines or one group. The input-direction
     # roles are held to it under §2, and .dialog with them, because
     # OVOS-INTENT-2 §4.2 makes a .dialog line a template whose metacharacters
     # are structural. Reported with the line, because the author has to open
@@ -561,7 +665,7 @@ def _lint_file(path: Path,
 
     # --- syntax (OVOS-INTENT-1) ---------------------------------------------
     # The direction of the role (OVOS-INTENT-1 §2) selects which §3.6 forms
-    # apply. `.intent`, `.entity`, `.voc` and `.blacklist` are input-direction:
+    # apply. `.intent` and the slot-free roles are input-direction:
     # an engine trains on them and a matcher fills their slots, so the
     # adjacent-slot and slot-only forms apply. `.dialog` is output-direction and
     # caller-filled (§5.1, §6); the linter therefore reports neither in it.
@@ -590,11 +694,12 @@ def _lint_file(path: Path,
                 ERROR, str(path), f"{exc}  [in: {template!r}]"))
             continue
         if slot_free and any("{" in sample for sample in samples):
-            # §4.3: .entity/.voc/.blacklist are the slot-free format — no {name}.
+            # §4.3, §4.5: .entity/.voc/.blacklist/.required are the slot-free
+            # format — no {name}.
             findings.append(Finding(
                 ERROR, str(path),
                 f"{extension} is slot-free but a template contains a named "
-                f"slot (OVOS-INTENT-2 §4.3)  [in: {template!r}]"))
+                f"slot (OVOS-INTENT-2 §4.3, §4.5)  [in: {template!r}]"))
         if slot_bearing:
             # Fold ``{{name}}`` to ``{name}`` and strip any type prefix first
             # (OVOS-INTENT-1 §3.4, §5.5) so the equivalent slot spellings yield
@@ -646,11 +751,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "--strict", action="store_true",
         help="exit non-zero if there are warnings as well as errors")
     parser.add_argument(
-        "--spec-version", type=int, choices=(0, 1, 2, 3),
+        "--spec-version", type=int, choices=(0, 1, 2, 3, 4),
         default=DEFAULT_SPEC_VERSION,
         help="target OVOS spec version; flags features newer than it "
              "(0: legacy, 1: adds .blacklist, 2: adds <name> references, "
-             f"3: adds the .prompt role). Default {DEFAULT_SPEC_VERSION}.")
+             "3: adds the .prompt role, 4: adds the .required role). "
+             f"Default {DEFAULT_SPEC_VERSION}.")
     args = parser.parse_args(argv)
 
     findings = lint_locale(args.locale, spec_version=args.spec_version)

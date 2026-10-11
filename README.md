@@ -68,7 +68,7 @@ A zero-to-hero guide lives in [`docs/`](docs/README.md):
 2. [Sentence templates](docs/templates.md), the grammar: alternatives,
    optionals, slots, vocabulary references, malformed forms.
 3. [Locale resources](docs/locale-resources.md), the `locale/` folder, the
-   six file roles, loading across languages, override precedence.
+   seven file roles, loading across languages, override precedence.
 4. [Dialog](docs/dialog.md), choosing and filling a spoken response, and
    rendering language-model prompts.
 

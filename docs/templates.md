@@ -80,6 +80,12 @@ Who fills a slot, and when, depends on the file role: an intent engine fills it
 from speech; a skill fills a dialog slot before the phrase is spoken. Expansion
 itself never does.
 
+A slot that occurs in every sample of an intent is a **required** slot
+(OVOS-INTENT-3 §5.3). In `play {query} [on {engine}]`, `{query}` is required
+and `{engine}` is optional, because the sample `play {query}` does not have
+it. `derive_required_slots` computes this set
+([chapter 3](locale-resources.md)).
+
 ### Vocabulary references: `<name>`
 
 `<name>` (OVOS-INTENT-1 §3.7) pulls in a named **vocabulary**, a reusable set

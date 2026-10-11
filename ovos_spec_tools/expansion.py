@@ -32,10 +32,10 @@ which states its own reason — a matcher cannot delimit two touching values —
 and the slot-only template (``{a}``), which an input-direction template must
 not be because it needs a literal word to anchor a match. Both hold for an
 **input-direction** template only (``.intent``, ``.entity``, ``.voc``,
-``.blacklist``). An **output-direction** template (``.dialog``) is
-caller-filled and never matched (§5.1, §6), so ``expand`` accepts both when it
-is called with ``direction="output"``. Every other malformed form holds in both
-directions.
+``.blacklist``, ``.required``). An **output-direction** template
+(``.dialog``) is caller-filled and never matched (§5.1, §6), so ``expand``
+accepts both when it is called with ``direction="output"``. Every other
+malformed form holds in both directions.
 """
 from __future__ import annotations
 
@@ -50,9 +50,12 @@ __all__ = ["expand", "iter_expand", "fold_double_braces",
 
 _log = logging.getLogger(__name__)
 
-#: The four input-direction roles (OVOS-INTENT-1 §2): these are held to §2's
+#: The five input-direction roles (OVOS-INTENT-1 §2): these are held to §2's
 #: normalized form, which forbids the grammar metacharacters as literal input.
-INPUT_DIRECTION_ROLES = (".intent", ".entity", ".voc", ".blacklist")
+#: ``.required`` has the format of ``.blacklist`` (OVOS-INTENT-2 §4.5) and is
+#: matched against the utterance in the same way, so it is input-direction too.
+INPUT_DIRECTION_ROLES = (".intent", ".entity", ".voc", ".blacklist",
+                         ".required")
 
 #: The roles the bare-pipe rule applies to. ``.dialog`` is in the set although
 #: it is output-direction, because OVOS-INTENT-2 §4.2 says a ``.dialog``
@@ -168,9 +171,10 @@ _TYPE_PREFIX_RE = re.compile(r"\A([a-z][a-z0-9_]*):([a-z][a-z0-9_]*)\Z")
 _ADJACENT_SLOTS_RE = re.compile(r"\}\s*\{")
 # The two template directions of OVOS-INTENT-1 §2: `input` is a template an
 # engine trains on and a matcher fills at match time (`.intent`, `.entity`,
-# `.voc`, `.blacklist`); `output` is a caller-filled template a renderer reads
-# (`.dialog`). The §3.6 adjacent-slot rule states its own reason — "a matcher
-# cannot tell where one slot's value ends and the next begins" — so it holds
+# `.voc`, `.blacklist`, `.required`); `output` is a caller-filled template a
+# renderer reads (`.dialog`). The §3.6 adjacent-slot rule states its own
+# reason — "a matcher cannot tell where one slot's value ends and the next
+# begins" — so it holds
 # for the input direction only, and §3.6 scopes the slot-only rule to the input
 # direction in so many words. §5.1 fills an output-direction slot from the caller, one value per slot
 # name, and nothing reads a value back out of the rendered text, so two touching
