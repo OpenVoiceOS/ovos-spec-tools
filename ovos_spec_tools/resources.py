@@ -2,15 +2,16 @@
 
 This module is the reference implementation of the loader of OVOS-INTENT-2: it
 discovers a skill's locale resource files, reads them with the common reader
-(§3), and loads each of the six resource roles per its format (§4).
+(§3), and loads each of the seven resource roles per its format (§4).
 
-The six roles, by extension:
+The seven roles, by extension:
 
 - ``.intent`` — slot-bearing intent training samples;
 - ``.dialog`` — slot-bearing spoken-response phrases;
 - ``.entity`` — slot-free example values for a slot;
 - ``.voc`` — slot-free vocabulary;
 - ``.blacklist`` — slot-free intent-suppression phrases;
+- ``.required`` — slot-free required keywords of one intent (§4.5);
 - ``.prompt`` — a whole-file plain-text language-model prompt (§4.4).
 
 The user-data path of the override precedence (§2.1) is **assistant-defined**;
@@ -45,6 +46,7 @@ __all__ = [
     "normalize_for_match",
     "read_resource_file",
     "read_prompt_file",
+    "required_keywords_reject",
     "strip_samples",
     "utterance_contains",
     "SLOT_BEARING_ROLES",
@@ -52,12 +54,12 @@ __all__ = [
     "PROMPT_ROLE",
 ]
 
-# Resource roles, by file extension (OVOS-INTENT-2 §1). The five template
+# Resource roles, by file extension (OVOS-INTENT-2 §1). The six template
 # roles are line-oriented; `.prompt` is a single whole-file document (§4.4).
 _log = logging.getLogger(__name__)
 
 SLOT_BEARING_ROLES = (".intent", ".dialog")
-SLOT_FREE_ROLES = (".entity", ".voc", ".blacklist")
+SLOT_FREE_ROLES = (".entity", ".voc", ".blacklist", ".required")
 PROMPT_ROLE = ".prompt"
 
 # A resolver maps a requested language and the available language tags to the
@@ -361,7 +363,8 @@ def utterance_contains(utterance: str, samples: Sequence[str],
     forward each one as required by the target language.
 
     The default whole-word (non-``exact``) mode implements the
-    OVOS-INTENT-2 §4.3 occurrence rule used for ``.voc``/``.blacklist`` testing:
+    OVOS-INTENT-2 §4.3 occurrence rule used for ``.voc``/``.blacklist`` testing,
+    and for ``.required`` testing (§4.5):
     a phrase "occurs" when its words appear "as a contiguous sequence of whole
     words … not a raw substring" — which is why ``art`` does not match within
     ``start``.
@@ -397,6 +400,42 @@ def utterance_contains(utterance: str, samples: Sequence[str],
             r"(?<!\w)" + re.escape(s) + r"(?!\w)", utt) is not None
         for s in norm_samples
     )
+
+
+def required_keywords_reject(utterance: str,
+                             required_keywords: Sequence[str],
+                             *,
+                             strip_diacritics: bool = True,
+                             strip_punct: bool = True) -> bool:
+    """True iff ``required_keywords`` suppresses its intent for ``utterance``.
+
+    OVOS-INTENT-2 §4.5: "If **no** keyword from the set occurs in the user's
+    utterance, that intent is suppressed — a **hard, score-independent
+    rejection**". A keyword occurs by the occurrence rule of §4.3, a
+    contiguous sequence of whole words, which :func:`utterance_contains`
+    implements. This is the ``.blacklist`` test with the logic inverted: a
+    blacklist rejects when any phrase occurs, a ``.required`` rejects when
+    none occurs.
+
+    An empty keyword set is no requirement and never rejects
+    (OVOS-INTENT-4 §6.1: "An empty ``required_keywords`` means no keyword
+    requirement, never a requirement that cannot be met").
+
+    Args:
+        utterance: the (ASR-normalized) text to test.
+        required_keywords: the intent's expanded ``.required`` set, as
+            :meth:`LocaleResources.load_required_keywords` returns it.
+        strip_diacritics: forwarded to :func:`normalize_for_match`.
+        strip_punct: forwarded to :func:`normalize_for_match`.
+
+    Returns:
+        ``True`` when the intent must not match ``utterance``.
+    """
+    if not required_keywords:
+        return False
+    return not utterance_contains(utterance, required_keywords,
+                                  strip_diacritics=strip_diacritics,
+                                  strip_punct=strip_punct)
 
 
 def strip_samples(utterance: str, samples: Sequence[str]) -> str:
@@ -619,7 +658,7 @@ class LocaleResources:
         malformed resource must not take down an unrelated first lookup. The
         access that needs it still raises.
         """
-        expanded_roles = {".intent", ".entity", ".voc", ".blacklist"}
+        expanded_roles = {".intent", *SLOT_FREE_ROLES}
         requests = set()
         for source in self._static_sources:
             lang_name = self._static_lang_name(source, lang)
@@ -872,7 +911,7 @@ class LocaleResources:
                          templates: Sequence[str]) -> frozenset:
         """WARN for every non-conformant template, and name the ones to skip.
 
-        The four input-direction roles are held to this (OVOS-INTENT-1 §2),
+        The input-direction roles are held to this (OVOS-INTENT-1 §2),
         and ``.dialog`` with them: OVOS-INTENT-2 §4.2 makes each ``.dialog``
         line a template whose metacharacters are structural, so a pipe there
         is not punctuation either. ``.prompt`` is out, being a whole-file
@@ -982,6 +1021,17 @@ class LocaleResources:
     def load_blacklist(self, base_name: str, lang: str) -> List[str]:
         """Load a ``.blacklist`` phrase set (§4.3)."""
         return self._load_expanded(base_name, ".blacklist", lang)
+
+    def load_required_keywords(self, base_name: str, lang: str) -> List[str]:
+        """Load a ``.required`` keyword set (§4.5).
+
+        The result is the union of the sample sets of all lines, the value an
+        intent's registration carries as ``required_keywords``
+        (OVOS-INTENT-4 §6.1). A ``.required`` is optional: a missing file
+        raises ``FileNotFoundError``, and the intent then has no keyword
+        requirement.
+        """
+        return self._load_expanded(base_name, ".required", lang)
 
     def load_dialog(self, base_name: str, lang: str) -> List[str]:
         """Load a ``.dialog`` as its list of phrase strings.

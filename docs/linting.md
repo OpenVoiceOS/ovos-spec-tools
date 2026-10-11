@@ -43,7 +43,8 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
   [chapter 2](templates.md).
 - an empty file (no templates after comments and blank lines).
 - a file that is not valid UTF-8.
-- a named slot inside a slot-free role (`.entity` / `.voc` / `.blacklist`).
+- a named slot inside a slot-free role (`.entity` / `.voc` / `.blacklist` /
+  `.required`).
 
 - templates within one **`.intent`** or **`.dialog`** declaring **different
   slot sets**. Every line of one definition MUST declare the same `{slots}` so
@@ -62,9 +63,16 @@ straight into a CI pipeline. With `--strict`, warnings fail the run too.
 - a language directory not named like a BCP-47 tag.
 
 - a language directory with no resource files.
-- a legacy file type (`.rx`, `.value`, `.list`, …), not one of the six
+- a legacy file type (`.rx`, `.value`, `.list`, …), not one of the seven
   OVOS-INTENT-2 roles.
 - a `.blacklist` with no matching `.intent` to suppress.
+- a `.required` with no matching `.intent`. A `.required` pairs only with an
+  `.intent` (OVOS-INTENT-2 §4.5). An `.entity` or a `{slot}` of the same base
+  name gives it nothing to constrain.
+- a sample of an `.intent` that has no slot and contains no keyword of the
+  paired `.required`. The intent can never match that sample, so the linter
+  reports each such sample with its line (OVOS-INTENT-2 §4.5). A sample with
+  a slot is not reported, because a slot value can supply the keyword.
 - a file name that is not lowercase.
 
 A `.prompt` is checked too, but not as a template, it is plain text, so only
@@ -102,7 +110,8 @@ shipping that a skill will not work there:
 | `0` | the legacy, undocumented Mycroft/OVOS de-facto behaviour |
 | `1` | the formalized specs, and the `.blacklist` role |
 | `2` | `<name>` inline vocabulary references |
-| `3` | the `.prompt` role *(the default)* |
+| `3` | the `.prompt` role |
+| `4` | the `.required` role *(the default)* |
 
 ```bash
 ovos-spec-lint my-skill/locale --spec-version 1
@@ -111,10 +120,11 @@ ovos-spec-lint my-skill/locale --spec-version 1
 With `--spec-version 1`, a template using `<name>` is an **error**. A
 version-1 runtime cannot expand it.
 
-With `--spec-version 2`, a `.prompt` file is a **warning**, and with
-`--spec-version 0` a `.blacklist` file likewise. An older runtime silently
-ignores a role it does not know, so that resource just will not take effect.
-The default, `3`, flags nothing extra.
+With `--spec-version 3`, a `.required` file is a **warning**. With
+`--spec-version 2`, a `.prompt` file is a warning too, and with
+`--spec-version 0` a `.blacklist` file also. An older runtime ignores a role
+it does not know, so that resource has no effect there. The default, `4`,
+flags nothing extra.
 
 ## Using it as a library
 

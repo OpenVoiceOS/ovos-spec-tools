@@ -156,7 +156,7 @@ symbols it exports as imported by the package `__init__`.)
 
 | Symbol | Spec | § |
 |---|---|---|
-| `LocaleResources` | OVOS-INTENT-2 | §2 (layout / override precedence), §4 (six roles) |
+| `LocaleResources` | OVOS-INTENT-2 | §2 (layout / override precedence), §4 (seven roles) |
 | `read_resource_file` | OVOS-INTENT-2 | §3 (common reader) |
 | `read_prompt_file` | OVOS-INTENT-2 | §3, §4.4 (`.prompt` whole-file read) |
 | `iter_locale_dirs` | OVOS-INTENT-2 | §2 (locale layout) + §2.2 distance fallback |
@@ -165,6 +165,7 @@ symbols it exports as imported by the package `__init__`.)
 | `normalize_for_match` | OVOS-INTENT-2 | §4.3 (match-comparison normalization) |
 | `utterance_contains` | OVOS-INTENT-2 | §4.3 (vocabulary / keyword match) |
 | `strip_samples` | OVOS-INTENT-2 | §4.3 (keyword removal) |
+| `required_keywords_reject` | OVOS-INTENT-2 | §4.5 (`.required` rejection, the inverted §4.3 occurrence test) |
 | `MalformedResource` | OVOS-INTENT-2 | §3, §4 (malformed file / layout) |
 
 ### `dialog.py`: OVOS-INTENT-2 §4.2 (Dialog)
@@ -205,6 +206,7 @@ spec version.
 | Symbol | Spec | § |
 |---|---|---|
 | `lint_locale` | OVOS-INTENT-1 + OVOS-INTENT-2 | INTENT-1 §3 (syntax) + INTENT-2 §2/§4 (layout/roles) |
+| `derive_required_slots` | OVOS-INTENT-3 + OVOS-INTENT-4 | INTENT-3 §5.3 (required slots) + INTENT-4 §6.1 (`required_slots`) |
 | `Finding` | (tooling) | a single lint result (`severity`/`path`/`message`) |
 | `ovos-spec-lint` (CLI) | (tooling) | command wrapper over `lint_locale` |
 

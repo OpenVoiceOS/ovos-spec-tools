@@ -98,9 +98,11 @@ class TestTheVerifier(unittest.TestCase):
         self.assertEqual(expand("a (b|c) d"), ["a b d", "a c d"])
 
     def test_the_roles_the_rule_applies_to(self):
-        # INPUT_DIRECTION_ROLES stays the §2 fact it names
+        # INPUT_DIRECTION_ROLES stays the §2 fact it names, with .required,
+        # which OVOS-INTENT-2 §4.5 gives "the same format as .blacklist"
         self.assertEqual(INPUT_DIRECTION_ROLES,
-                         (".intent", ".entity", ".voc", ".blacklist"))
+                         (".intent", ".entity", ".voc", ".blacklist",
+                          ".required"))
         self.assertNotIn(".dialog", INPUT_DIRECTION_ROLES)
         # the bare-pipe rule reaches .dialog as well: OVOS-INTENT-2 §4.2 makes
         # its metacharacters structural, so a pipe there is not punctuation.
@@ -224,6 +226,7 @@ class TestNothingLeftAfterTheSkipRaisesForEveryRole(unittest.TestCase):
              ("greet", ".intent", "load_intent", "template"),
              ("colour", ".entity", "load_entity", "template"),
              ("banned", ".blacklist", "load_blacklist", "template"),
+             ("needed", ".required", "load_required_keywords", "template"),
              ("answer", ".dialog", "load_dialog", "phrase"))
 
     def _loader(self, tmp, base_name, extension, body):

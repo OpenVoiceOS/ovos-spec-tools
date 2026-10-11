@@ -120,6 +120,10 @@ no-repetition-tracking one-off render).
   context.
 - `.blacklist` pairing with an `.entity` or `{slot}` for slot-value
   exclusion, enforced by the linter.
+- The `.required` role (OVOS-INTENT-2 §4.5): `load_required_keywords`,
+  `required_keywords_reject`, `derive_required_slots`, and the linter rules
+  for it. A `.required` file has no effect on an engine that does not read
+  `required_keywords` from the registration (OVOS-INTENT-4 §6.1).
 - Malformed keyword/`.intent` files now reject (later downgraded to warn) at
   build/emit time per INTENT-3 §4.2, instead of failing silently later.
 - `persona_id` and `fallback_handlers` added as registered `Session` fields
