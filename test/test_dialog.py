@@ -146,7 +146,7 @@ def test_renderer_missing_dialog_for_language_raises(tmp_path):
         renderer.render("de-DE")
 
 
-# --- default slots and .entity fallback --------------------------------------
+# --- default slots, and an .entity never fills a slot --------------------------------------
 
 def test_renderer_default_slots_are_reused(tmp_path):
     res = _resources(tmp_path, {"en-US/g.dialog": "Hello {name}."})
@@ -161,24 +161,24 @@ def test_per_call_slot_overrides_a_default(tmp_path):
     assert renderer.render("en-US", {"name": "Max"}) == "Hello Max."
 
 
-def test_unfilled_slot_falls_back_to_entity(tmp_path):
+def test_an_entity_never_fills_a_dialog_slot(tmp_path):
+    # OVOS-INTENT-2 §4.2: .entity is for .intent only
     res = _resources(tmp_path, {
         "en-US/today.dialog": "today is {day}",
         "en-US/day.entity": "monday\n",
     })
     renderer = DialogRenderer(res, "today")
-    assert renderer.render("en-US") == "today is monday"
+    with pytest.raises(UnfilledSlot, match="day"):
+        renderer.render("en-US")
 
 
-def test_slot_precedence_call_then_default_then_entity(tmp_path):
+def test_slot_precedence_call_then_default(tmp_path):
     res = _resources(tmp_path, {
         "en-US/v.dialog": "value {x}",
         "en-US/x.entity": "from_entity\n",
     })
     renderer = DialogRenderer(res, "v", slots={"x": "from_default"})
-    # default beats the .entity fallback
     assert renderer.render("en-US") == "value from_default"
-    # a per-call value beats both
     assert renderer.render("en-US", {"x": "from_call"}) == "value from_call"
 
 
