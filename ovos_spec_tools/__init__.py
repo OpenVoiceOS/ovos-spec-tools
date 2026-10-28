@@ -128,6 +128,7 @@ from ovos_spec_tools.resources import (
     read_prompt_file,
     read_resource_file,
     required_keywords_reject,
+    split_unspaced,
     strip_samples,
     utterance_contains,
 )
@@ -169,6 +170,7 @@ __all__ = [
     "read_resource_file",
     "read_prompt_file",
     "required_keywords_reject",
+    "split_unspaced",
     "strip_samples",
     "utterance_contains",
     "render",

@@ -24,6 +24,7 @@ serves every language the skill ships.
 from __future__ import annotations
 
 import logging
+import re
 import string
 import unicodedata
 from functools import lru_cache
@@ -50,6 +51,7 @@ __all__ = [
     "read_resource_file",
     "read_prompt_file",
     "required_keywords_reject",
+    "split_unspaced",
     "strip_samples",
     "utterance_contains",
     "SLOT_BEARING_ROLES",
@@ -452,6 +454,36 @@ def normalize_for_match(text: str, *,
     return text
 
 
+#: One character of Han, Hiragana, Katakana, Thai, Lao, Khmer or Myanmar:
+#: the scripts that do not separate words with spaces (OVOS-INTENT-2 §4.3).
+_UNSPACED_CHAR = re.compile(
+    "([\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u19e0-\u19ff"
+    "\u2e80-\u2fdf\u3005\u3007\u3021-\u3029\u3038-\u303b"
+    "\u3041-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff"
+    "\uf900-\ufaff\uff66-\uff9f\U00020000-\U000323af])")
+
+
+def split_unspaced(text: str) -> str:
+    """``text`` with each character of an unspaced script as its own word.
+
+    OVOS-INTENT-2 §4.3 counts whole words. Han, Hiragana, Katakana, Thai,
+    Lao, Khmer and Myanmar do not separate words with spaces, so there each
+    character is a word: ``"在WordNet中"`` gives ``"在 WordNet 中"``. The
+    result is single-spaced. Text with no such character is returned
+    unchanged, so a whitespace-delimited match on both sides of the
+    comparison follows the §4.3 rule in every script.
+
+    Args:
+        text: an utterance or a phrase, normalized the same way.
+
+    Returns:
+        ``text`` with a space between every two words.
+    """
+    if not _UNSPACED_CHAR.search(text):
+        return text
+    return " ".join(_UNSPACED_CHAR.sub(r" \1 ", text).split())
+
+
 def utterance_contains(utterance: str, samples: Sequence[str],
                        *,
                        exact: bool = False,
@@ -498,7 +530,8 @@ def utterance_contains(utterance: str, samples: Sequence[str],
     norm_samples = [norm(s) for s in samples]
     if exact:
         return any(s and s == utt for s in norm_samples)
-    import re
+    utt = split_unspaced(utt)
+    norm_samples = [split_unspaced(s) for s in norm_samples]
     # `(?<!\w)...(?!\w)` is whole-word like `\b...\b` but also matches
     # samples that begin or end in non-word characters (e.g. ``c++``).
     return any(
