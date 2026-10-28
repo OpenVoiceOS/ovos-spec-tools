@@ -3,28 +3,44 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ovos-intent-primitives"
+name = "ovos-spec-tools"
 dynamic = ["version"]
-description = "Reference implementation of the OVOS intent specifications"
+description = "Reference implementation of the OVOS formal specifications"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "jarbasai", email = "jarbasai@mailfence.com" }]
-requires-python = ">=3.8"
-dependencies = [
+requires-python = ">=3.10"
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# `langcodes` powers the smart language fallback of LocaleResources; without
+# it, language resolution is exact-match only.
+langcodes = [
+    "langcodes",
+]
+test = [
+    "pytest",
     "langcodes",
 ]
 
-[project.optional-dependencies]
-test = [
-    "pytest",
-]
+[project.scripts]
+ovos-spec-lint = "ovos_spec_tools.lint:main"
 
 [project.urls]
-Homepage = "https://github.com/OpenVoiceOS/ovos-intent-primitives"
+Homepage = "https://github.com/OpenVoiceOS/ovos-spec-tools"
 
 [tool.setuptools.dynamic]
-version = { attr = "ovos_intent_primitives.version.__version__" }
+version = { attr = "ovos_spec_tools.version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["ovos_intent_primitives*"]
+include = ["ovos_spec_tools*"]
