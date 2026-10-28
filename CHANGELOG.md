@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.16.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.16.1a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.16.0a1...1.16.1a1)
+
+**Merged pull requests:**
+
+- fix: fold punctuation of any script, and separate the words it joined [\#166](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/166) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.16.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.16.0a1) (2026-10-11)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.15.2a1...1.16.0a1)
@@ -374,10 +382,6 @@
 ## [1.5.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.1a1) (2026-07-17)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.5.0a1...1.5.1a1)
-
-**Merged pull requests:**
-
-- fix: make SessionManager registry lock reentrant [\#84](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/84) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.5.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.0a1) (2026-07-03)
 
