@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.16.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.16.2a1) (2026-10-28)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.16.1a1...1.16.2a1)
+
+**Merged pull requests:**
+
+- fix: a character of an unspaced script is a word [\#190](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/190) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.16.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.16.1a1) (2026-10-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.16.0a1...1.16.1a1)
@@ -374,10 +382,6 @@
 ## [1.5.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.1a2) (2026-07-23)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.5.1a1...1.5.1a2)
-
-**Merged pull requests:**
-
-- test: strengthen intent\_context decay/cap primitive coverage \(OVOS-CONTEXT-1\) [\#86](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/86) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.5.1a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.1a1) (2026-07-17)
 
