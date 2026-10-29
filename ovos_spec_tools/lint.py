@@ -24,12 +24,13 @@ Clause map (which spec rule each rule enforces):
 - *named slot in a slot-free role* → OVOS-INTENT-2 §4.3, §4.5 — ``.entity`` /
   ``.voc`` / ``.blacklist`` / ``.required`` are slot-free.
 - *template syntax* → OVOS-INTENT-1 §3.6 (delegated to
-  :func:`~ovos_spec_tools.expansion.expand`). Two forms of §3.6 are scoped by
-  direction (§2): *adjacent slots* and *slot-only template* are reported for
-  the input-direction roles (``.intent``, ``.entity``, ``.voc``,
-  ``.blacklist``, ``.required``) only. A ``.dialog`` is output-direction and
-  caller-filled (§5.1, §6), so two of its slots may touch, a phrase may be a single slot, and
-  the linter reports neither.
+  :func:`~ovos_spec_tools.expansion.expand`). Three forms of §3.6 are scoped by
+  direction (§2): *adjacent slots*, *slot-only template* and *repeated slot
+  name* are reported for the input-direction roles (``.intent``, ``.entity``,
+  ``.voc``, ``.blacklist``, ``.required``) only. A ``.dialog`` is
+  output-direction and caller-filled (§5.1, §6), so two of its slots may
+  touch, a phrase may be a single slot, a slot name may repeat, and the
+  linter reports none of them.
 - *slot-set consistency* → OVOS-INTENT-2 §4.2 (``.dialog`` only): a ``.dialog``
   whose phrases declare different slot sets is an ERROR (the caller fills the
   slots of the rendered phrase, so all phrases must expose the same slots).
@@ -667,8 +668,9 @@ def _lint_file(path: Path,
     # The direction of the role (OVOS-INTENT-1 §2) selects which §3.6 forms
     # apply. `.intent` and the slot-free roles are input-direction:
     # an engine trains on them and a matcher fills their slots, so the
-    # adjacent-slot and slot-only forms apply. `.dialog` is output-direction and
-    # caller-filled (§5.1, §6); the linter therefore reports neither in it.
+    # adjacent-slot, slot-only and repeated-name forms apply. `.dialog` is
+    # output-direction and caller-filled (§5.1, §6); the linter therefore
+    # reports none of them in it.
     # Every other §3.6 form is reported in both.
     direction = (INPUT_DIRECTION if extension in INPUT_DIRECTION_ROLES
                  else OUTPUT_DIRECTION)

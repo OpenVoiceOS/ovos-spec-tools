@@ -27,15 +27,17 @@ normalize; it expands.
 
 Malformed templates (OVOS-INTENT-1 §3.6) raise :class:`MalformedTemplate`.
 
-Two §3.6 forms are scoped by **direction** (§2): adjacent slots (``{a} {b}``),
+Three §3.6 forms are scoped by **direction** (§2): adjacent slots (``{a} {b}``),
 which states its own reason — a matcher cannot delimit two touching values —
-and the slot-only template (``{a}``), which an input-direction template must
-not be because it needs a literal word to anchor a match. Both hold for an
+the slot-only template (``{a}``), which an input-direction template must
+not be because it needs a literal word to anchor a match, and the repeated
+slot name (``{a} and {a}``), which leaves open which span of the utterance the
+one value is. All three hold for an
 **input-direction** template only (``.intent``, ``.entity``, ``.voc``,
 ``.blacklist``, ``.required``). An **output-direction** template
 (``.dialog``) is caller-filled and never matched (§5.1, §6), so ``expand``
-accepts both when it is called with ``direction="output"``. Every other
-malformed form holds in both directions.
+accepts all three when it is called with ``direction="output"``. Every
+other malformed form holds in both directions.
 """
 from __future__ import annotations
 
@@ -174,11 +176,12 @@ _ADJACENT_SLOTS_RE = re.compile(r"\}\s*\{")
 # `.voc`, `.blacklist`, `.required`); `output` is a caller-filled template a
 # renderer reads (`.dialog`). The §3.6 adjacent-slot rule states its own
 # reason — "a matcher cannot tell where one slot's value ends and the next
-# begins" — so it holds
-# for the input direction only, and §3.6 scopes the slot-only rule to the input
-# direction in so many words. §5.1 fills an output-direction slot from the caller, one value per slot
-# name, and nothing reads a value back out of the rendered text, so two touching
-# slots carry no ambiguity there. Every other §3.6 form is direction-neutral.
+# begins" — so it holds for the input direction only, and §3.6 scopes the
+# slot-only and repeated-slot-name rules to the input direction in so many
+# words. §5.1 fills an output-direction slot from the caller, one value per
+# slot name, and nothing reads a value back out of the rendered text, so
+# touching slots and a repeated name carry no ambiguity there. Every other
+# §3.6 form is direction-neutral.
 INPUT_DIRECTION = "input"
 OUTPUT_DIRECTION = "output"
 DIRECTIONS = (INPUT_DIRECTION, OUTPUT_DIRECTION)
@@ -206,8 +209,9 @@ def expand(template: str,
             ``template`` contains ``<name>`` references.
         direction: ``"input"`` (the default) for a template a matcher fills, or
             ``"output"`` for a caller-filled template a renderer reads (§2).
-            The adjacent-slot rule of §3.6 holds for the input direction only;
-            every other malformed form holds in both.
+            The adjacent-slot, slot-only and repeated-slot-name rules of §3.6
+            hold for the input direction only; every other malformed form
+            holds in both.
 
     Returns:
         The sample set: distinct sample sentences, in first-seen order. Each
@@ -511,9 +515,11 @@ def _check_sample(sentence: str, template: str, *,
                   direction: str = INPUT_DIRECTION) -> None:
     """Reject a sample that is malformed per §3.6.
 
-    The adjacent-slot form is skipped in the output direction: it exists so a
-    matcher can delimit two values, and an output-direction template is
-    caller-filled and never matched (§2, §5.1, §6).
+    The adjacent-slot form and the repeated-slot-name form are skipped in the
+    output direction: each exists because an engine returns one value per slot
+    name from the utterance, and an output-direction template is
+    caller-filled and never matched (§2, §5.1, §6). The caller gives one value
+    per name and every occurrence of the name takes it.
     """
     if sentence == "":
         raise MalformedTemplate(
@@ -523,7 +529,7 @@ def _check_sample(sentence: str, template: str, *,
             f"adjacent slots in sample {sentence!r} of template {template!r}: "
             f"a literal word must separate any two slots")
     names = _SLOT_TOKEN_RE.findall(sentence)
-    if len(names) != len(set(names)):
+    if direction == INPUT_DIRECTION and len(names) != len(set(names)):
         raise MalformedTemplate(
             f"repeated slot name in sample {sentence!r} of template "
             f"{template!r}: each slot is defined once per sample")
