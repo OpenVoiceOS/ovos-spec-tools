@@ -690,7 +690,7 @@ class NamespaceTranslator:
     ``MessageBusClient`` and ``ovos_utils``' ``FakeBus`` both delegate to, so
     the real websocket bus and the test/satellite double behave identically. It
     carries no I/O and no config: the two direction flags are passed in (the
-    caller reads env/config), keeping ``ovos-spec-tools`` dependency-free.
+    caller reads env/config), so the module needs no bus or config package.
 
     .. note::
 

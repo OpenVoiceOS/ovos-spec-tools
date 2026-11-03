@@ -68,8 +68,8 @@ def test_closest_lang_skips_a_distant_language():
     assert closest_lang("en-AU", ["fr-FR", "en-GB"]) == "en-GB"
 
 
-def test_closest_lang_prefers_the_norm_region_for_a_bare_tag():
-    """langcodes makes bare `pt` closest to pt-BR; the norm region pt-PT wins."""
+def test_closest_lang_prefers_the_default_region_for_a_bare_tag():
+    """langcodes makes bare `pt` closest to pt-BR; the default region pt-PT wins."""
     assert closest_lang("pt", ["pt-BR", "pt-PT"]) == "pt-PT"
     assert closest_lang("pt", ["pt-PT", "pt-BR"]) == "pt-PT"  # order-independent
 

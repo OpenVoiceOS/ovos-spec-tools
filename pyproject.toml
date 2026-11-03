@@ -23,8 +23,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# `langcodes` powers the smart language fallback of LocaleResources; without
-# it, language resolution is exact-match only.
+# `langcodes` gives the full CLDR language distance; without it, a coarse
+# language, script and region comparison ranks the fallback.
 langcodes = [
     "linguatag[langcodes]>=0.0.2a2",
 ]
