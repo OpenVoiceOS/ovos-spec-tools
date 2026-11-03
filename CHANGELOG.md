@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.17.0a1) (2026-11-03)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.16.2a1...1.17.0a1)
+
+**Merged pull requests:**
+
+- feat: re-export linguatag for language-tag matching [\#192](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/192) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.16.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.16.2a1) (2026-10-28)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.16.1a1...1.16.2a1)
@@ -366,10 +374,6 @@
 ## [1.6.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.6.0a1) (2026-08-01)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.5.1a3...1.6.0a1)
-
-**Merged pull requests:**
-
-- feat: intent-topic compat helpers — canonical/legacy aliasing per MSG-1/INTENT-4 [\#88](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/88) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.5.1a3](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.5.1a3) (2026-08-01)
 
