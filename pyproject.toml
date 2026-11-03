@@ -19,18 +19,18 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "linguatag>=0.1.1a1",
+    "linguatag>=0.1.2a1",
 ]
 
 [project.optional-dependencies]
 # `langcodes` gives the full CLDR language distance; without it, a coarse
 # language, script and region comparison ranks the fallback.
 langcodes = [
-    "linguatag[langcodes]>=0.1.1a1",
+    "linguatag[langcodes]>=0.1.2a1",
 ]
 test = [
     "pytest",
-    "linguatag[langcodes]>=0.1.1a1",
+    "linguatag[langcodes]>=0.1.2a1",
 ]
 
 [project.scripts]

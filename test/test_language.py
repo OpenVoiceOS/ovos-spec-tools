@@ -78,6 +78,13 @@ def test_explicit_region_is_respected_over_the_norm_preference():
     assert closest_lang("pt-BR", ["pt-PT", "pt-BR"]) == "pt-BR"
 
 
+def test_closest_lang_picks_the_exact_tag_when_a_bare_tag_ties_with_it():
+    # A bare "pt" means pt-PT, so both candidates sit at distance 0 from the
+    # request; the one the caller asked for by name is the answer.
+    assert closest_lang("pt-PT", ["pt", "pt-BR", "pt-PT"]) == "pt-PT"
+    assert closest_lang("en", ["en-GB", "en"]) == "en"
+
+
 def test_bare_tag_falls_back_when_norm_region_absent():
     pytest.importorskip("langcodes")
     assert closest_lang("pt", ["pt-BR"]) == "pt-BR"
