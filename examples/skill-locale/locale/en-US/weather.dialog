@@ -1,0 +1,3 @@
+It is {temperature} degrees.
+Right now it's {temperature} degrees out.
+(Currently|At the moment) {temperature} degrees.
