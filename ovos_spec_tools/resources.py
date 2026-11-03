@@ -661,8 +661,9 @@ class LocaleResources:
     Resolution is done by :func:`ovos_spec_tools.language.closest_lang` and is
     cached per static source and requested language, so one instance serves
     different languages — and different fallbacks — without repeating static
-    directory discovery. The fallback needs the optional ``langcodes``
-    dependency; without it, only exact tags resolve.
+    directory discovery. The optional ``langcodes`` dependency gives the full
+    CLDR distance; without it, a coarse language, script and region
+    comparison ranks the fallback.
     """
 
     def __init__(self, skill_locale: str,

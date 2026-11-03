@@ -13,9 +13,11 @@ formal specifications describe:
   — the OVOS-INTENT-2 §4.4 ``.prompt`` renderer;
 - :func:`~ovos_spec_tools.language.standardize_lang`,
   :func:`~ovos_spec_tools.language.lang_distance`,
-  :func:`~ovos_spec_tools.language.lang_matches`, and
-  :func:`~ovos_spec_tools.language.closest_lang` — language-tag normalization,
-  distance, match checking, and closest-match resolution;
+  :func:`~ovos_spec_tools.language.lang_matches`,
+  :func:`~ovos_spec_tools.language.closest_lang`, and
+  :func:`~ovos_spec_tools.language.default_region` — language-tag
+  normalization, distance, match checking, closest-match resolution, and the
+  default region of a bare tag, re-exported from ``linguatag``;
 - :func:`~ovos_spec_tools.resources.iter_locale_dirs` — locale subdirectory
   discovery with optional native-language filtering;
 - :func:`~ovos_spec_tools.resources.keyword_form`,
@@ -55,10 +57,13 @@ from ovos_spec_tools.message import (
     Message,
 )
 from ovos_spec_tools.language import (
+    DEFAULT_MAX_LANGUAGE_DISTANCE,
     closest_lang,
+    default_region,
     lang_distance,
     lang_matches,
     standardize_lang,
+    with_default_region,
 )
 from ovos_spec_tools.intent import (
     Intent,
@@ -183,6 +188,9 @@ __all__ = [
     "lang_distance",
     "lang_matches",
     "closest_lang",
+    "default_region",
+    "with_default_region",
+    "DEFAULT_MAX_LANGUAGE_DISTANCE",
     "lint_locale",
     "declared_slots",
     "derive_required_slots",

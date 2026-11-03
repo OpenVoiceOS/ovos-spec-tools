@@ -28,11 +28,11 @@ depend on.
 ## Install
 
 ```bash
-pip install ovos-spec-tools            # core — no dependencies
+pip install ovos-spec-tools            # core
 pip install ovos-spec-tools[langcodes] # adds the smart language fallback
 ```
 
-Requires Python 3.10+.
+Requires Python 3.11+.
 
 ## Quick taste
 

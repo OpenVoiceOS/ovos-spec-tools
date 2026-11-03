@@ -1,9 +1,10 @@
 """Tests for the language-tag utilities."""
+import linguatag
+import linguatag.matching as language
 import pytest
 
-import ovos_spec_tools.language as language
+import ovos_spec_tools.language as spec_language
 from ovos_spec_tools import closest_lang, lang_distance, lang_matches, standardize_lang
-
 
 # --- standardize_lang --------------------------------------------------------
 
@@ -67,8 +68,8 @@ def test_closest_lang_skips_a_distant_language():
     assert closest_lang("en-AU", ["fr-FR", "en-GB"]) == "en-GB"
 
 
-def test_closest_lang_prefers_the_norm_region_for_a_bare_tag():
-    """langcodes makes bare `pt` closest to pt-BR; the norm region pt-PT wins."""
+def test_closest_lang_prefers_the_default_region_for_a_bare_tag():
+    """langcodes makes bare `pt` closest to pt-BR; the default region pt-PT wins."""
     assert closest_lang("pt", ["pt-BR", "pt-PT"]) == "pt-PT"
     assert closest_lang("pt", ["pt-PT", "pt-BR"]) == "pt-PT"  # order-independent
 
@@ -91,8 +92,13 @@ def test_distance_without_langcodes_shares_primary_subtag(monkeypatch):
 
 
 def test_distance_without_langcodes_prefers_the_generic_tag(monkeypatch):
+    """`qaa` has no default region, so the bare tag stays generic and beats a
+    sibling region. A bare `en` is measured as `en-GB`, so it ties with the
+    other regions and the first candidate wins."""
     monkeypatch.setattr(language, "_langcodes_distance", lambda a, b: None)
-    assert closest_lang("en-AU", ["en-US", "en", "en-GB"]) == "en"
+    assert closest_lang("qaa-US", ["qaa-IL", "qaa"]) == "qaa"
+    assert lang_distance("en-AU", "en") == lang_distance("en-AU", "en-GB") == 5
+    assert closest_lang("en-AU", ["en-US", "en", "en-GB"]) == "en-US"
 
 
 def test_distance_without_langcodes_no_shared_subtag(monkeypatch):
@@ -254,3 +260,55 @@ def test_arabizi_is_not_pulled_to_msa(monkeypatch):
     monkeypatch.setattr(language, "_ARABIC_FALLBACK_DISTANCE", 0)
     assert lang_distance("ar-Latn", "ar") == capped
     assert lang_distance("arz-Arab", "arb") == 0
+
+
+# --- the re-export of linguatag ----------------------------------------------
+
+REEXPORT_TAGS = ["en", "en-US", "en-GB", "en_GB-alan-low", "pt", "pt-BR",
+                 "pt-PT", "ar", "arb", "arz", "ar-EG", "yue", "yue-Hant",
+                 "zh-CN", "zh-HK", "zh-HK-HiuMaanNeural", "ur", "tl"]
+
+
+@pytest.mark.parametrize("tag", REEXPORT_TAGS)
+def test_reexport_matches_linguatag_per_tag(tag):
+    assert spec_language.standardize_lang(tag) == linguatag.standardize_lang(tag)
+    assert spec_language.default_region(tag) == linguatag.default_region(tag)
+    assert (spec_language.with_default_region(tag)
+            == linguatag.with_default_region(tag))
+    assert (spec_language.closest_lang(tag, REEXPORT_TAGS)
+            == linguatag.closest_lang(tag, REEXPORT_TAGS))
+
+
+@pytest.mark.parametrize("tag", REEXPORT_TAGS)
+def test_reexport_matches_linguatag_distances(tag):
+    for other in REEXPORT_TAGS:
+        assert (spec_language.lang_distance(tag, other)
+                == linguatag.lang_distance(tag, other)), other
+        assert (spec_language.lang_matches(tag, other)
+                == linguatag.lang_matches(tag, other)), other
+
+
+def test_reexport_default_regions():
+    """A bare tag defaults to the region where the language first appeared."""
+    assert spec_language.with_default_region("en") == "en-GB"
+    assert spec_language.with_default_region("pt") == "pt-PT"
+    assert spec_language.default_region("ar") == "001"
+    assert lang_distance("en", "en-GB") == 0
+    assert closest_lang("en", ["en-US", "en-GB"]) == "en-GB"
+
+
+def test_reexport_measures_a_voice_id_as_its_tag_prefix():
+    pytest.importorskip("langcodes")
+    assert lang_distance("zh-HK-HiuMaanNeural", "zh-HK") == 0
+    assert lang_distance("en_GB-alan-low", "en-GB") == 0
+
+
+def test_reexport_public_names():
+    from ovos_spec_tools import (
+        DEFAULT_MAX_LANGUAGE_DISTANCE,
+        default_region,
+        with_default_region,
+    )
+    assert DEFAULT_MAX_LANGUAGE_DISTANCE == linguatag.DEFAULT_MAX_LANGUAGE_DISTANCE == 10
+    assert default_region("pt") == "PT"
+    assert with_default_region("en_us") == "en-US"

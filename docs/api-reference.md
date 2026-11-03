@@ -115,12 +115,21 @@ Normalize a BCP-47 tag (underscores, case, canonical forms).
 ### `lang_distance(desired, supported) -> int`
 
 Distance between two tags: `0` is identical, `>= 10` is not a usable match. A
-bare tag is measured from its norm region.
+bare tag is measured from its default region.
 
 ### `closest_lang(target, available, max_distance=10) -> str | None`
 
 The entry of `available` with the smallest `lang_distance`, if it is below
 `max_distance` (or exact). Returns the original string, or `None`.
+
+### `default_region(tag) -> str | None`
+
+The region `tag` names, or the region it defaults to: `en` is `GB`, `pt` is
+`PT`, `ar` is `001`. `None` when no region applies.
+
+### `with_default_region(tag) -> str`
+
+`tag`, standardized, with its default region inserted: `en` becomes `en-GB`.
 
 ## Bus messages: [chapter 6](message.md)
 

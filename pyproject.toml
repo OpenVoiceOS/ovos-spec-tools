@@ -9,27 +9,28 @@ description = "Reference implementation of the OVOS formal specifications"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "jarbasai", email = "jarbasai@mailfence.com" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
-dependencies = []
+dependencies = [
+    "linguatag>=0.1.1a1",
+]
 
 [project.optional-dependencies]
-# `langcodes` powers the smart language fallback of LocaleResources; without
-# it, language resolution is exact-match only.
+# `langcodes` gives the full CLDR language distance; without it, a coarse
+# language, script and region comparison ranks the fallback.
 langcodes = [
-    "langcodes",
+    "linguatag[langcodes]>=0.1.1a1",
 ]
 test = [
     "pytest",
-    "langcodes",
+    "linguatag[langcodes]>=0.1.1a1",
 ]
 
 [project.scripts]
