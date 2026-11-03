@@ -49,13 +49,14 @@ forms through `langcodes` when it is installed (`en-us` -> `en-US`, not just
 a case-folded string). Two deliberate, non-normative policy overrides on top
 of `langcodes`' own resolution:
 
-- a bare `pt` resolves to `pt-PT` (the reference variety OVOS prefers), not
-  `langcodes`' default most-populous-region pick of `pt-BR`.
+- a bare tag is measured from its default region, the region where the
+  language first appeared: `pt` is `pt-PT` and `en` is `en-GB`, not
+  `langcodes`' most-populous picks of `pt-BR` and `en-US`.
 - `tl` is kept distinct from `langcodes`' `fil` macrolanguage fold.
 
 Code migrating off the old `standardize_lang_tag` should expect full BCP-47
 tags back, not just normalized casing, and should not assume `langcodes`'
-raw region-resolution defaults for `pt`.
+raw region-resolution defaults for a bare tag.
 
 ## `MIGRATION_MAP` / `NamespaceTranslator` — the legacy<->`ovos.*` bridge
 

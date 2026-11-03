@@ -15,12 +15,15 @@ language X, which of the languages I actually have is the best fit?" It needs
 the answer for locale folders, TTS voices, and STT models.
 
 The logic was reimplemented in several places (`ovos_utils.lang`, `phoonnx`,
-…) and drifted. This module is the one implementation.
+…) and drifted. This module is the one implementation. It re-exports
+[linguatag](https://github.com/TigreGotico/linguatag), and the linguatag
+README documents every rule in detail.
 
-Three functions:
+Three functions, and two helpers for the default region of a tag:
 
 ```python
 from ovos_spec_tools import standardize_lang, lang_distance, closest_lang
+from ovos_spec_tools import default_region, with_default_region
 ```
 
 ## `standardize_lang(tag)`
@@ -50,30 +53,38 @@ lang_distance("en-US", "fr-FR")   # large, a different language
 
 All the policy lives here, so callers never need special cases.
 
-### A bare tag is measured from its norm region
+### A bare tag is measured from its default region
 
-`langcodes` resolves a bare tag to its *most-populous* region. It considers
-`pt` closest to `pt-BR`.
-
-But the unmarked form of a language should mean its **reference variety**:
-Portuguese is "from Portugal" by name, and every Lusophone country except
-Brazil follows the pt-PT norm. So `lang_distance` measures a bare tag from its
-norm region:
+A tag with no region defaults to its motherland: the region where the
+language first appeared and is still spoken. `lang_distance` measures a bare
+tag from that region:
 
 ```python
-lang_distance("pt", "pt-PT")   # 0, the norm region
+lang_distance("pt", "pt-PT")   # 0, the default region
 lang_distance("pt", "pt-BR")   # > 0, a regional variant
+lang_distance("en", "en-GB")   # 0
+default_region("ar")           # '001', Modern Standard Arabic
+with_default_region("yue")     # 'yue-CN'
 ```
 
-The norm regions are a small explicit table (currently just `pt → PT`). A
-language is added only when its bare tag has a clear reference region distinct
-from the populous one.
+CLDR likely-subtags supplies the default region for most languages. A short
+table of cited overrides replaces it where the most-populous region is not the
+motherland: `en` is GB, `pt` is PT, `ur` is IN and `yue` is CN. A bare `ar`
+is Modern Standard Arabic, so its region is `001`, the world.
+
+### A voice id is measured as its tag
+
+A tag that `langcodes` cannot parse is measured as its longest parseable
+prefix. The voice id `zh-HK-HiuMaanNeural` is measured as `zh-HK`, and
+`en_GB-alan-low` as `en-GB`.
 
 ### Without `langcodes`
 
 `langcodes` is optional. Without it, `lang_distance` falls back to a coarse
 measure: a shared primary subtag is near, a different language is far, and the
-generic region-less form counts as nearer than a sibling region.
+generic region-less form counts as nearer than a sibling region. A bare tag
+with a default region is measured as that region, so only a language with no
+default region keeps a generic form.
 
 It is enough to keep a request for `en-AU` resolving against `en`, `en-GB`,
 `en-US`, just without `langcodes`' finer regional ranking. Install the
@@ -90,7 +101,7 @@ It is simply *the candidate with the smallest `lang_distance`*:
 
 ```python
 closest_lang("en-AU", ["pt-BR", "en-US", "de-DE"])   # 'en-US'
-closest_lang("pt",    ["pt-BR", "pt-PT"])            # 'pt-PT'  (norm region)
+closest_lang("pt",    ["pt-BR", "pt-PT"])            # 'pt-PT'  (default region)
 closest_lang("zz-ZZ", ["en-US", "pt-BR"])            # None
 ```
 
@@ -114,7 +125,7 @@ to farthest:
 | Relationship | Distance | Resolves (default threshold 10)? |
 |--------------|----------|----------------------------------|
 | identical tag (case aside) | `0` | yes |
-| bare tag vs its norm region (`pt` / `pt-PT`) | `0` | yes |
+| bare tag vs its default region (`pt` / `pt-PT`) | `0` | yes |
 | two regions of one language (`en-US` / `en-GB`) | small (`<10`) | yes |
 | a different primary language (`en` / `fr`) | large (`≥100` coarse) | no |
 

@@ -15,16 +15,16 @@ matching the formal specifications. Depend on it instead of rolling your own.
 ## Install
 
 ```bash
-pip install ovos-spec-tools            # core — no dependencies
+pip install ovos-spec-tools            # core
 pip install ovos-spec-tools[langcodes] # adds the smart language fallback
 ```
 
-The core package has **no dependencies**. The optional `langcodes` extra
+The core package depends only on `linguatag`. The optional `langcodes` extra
 improves only one thing: how a missing language falls back to a near one
 (see [Language matching](language-matching.md)); everything else works without
 it.
 
-Requires Python 3.10 or newer.
+Requires Python 3.11 or newer.
 
 ## A first taste
 
