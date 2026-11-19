@@ -692,6 +692,8 @@ class LocaleResources:
                 language. A request that resolves outside the snapshot
                 raises :class:`LookupError`.
         """
+        if isinstance(langs, str):
+            raise TypeError(f"langs must be a list of tags, not {langs!r}")
         self._user_source = Path(user_locale) if user_locale is not None else None
         # Highest static precedence first (§2.1): skill, core.
         self._static_sources: List[Path] = [
@@ -724,18 +726,31 @@ class LocaleResources:
         ] = {}
         #: languages already expanded by :meth:`_preload_expanded_resources`
         self._preloaded_languages: Set[str] = set()
-        if isinstance(langs, str):
-            raise TypeError(f"langs must be a list of tags, not {langs!r}")
         self._langs: Optional[Tuple[str, ...]] = (
             tuple(langs) if langs is not None else None)
         #: source -> every language directory name, snapshotted or not
-        self._static_lang_names: Dict[Path, Tuple[str, ...]] = {}
-        self._snapshot_static_sources()
-        #: the ``langs`` tags plus the directory names they resolved to
-        self._snapshot_langs: Tuple[str, ...] = (self._langs or ()) + tuple(
-            name for index in self._static_index.values() for name in index)
+        self._static_lang_names: Dict[Path, Tuple[str, ...]] = {
+            source: tuple(sorted(d.name for d in source.iterdir()
+                                 if d.is_dir())) if source.is_dir() else ()
+            for source in self._static_sources}
+        #: the ``langs`` tags plus every directory name they resolve to
+        self._snapshot_langs: Tuple[str, ...] = ()
+        wanted: Optional[Set[str]] = None
+        if self._langs is not None:
+            # A load resolves one source's directory name against the other
+            # sources, so resolve the resolved names too until none is new.
+            tags = set(self._langs)
+            while True:
+                wanted = {self._resolve_lang(tag, names) for tag in tags
+                          for names in self._static_lang_names.values()}
+                wanted.discard(None)
+                if wanted <= tags:
+                    break
+                tags |= wanted
+            self._snapshot_langs = tuple(sorted(tags))
+        self._snapshot_static_sources(wanted)
 
-    def _snapshot_static_sources(self) -> None:
+    def _snapshot_static_sources(self, wanted: Optional[Set[str]]) -> None:
         """Eagerly read and index installed skill/core resource files once.
 
         Installed locale trees are package-owned and static for the instance
@@ -752,18 +767,11 @@ class LocaleResources:
             indexes_by_target: Dict[
                 Path, Dict[Tuple[str, str], Tuple[Path, ...]]
             ] = {}
-            self._static_lang_names[source] = ()
             if source.is_dir():
-                lang_dirs = [d for d in sorted(source.iterdir()) if d.is_dir()]
-                names = tuple(d.name for d in lang_dirs)
-                self._static_lang_names[source] = names
-                wanted = None
-                if self._langs is not None:
-                    wanted = {self._resolve_lang(tag, names)
-                              for tag in self._langs}
-                for lang_dir in lang_dirs:
-                    if wanted is not None and lang_dir.name not in wanted:
+                for name in self._static_lang_names[source]:
+                    if wanted is not None and name not in wanted:
                         continue
+                    lang_dir = source / name
                     lang_target = lang_dir.resolve()
                     if lang_target in indexes_by_target:
                         language_index[lang_dir.name] = indexes_by_target[
@@ -846,8 +854,12 @@ class LocaleResources:
         resolved = self._resolve_lang(lang, self._static_lang_names[source])
         if self._langs is not None:
             if resolved is None:
-                outside = self._resolve_lang(
-                    lang, self._snapshot_langs) is None
+                target = standardize_lang(lang)
+                listed = (any(standardize_lang(name) == target
+                              for name in self._snapshot_langs)
+                          or self._resolve_lang(lang, self._snapshot_langs)
+                          is not None)
+                outside = not listed
             else:
                 outside = resolved not in self._static_index[source]
             if outside:
@@ -868,7 +880,7 @@ class LocaleResources:
                     break
         if resolved is None:
             match = self._lang_resolver(
-                lang, list(names), self.max_language_distance
+                lang, names, self.max_language_distance
             )
             if match is not None:
                 if match in names:

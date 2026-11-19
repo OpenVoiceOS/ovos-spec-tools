@@ -1256,3 +1256,39 @@ def test_langs_snapshot_breaks_a_fallback_tie_as_a_load_call_does(
 def test_langs_rejects_a_bare_string(tmp_path):
     with pytest.raises(TypeError, match="langs must be a list of tags"):
         LocaleResources(str(_en_pt_tree(tmp_path)), langs="en")
+
+
+@pytest.mark.parametrize("tag, skill_dirs, core_dirs", [
+    ("pt", ["pt-BR"], ["pt-BR", "pt-PT"]),
+    ("en", ["en-US"], ["en", "en-US"]),
+    ("de", ["de-DE"], ["de", "de-DE"]),
+    # pt-BR resolves to pt-AO in the core: found only on a second pass
+    ("pt", ["pt-BR"], ["pt-AO", "pt-PT"]),
+])
+def test_langs_snapshot_holds_what_a_load_resolves_across_sources(
+        tmp_path, tag, skill_dirs, core_dirs):
+    skill = tmp_path / "skill"
+    core = tmp_path / "core"
+    for name in skill_dirs:
+        _write(skill / name / "stop.voc", f"stop {name}\n")
+    for name in core_dirs:
+        _write(core / name / "yes.voc", f"yes {name}\n")
+    full = LocaleResources(str(skill), str(core))
+    one = LocaleResources(str(skill), str(core), langs=[tag])
+    assert one.load_vocabulary("stop", tag) == full.load_vocabulary(
+        "stop", tag) == [f"stop {skill_dirs[0]}"]
+    assert one.voc_match(f"stop {skill_dirs[0]}", "stop", tag)
+
+
+def test_langs_snapshot_lists_a_tag_without_the_custom_resolver(tmp_path):
+    def table(lang, available, max_distance):
+        match = {"pt": "pt-PT"}.get(lang)
+        return match if match in available else None
+
+    skill = tmp_path / "skill"
+    core = tmp_path / "core"
+    _write(skill / "pt-PT" / "stop.voc", "parar\n")
+    _write(core / "en" / "yes.voc", "yes\n")
+    res = LocaleResources(str(skill), str(core), lang_resolver=table,
+                          langs=["pt"])
+    assert res.load_vocabulary("stop", "pt") == ["parar"]
