@@ -286,7 +286,6 @@ def test_missing_resource_raises(tmp_path):
 # --- §2.2 smart language fallback -------------------------------------------
 
 def test_fallback_resolves_a_near_language(tmp_path):
-    pytest.importorskip("langcodes")
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "x.intent", "hello world\n")
     res = LocaleResources(str(locale))
@@ -294,7 +293,6 @@ def test_fallback_resolves_a_near_language(tmp_path):
 
 
 def test_fallback_rejects_a_too_distant_language(tmp_path):
-    pytest.importorskip("langcodes")
     locale = tmp_path / "locale"
     _write(locale / "fr-FR" / "x.intent", "bonjour\n")
     res = LocaleResources(str(locale))
@@ -312,7 +310,6 @@ def test_fallback_disabled_with_zero_max_distance(tmp_path):
 
 def test_fallback_resolved_per_query_not_once(tmp_path):
     """One instance: an exact tag and a fallback tag resolve independently."""
-    pytest.importorskip("langcodes")
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "x.intent", "us text\n")
     res = LocaleResources(str(locale))
@@ -440,7 +437,6 @@ def test_find_recurses_into_subdirectories(tmp_path):
 
 def test_find_resolves_lang_via_closest_match(tmp_path):
     """A request for ``en`` matches an ``en-US/`` tree."""
-    pytest.importorskip("langcodes")
     locale = tmp_path / "locale"
     f = locale / "en-US" / "play.intent"
     _write(f, "play {query}\n")
@@ -1049,7 +1045,6 @@ def test_remove_voc_empty_utterance_returns_empty(tmp_path):
 
 def test_voc_match_and_remove_voc_resolve_smart_lang_fallback(tmp_path):
     """en-AU falls back to en-US for both methods."""
-    pytest.importorskip("langcodes")
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "yes.voc", "yes\n")
     res = LocaleResources(str(locale))

@@ -39,9 +39,8 @@ class TestFindLangDir(unittest.TestCase):
                          Path(self.root) / "en-us")
 
     def test_subdialect_fallback(self):
-        """Request en-AU, only en-US available — minor regional
-        difference (langcodes distance ~4) is below the default max
-        of 10."""
+        """Request en-AU, only en-US available — a regional difference
+        is within the default max distance."""
         _mkdirs(self.root, "en-US", "fr-FR")
         self.assertEqual(find_lang_dir(self.root, "en-AU"),
                          Path(self.root) / "en-US")
