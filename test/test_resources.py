@@ -1280,7 +1280,8 @@ def test_langs_snapshot_holds_what_a_load_resolves_across_sources(
     assert one.voc_match(f"stop {skill_dirs[0]}", "stop", tag)
 
 
-def test_langs_snapshot_lists_a_tag_without_the_custom_resolver(tmp_path):
+def test_langs_snapshot_lists_a_folder_name_the_custom_resolver_skips(
+        tmp_path):
     def table(lang, available, max_distance):
         match = {"pt": "pt-PT"}.get(lang)
         return match if match in available else None
@@ -1292,3 +1293,13 @@ def test_langs_snapshot_lists_a_tag_without_the_custom_resolver(tmp_path):
     res = LocaleResources(str(skill), str(core), lang_resolver=table,
                           langs=["pt"])
     assert res.load_vocabulary("stop", "pt") == ["parar"]
+
+
+def test_langs_snapshot_serves_a_fallback_when_one_source_lacks_the_language(
+        tmp_path):
+    skill = tmp_path / "skill"
+    core = tmp_path / "core"
+    _write(skill / "en" / "stop.voc", "stop\n")
+    _write(core / "fr" / "yes.voc", "oui\n")
+    res = LocaleResources(str(skill), str(core), langs=["en"])
+    assert res.load_vocabulary("stop", "en-GB") == ["stop"]

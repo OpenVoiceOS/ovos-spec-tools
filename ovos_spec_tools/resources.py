@@ -649,11 +649,12 @@ class LocaleResources:
     Skill and core resources are installed with their owning packages and are
     therefore snapshotted at construction. Their file contents, resource
     index, dialogs, and prompts remain in memory for the lifetime of this
-    instance. When ``langs`` is given, construction snapshots only the
-    language directories those tags resolve to, and a request that resolves
-    outside the snapshot raises :class:`LookupError`. Valid expanded results
-    are also precomputed when no user tree is configured. With a user tree,
-    expansion is repeated against its live files on each call. Recreate the
+    instance. When ``langs`` is given, construction snapshots the language
+    directories those tags resolve to, and the directories those names
+    resolve to in the other sources. A request that resolves outside the
+    snapshot raises :class:`LookupError`. Valid expanded results are also
+    precomputed when no user tree is configured. With a user tree, expansion
+    is repeated against its live files on each call. Recreate the
     instance after changing installed resources; package-owned data
     intentionally has no refresh operation. An optional user resource tree
     stays live, so creating, editing, or removing a user override takes
@@ -687,8 +688,9 @@ class LocaleResources:
             max_language_distance: passed to the resolver — the fallback
                 accepts a language whose tag distance is **below** this
                 (default 10, §2.2). ``0`` disables the fallback.
-            langs: snapshot only the skill and core language directories
-                these tags resolve to. ``None`` (default) snapshots every
+            langs: snapshot the skill and core language directories these
+                tags resolve to, and the directories those names resolve to
+                in the other sources. ``None`` (default) snapshots every
                 language. A request that resolves outside the snapshot
                 raises :class:`LookupError`.
         """
@@ -729,10 +731,11 @@ class LocaleResources:
         self._langs: Optional[Tuple[str, ...]] = (
             tuple(langs) if langs is not None else None)
         #: source -> every language directory name, snapshotted or not
-        self._static_lang_names: Dict[Path, Tuple[str, ...]] = {
-            source: tuple(sorted(d.name for d in source.iterdir()
-                                 if d.is_dir())) if source.is_dir() else ()
-            for source in self._static_sources}
+        self._static_lang_names: Dict[Path, Tuple[str, ...]] = {}
+        for source in self._static_sources:
+            entries = source.iterdir() if source.is_dir() else ()
+            self._static_lang_names[source] = tuple(
+                sorted(d.name for d in entries if d.is_dir()))
         #: the ``langs`` tags plus every directory name they resolve to
         self._snapshot_langs: Tuple[str, ...] = ()
         wanted: Optional[Set[str]] = None
@@ -855,11 +858,10 @@ class LocaleResources:
         if self._langs is not None:
             if resolved is None:
                 target = standardize_lang(lang)
-                listed = (any(standardize_lang(name) == target
-                              for name in self._snapshot_langs)
-                          or self._resolve_lang(lang, self._snapshot_langs)
-                          is not None)
-                outside = not listed
+                outside = (all(standardize_lang(name) != target
+                               for name in self._snapshot_langs)
+                           and self._resolve_lang(lang, self._snapshot_langs)
+                           is None)
             else:
                 outside = resolved not in self._static_index[source]
             if outside:
