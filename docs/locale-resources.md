@@ -153,6 +153,12 @@ say) does not fail construction: the error is raised when that resource is
 actually requested, so one bad file in an unused language cannot take down
 every other language.
 
+A process that uses one or two languages can pass `langs`.
+`LocaleResources(locale_dir, langs=["en"])` reads and snapshots only the
+language directories those tags resolve to. It uses the same fallback as a
+load call, so `en-US` finds `en/`. A request for any other language raises
+`LookupError`, which names the language and the `langs` of the instance.
+
 The optional **user** resource tree is deliberately different. It remains
 live and is checked on every call, so a user override can be created, edited,
 or removed without rebuilding the installed-resource snapshot. A live user

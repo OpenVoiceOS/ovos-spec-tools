@@ -649,12 +649,15 @@ class LocaleResources:
     Skill and core resources are installed with their owning packages and are
     therefore snapshotted at construction. Their file contents, resource
     index, dialogs, and prompts remain in memory for the lifetime of this
-    instance. Valid expanded results are also precomputed when no user tree is
-    configured. With a user tree, expansion is repeated against its live files
-    on each call. Recreate the instance after changing installed resources;
-    package-owned data intentionally has no refresh operation. An optional
-    user resource tree stays live, so creating, editing, or removing a user
-    override takes effect without restarting the process.
+    instance. When ``langs`` is given, construction snapshots only the
+    language directories those tags resolve to, and a request for any other
+    language raises :class:`LookupError`. Valid expanded results are also
+    precomputed when no user tree is configured. With a user tree, expansion
+    is repeated against its live files on each call. Recreate the instance
+    after changing installed resources; package-owned data intentionally has
+    no refresh operation. An optional user resource tree stays live, so
+    creating, editing, or removing a user override takes effect without
+    restarting the process.
 
     When the requested language has no directory, a **smart language fallback**
     (OVOS-INTENT-2 §2.2, non-normative) selects the nearest available language.
@@ -670,7 +673,8 @@ class LocaleResources:
                  core_locale: Optional[str] = None,
                  user_locale: Optional[str] = None,
                  lang_resolver: Optional[LanguageResolver] = None,
-                 max_language_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE):
+                 max_language_distance: int = DEFAULT_MAX_LANGUAGE_DISTANCE,
+                 langs: Optional[Sequence[str]] = None):
         """
         Args:
             skill_locale: path to the skill's ``locale/`` directory.
@@ -683,6 +687,10 @@ class LocaleResources:
             max_language_distance: passed to the resolver — the fallback
                 accepts a language whose tag distance is **below** this
                 (default 10, §2.2). ``0`` disables the fallback.
+            langs: snapshot only the skill and core language directories
+                these tags resolve to. ``None`` (default) snapshots every
+                language. A request for any other language raises
+                :class:`LookupError`.
         """
         self._user_source = Path(user_locale) if user_locale is not None else None
         # Highest static precedence first (§2.1): skill, core.
@@ -716,6 +724,12 @@ class LocaleResources:
         ] = {}
         #: languages already expanded by :meth:`_preload_expanded_resources`
         self._preloaded_languages: Set[str] = set()
+        self._langs: Optional[Tuple[str, ...]] = (
+            tuple(langs) if langs is not None else None)
+        #: source -> every language directory name, snapshotted or not
+        self._static_lang_names: Dict[Path, Tuple[str, ...]] = {}
+        #: the ``langs`` tags plus the directory names they resolved to
+        self._snapshot_langs: Tuple[str, ...] = self._langs or ()
         self._snapshot_static_sources()
 
     def _snapshot_static_sources(self) -> None:
@@ -735,9 +749,19 @@ class LocaleResources:
             indexes_by_target: Dict[
                 Path, Dict[Tuple[str, str], Tuple[Path, ...]]
             ] = {}
+            lang_names: List[str] = []
             if source.is_dir():
+                wanted = None
+                if self._langs is not None:
+                    found = (self._lang_dir(source, tag)
+                             for tag in self._langs)
+                    wanted = {path.name for path in found if path is not None}
+                    self._snapshot_langs += tuple(sorted(wanted))
                 for lang_dir in sorted(source.iterdir()):
                     if not lang_dir.is_dir():
+                        continue
+                    lang_names.append(lang_dir.name)
+                    if wanted is not None and lang_dir.name not in wanted:
                         continue
                     lang_target = lang_dir.resolve()
                     if lang_target in indexes_by_target:
@@ -783,6 +807,7 @@ class LocaleResources:
                     indexes_by_target[lang_target] = resource_index
                     language_index[lang_dir.name] = resource_index
             self._static_index[source] = language_index
+            self._static_lang_names[source] = tuple(lang_names)
 
     def _preload_expanded_resources(self, lang: str) -> None:
         """Expand one language's installed resources on its first use.
@@ -818,7 +843,22 @@ class LocaleResources:
         cache_key = (source, lang)
         if cache_key in self._static_language_cache:
             return self._static_language_cache[cache_key]
-        names = list(self._static_index[source])
+        resolved = self._resolve_lang(lang, self._static_lang_names[source])
+        if self._langs is not None:
+            if resolved is None:
+                outside = self._resolve_lang(
+                    lang, self._snapshot_langs) is None
+            else:
+                outside = resolved not in self._static_index[source]
+            if outside:
+                raise LookupError(
+                    f"language {lang!r} is outside this LocaleResources "
+                    f"snapshot, built with langs={list(self._langs)}")
+        self._static_language_cache[cache_key] = resolved
+        return resolved
+
+    def _resolve_lang(self, lang: str, names: Sequence[str]) -> Optional[str]:
+        """Resolve ``lang`` against available language names (§2.2)."""
         resolved = None
         if self._uses_default_lang_resolver:
             target = standardize_lang(lang)
@@ -828,7 +868,7 @@ class LocaleResources:
                     break
         if resolved is None:
             match = self._lang_resolver(
-                lang, names, self.max_language_distance
+                lang, list(names), self.max_language_distance
             )
             if match is not None:
                 if match in names:
@@ -839,7 +879,6 @@ class LocaleResources:
                         if standardize_lang(name) == match:
                             resolved = name
                             break
-        self._static_language_cache[cache_key] = resolved
         return resolved
 
     def _static_paths(self, source: Path, base_name: str, extension: str,

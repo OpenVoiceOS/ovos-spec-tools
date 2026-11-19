@@ -22,13 +22,15 @@ Raises `MalformedTemplate`.
 
 ## Locale resources: [chapter 3](locale-resources.md)
 
-### `LocaleResources(skill_locale, core_locale=None, user_locale=None, lang_resolver=None, max_language_distance=10)`
+### `LocaleResources(skill_locale, core_locale=None, user_locale=None, lang_resolver=None, max_language_distance=10, langs=None)`
 
 Loads a skill's locale resource files. The three `*_locale` arguments are paths
 to `locale/` directories, in ascending override precedence. `lang_resolver` is
 a `(target, available, max_distance) -> str | None` callable (default
 `closest_lang`). `max_language_distance` caps the smart fallback (`0` disables
-it). Installed skill/core resources are snapshotted at construction; an
+it). `langs` limits the snapshot to the language directories those tags
+resolve to; a request for another language raises `LookupError`. Installed
+skill/core resources are snapshotted at construction; an
 optional user resource tree remains live and is checked on every call. Static
 resources are also pre-expanded when no user tree is configured. With a user
 tree, expansion is performed per call so live vocabulary changes can affect
