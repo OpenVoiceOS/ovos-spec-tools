@@ -29,9 +29,10 @@ to `locale/` directories, in ascending override precedence. `lang_resolver` is
 a `(target, available, max_distance) -> str | None` callable (default
 `closest_lang`). `max_language_distance` caps the smart fallback (`0` disables
 it). `langs` limits the snapshot to the language directories those tags
-resolve to; a request for another language raises `LookupError`. Installed
-skill/core resources are snapshotted at construction; an
-optional user resource tree remains live and is checked on every call. Static
+resolve to; a request that resolves outside the snapshot raises
+`LookupError`. Installed skill/core resources are snapshotted at
+construction; an optional user resource tree remains live and is checked on
+every call. Static
 resources are also pre-expanded when no user tree is configured. With a user
 tree, expansion is performed per call so live vocabulary changes can affect
 installed intents. Recreate the instance after changing installed resources.

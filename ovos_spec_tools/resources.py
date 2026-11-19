@@ -650,14 +650,14 @@ class LocaleResources:
     therefore snapshotted at construction. Their file contents, resource
     index, dialogs, and prompts remain in memory for the lifetime of this
     instance. When ``langs`` is given, construction snapshots only the
-    language directories those tags resolve to, and a request for any other
-    language raises :class:`LookupError`. Valid expanded results are also
-    precomputed when no user tree is configured. With a user tree, expansion
-    is repeated against its live files on each call. Recreate the instance
-    after changing installed resources; package-owned data intentionally has
-    no refresh operation. An optional user resource tree stays live, so
-    creating, editing, or removing a user override takes effect without
-    restarting the process.
+    language directories those tags resolve to, and a request that resolves
+    outside the snapshot raises :class:`LookupError`. Valid expanded results
+    are also precomputed when no user tree is configured. With a user tree,
+    expansion is repeated against its live files on each call. Recreate the
+    instance after changing installed resources; package-owned data
+    intentionally has no refresh operation. An optional user resource tree
+    stays live, so creating, editing, or removing a user override takes
+    effect without restarting the process.
 
     When the requested language has no directory, a **smart language fallback**
     (OVOS-INTENT-2 §2.2, non-normative) selects the nearest available language.
@@ -689,8 +689,8 @@ class LocaleResources:
                 (default 10, §2.2). ``0`` disables the fallback.
             langs: snapshot only the skill and core language directories
                 these tags resolve to. ``None`` (default) snapshots every
-                language. A request for any other language raises
-                :class:`LookupError`.
+                language. A request that resolves outside the snapshot
+                raises :class:`LookupError`.
         """
         self._user_source = Path(user_locale) if user_locale is not None else None
         # Highest static precedence first (§2.1): skill, core.
@@ -724,13 +724,16 @@ class LocaleResources:
         ] = {}
         #: languages already expanded by :meth:`_preload_expanded_resources`
         self._preloaded_languages: Set[str] = set()
+        if isinstance(langs, str):
+            raise TypeError(f"langs must be a list of tags, not {langs!r}")
         self._langs: Optional[Tuple[str, ...]] = (
             tuple(langs) if langs is not None else None)
         #: source -> every language directory name, snapshotted or not
         self._static_lang_names: Dict[Path, Tuple[str, ...]] = {}
-        #: the ``langs`` tags plus the directory names they resolved to
-        self._snapshot_langs: Tuple[str, ...] = self._langs or ()
         self._snapshot_static_sources()
+        #: the ``langs`` tags plus the directory names they resolved to
+        self._snapshot_langs: Tuple[str, ...] = (self._langs or ()) + tuple(
+            name for index in self._static_index.values() for name in index)
 
     def _snapshot_static_sources(self) -> None:
         """Eagerly read and index installed skill/core resource files once.
@@ -749,18 +752,16 @@ class LocaleResources:
             indexes_by_target: Dict[
                 Path, Dict[Tuple[str, str], Tuple[Path, ...]]
             ] = {}
-            lang_names: List[str] = []
+            self._static_lang_names[source] = ()
             if source.is_dir():
+                lang_dirs = [d for d in sorted(source.iterdir()) if d.is_dir()]
+                names = tuple(d.name for d in lang_dirs)
+                self._static_lang_names[source] = names
                 wanted = None
                 if self._langs is not None:
-                    found = (self._lang_dir(source, tag)
-                             for tag in self._langs)
-                    wanted = {path.name for path in found if path is not None}
-                    self._snapshot_langs += tuple(sorted(wanted))
-                for lang_dir in sorted(source.iterdir()):
-                    if not lang_dir.is_dir():
-                        continue
-                    lang_names.append(lang_dir.name)
+                    wanted = {self._resolve_lang(tag, names)
+                              for tag in self._langs}
+                for lang_dir in lang_dirs:
                     if wanted is not None and lang_dir.name not in wanted:
                         continue
                     lang_target = lang_dir.resolve()
@@ -807,7 +808,6 @@ class LocaleResources:
                     indexes_by_target[lang_target] = resource_index
                     language_index[lang_dir.name] = resource_index
             self._static_index[source] = language_index
-            self._static_lang_names[source] = tuple(lang_names)
 
     def _preload_expanded_resources(self, lang: str) -> None:
         """Expand one language's installed resources on its first use.

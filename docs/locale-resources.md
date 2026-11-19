@@ -155,9 +155,13 @@ every other language.
 
 A process that uses one or two languages can pass `langs`.
 `LocaleResources(locale_dir, langs=["en"])` reads and snapshots only the
-language directories those tags resolve to. It uses the same fallback as a
-load call, so `en-US` finds `en/`. A request for any other language raises
-`LookupError`, which names the language and the `langs` of the instance.
+language directories those tags resolve to. It resolves each tag as a load
+call does, so `en-US` finds `en/`. A request that resolves outside the
+snapshot raises `LookupError`, which names the language and the `langs` of the
+instance. A request that falls back into a snapshotted directory is served:
+with `langs=["en-US"]` and no `en-GB/` directory, a request for `en-GB`
+reads `en-US/`. Files in the live user tree are also served for any
+language.
 
 The optional **user** resource tree is deliberately different. It remains
 live and is checked on every call, so a user override can be created, edited,
