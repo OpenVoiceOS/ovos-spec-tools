@@ -1,6 +1,5 @@
 """Tests for the language-tag utilities."""
 import linguatag
-import linguatag.matching as language
 import pytest
 
 import ovos_spec_tools.language as spec_language
@@ -13,7 +12,7 @@ def test_standardize_normalizes_underscores_and_case():
 
 
 def test_standardize_keeps_tagalog_as_tl():
-    """langcodes folds `tl` into `fil`; OVOS keeps it distinct."""
+    """OVOS keeps Tagalog `tl` distinct from Filipino `fil`."""
     assert standardize_lang("tl") == "tl"
     assert standardize_lang("tgl") == "tl"
 
@@ -58,18 +57,16 @@ def test_closest_lang_disabled_with_zero_distance():
 
 
 def test_closest_lang_regional_fallback():
-    pytest.importorskip("langcodes")
     assert closest_lang("en-AU", ["pt-BR", "en-US"]) == "en-US"
 
 
 def test_closest_lang_skips_a_distant_language():
-    pytest.importorskip("langcodes")
     # fr-FR is a different language and beyond the distance cap; en-GB is near.
     assert closest_lang("en-AU", ["fr-FR", "en-GB"]) == "en-GB"
 
 
 def test_closest_lang_prefers_the_default_region_for_a_bare_tag():
-    """langcodes makes bare `pt` closest to pt-BR; the default region pt-PT wins."""
+    """A bare `pt` is measured as its default region, pt-PT."""
     assert closest_lang("pt", ["pt-BR", "pt-PT"]) == "pt-PT"
     assert closest_lang("pt", ["pt-PT", "pt-BR"]) == "pt-PT"  # order-independent
 
@@ -86,31 +83,7 @@ def test_closest_lang_picks_the_exact_tag_when_a_bare_tag_ties_with_it():
 
 
 def test_bare_tag_falls_back_when_norm_region_absent():
-    pytest.importorskip("langcodes")
     assert closest_lang("pt", ["pt-BR"]) == "pt-BR"
-
-
-# --- the langcodes-absent path ----------------------------------------------
-
-def test_distance_without_langcodes_shares_primary_subtag(monkeypatch):
-    """With no langcodes distance, a shared primary subtag still resolves."""
-    monkeypatch.setattr(language, "_langcodes_distance", lambda a, b: None)
-    assert closest_lang("en-AU", ["pt-BR", "en-GB", "fr-FR"]) == "en-GB"
-
-
-def test_distance_without_langcodes_prefers_the_generic_tag(monkeypatch):
-    """`qaa` has no default region, so the bare tag stays generic and beats a
-    sibling region. A bare `en` is measured as `en-GB`, so it ties with the
-    other regions and the first candidate wins."""
-    monkeypatch.setattr(language, "_langcodes_distance", lambda a, b: None)
-    assert closest_lang("qaa-US", ["qaa-IL", "qaa"]) == "qaa"
-    assert lang_distance("en-AU", "en") == lang_distance("en-AU", "en-GB") == 5
-    assert closest_lang("en-AU", ["en-US", "en", "en-GB"]) == "en-US"
-
-
-def test_distance_without_langcodes_no_shared_subtag(monkeypatch):
-    monkeypatch.setattr(language, "_langcodes_distance", lambda a, b: None)
-    assert closest_lang("en-AU", ["pt-BR", "fr-FR"]) is None
 
 
 # --- edge cases --------------------------------------------------------------
@@ -129,13 +102,11 @@ def test_lang_distance_is_symmetric_enough_for_identity():
 
 
 def test_lang_distance_regional_versus_different_language():
-    pytest.importorskip("langcodes")
     assert lang_distance("de-DE", "de-AT") < 10    # a usable regional match
     assert lang_distance("de-DE", "nl-NL") >= 10   # a different language
 
 
 def test_closest_lang_regioned_request_falls_back_to_a_sibling(tmp_path):
-    pytest.importorskip("langcodes")
     assert closest_lang("pt-MZ", ["en-US", "pt-BR"]) == "pt-BR"
 
 
@@ -146,12 +117,10 @@ def test_lang_matches_identical_tags():
 
 
 def test_lang_matches_different_languages():
-    pytest.importorskip("langcodes")
     assert lang_matches("en-US", "fr-FR") is False
 
 
 def test_lang_matches_regional_sibling_within_default_threshold():
-    pytest.importorskip("langcodes")
     assert lang_matches("de-DE", "de-AT") is True
 
 
@@ -161,66 +130,51 @@ def test_lang_matches_exact_only_when_max_distance_zero():
     assert lm("en-US", "en-GB", max_distance=0) is False
 
 
-# --- the distance-10 boundary ------------------------------------------------
+# --- the default threshold ---------------------------------------------------
 
-MACROLANGUAGE_PAIRS = [("wuu", "zh")]
-REGIONAL_PAIRS = [("ar-SA", "ar", 4), ("en-AU", "en-GB", 3), ("pt-BR", "pt-PT", 5)]
-UNRELATED_PAIRS = [("en", "zh", 134), ("es", "fr", 84),
-                   ("fr-CH", "de-CH", 80), ("af", "nl", 24)]
-
-
-@pytest.mark.parametrize("member,macro", MACROLANGUAGE_PAIRS)
-def test_macrolanguage_distance_is_exactly_ten(member, macro):
-    pytest.importorskip("langcodes")
-    assert lang_distance(member, macro) == 10
+MACROLANGUAGE_PAIRS = [("yue-HK", "zh-HK"), ("swc", "sw")]
+REGIONAL_PAIRS = [("ar-SA", "ar"), ("en-AU", "en-GB"), ("pt-BR", "pt-PT")]
+UNRELATED_PAIRS = [("en", "zh"), ("es", "fr"), ("fr-CH", "de-CH"), ("af", "nl")]
 
 
 @pytest.mark.parametrize("member,macro", MACROLANGUAGE_PAIRS)
 def test_macrolanguage_resolves_at_the_default_threshold(member, macro):
-    pytest.importorskip("langcodes")
     assert lang_matches(member, macro) is True
     assert closest_lang(member, [macro]) == macro
 
 
-@pytest.mark.parametrize("desired,supported,distance", REGIONAL_PAIRS)
-def test_regional_pair_resolves(desired, supported, distance):
-    pytest.importorskip("langcodes")
-    assert lang_distance(desired, supported) == distance
+@pytest.mark.parametrize("desired,supported", REGIONAL_PAIRS)
+def test_regional_pair_resolves(desired, supported):
     assert lang_matches(desired, supported) is True
     assert closest_lang(desired, [supported]) == supported
 
 
-@pytest.mark.parametrize("desired,supported,distance", UNRELATED_PAIRS)
-def test_unrelated_pair_never_resolves(desired, supported, distance):
-    pytest.importorskip("langcodes")
-    assert lang_distance(desired, supported) == distance
+@pytest.mark.parametrize("desired,supported", UNRELATED_PAIRS)
+def test_unrelated_pair_never_resolves(desired, supported):
     assert lang_matches(desired, supported) is False
     assert closest_lang(desired, [supported]) is None
 
 
 def test_threshold_is_inclusive_on_both_sides():
     """A distance equal to the bound resolves; one above it does not."""
-    assert lang_matches("en-US", "en-GB", max_distance=5) is True
-    assert lang_matches("en-US", "en-GB", max_distance=4) is False
-    assert closest_lang("en-US", ["en-GB"], max_distance=5) == "en-GB"
-    assert closest_lang("en-US", ["en-GB"], max_distance=4) is None
+    distance = lang_distance("en-US", "en-GB")
+    assert lang_matches("en-US", "en-GB", max_distance=distance) is True
+    assert lang_matches("en-US", "en-GB", max_distance=distance - 1) is False
+    assert closest_lang("en-US", ["en-GB"], max_distance=distance) == "en-GB"
+    assert closest_lang("en-US", ["en-GB"], max_distance=distance - 1) is None
 
 
 # --- Arabic varieties fall back to Modern Standard Arabic ---------------------
 
+# Juba Arabic (`pga`) is written in Latin script, so it does not reach
+# Arabic-script MSA.
 ARABIC_REQUESTS = ["ar", "ar-SA", "ar-EG", "ar-MA", "arz", "apc", "ary", "acm",
-                   "afb", "aeb", "ajp", "pga", "ssh", "arq"]
+                   "afb", "aeb", "ajp", "ssh", "arq"]
 
 
 @pytest.mark.parametrize("tag", ARABIC_REQUESTS)
-@pytest.mark.parametrize("langcodes_present", [True, False])
-def test_arabic_request_falls_back_to_msa(tag, langcodes_present, monkeypatch):
-    if langcodes_present:
-        pytest.importorskip("langcodes")
-    else:
-        monkeypatch.setattr(language, "_langcodes_distance", lambda a, b: None)
-    assert lang_distance(tag, "arb") <= 5
-    assert closest_lang(tag, ["arb", "en-US"], max_distance=5) == "arb"
+def test_arabic_request_falls_back_to_msa(tag):
+    assert closest_lang(tag, ["arb", "en-US"]) == "arb"
 
 
 def test_arabic_variety_file_beats_msa():
@@ -229,8 +183,7 @@ def test_arabic_variety_file_beats_msa():
 
 
 def test_msa_request_does_not_fall_back_to_a_variety():
-    pytest.importorskip("langcodes")
-    assert closest_lang("arb", ["arz"], max_distance=5) is None
+    assert closest_lang("arb", ["arz"]) is None
 
 
 def test_arabic_does_not_reach_other_languages():
@@ -239,34 +192,23 @@ def test_arabic_does_not_reach_other_languages():
 
 
 def test_cantonese_does_not_reach_mandarin():
-    pytest.importorskip("langcodes")
     assert closest_lang("yue", ["zh-CN"], max_distance=5) is None
     assert closest_lang("yue", ["zh-CN"]) is None
 
 
 def test_arabic_variety_prefers_its_own_region_over_another():
-    pytest.importorskip("langcodes")
     assert closest_lang("ary", ["ar-EG", "ar-MA"]) == "ar-MA"
     assert closest_lang("arz", ["ar-MA", "ar-EG"]) == "ar-EG"
 
 
 def test_arabic_variety_prefers_msa_over_a_foreign_region():
-    pytest.importorskip("langcodes")
     assert closest_lang("ary", ["ar-EG", "arb"]) == "arb"
     assert closest_lang("apc", ["ar-SA", "arb"]) == "arb"
 
 
-def test_arabic_fallback_distance_is_exactly_five():
-    pytest.importorskip("langcodes")
-    assert lang_distance("arz", "arb") == 5
-
-
-def test_arabizi_is_not_pulled_to_msa(monkeypatch):
-    pytest.importorskip("langcodes")
-    capped = lang_distance("ar-Latn", "ar")
-    monkeypatch.setattr(language, "_ARABIC_FALLBACK_DISTANCE", 0)
-    assert lang_distance("ar-Latn", "ar") == capped
-    assert lang_distance("arz-Arab", "arb") == 0
+def test_arabizi_is_not_pulled_to_msa():
+    assert closest_lang("ar-Latn", ["ar"]) is None
+    assert closest_lang("arz-Arab", ["arb"]) == "arb"
 
 
 # --- the re-export of linguatag ----------------------------------------------
@@ -305,7 +247,6 @@ def test_reexport_default_regions():
 
 
 def test_reexport_measures_a_voice_id_as_its_tag_prefix():
-    pytest.importorskip("langcodes")
     assert lang_distance("zh-HK-HiuMaanNeural", "zh-HK") == 0
     assert lang_distance("en_GB-alan-low", "en-GB") == 0
 

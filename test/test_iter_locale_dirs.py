@@ -1,5 +1,4 @@
 """Tests for `iter_locale_dirs` — the canonical locale subdir walker."""
-import pytest
 
 from ovos_spec_tools import iter_locale_dirs
 
@@ -46,7 +45,6 @@ def test_files_in_locale_root_are_ignored(tmp_path):
 
 def test_native_filter_keeps_a_regional_subdir(tmp_path):
     """A skill that declares ``en`` as native still discovers ``en-US/``."""
-    pytest.importorskip("langcodes")
     root = _make_skill(tmp_path, "en-US", "fr-FR")
     langs = sorted(lang for lang, _ in
                    iter_locale_dirs(root, native_langs=["en"]))
@@ -54,7 +52,6 @@ def test_native_filter_keeps_a_regional_subdir(tmp_path):
 
 
 def test_native_filter_drops_unrelated_languages(tmp_path):
-    pytest.importorskip("langcodes")
     root = _make_skill(tmp_path, "en-US", "fr-FR", "ja-JP")
     langs = sorted(lang for lang, _ in
                    iter_locale_dirs(root, native_langs=["en-GB", "fr"]))
