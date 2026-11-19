@@ -1,4 +1,6 @@
 """Conformance tests for the OVOS-INTENT-2 reference loader."""
+from pathlib import Path
+
 import pytest
 
 from ovos_spec_tools.expansion import MalformedTemplate
@@ -1151,3 +1153,153 @@ def test_preload_fault_in_one_language_leaves_another_usable(tmp_path):
     assert resources.voc_match("yes, please", "yes", "en-US")
     with pytest.raises(MalformedTemplate):
         resources.load_vocabulary("broken", "it-IT")
+
+
+# --- langs: a snapshot of the chosen languages only --------------------------
+
+def _en_pt_tree(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en" / "stop.voc", "stop\nhalt\n")
+    _write(locale / "en" / "hello.dialog", "hello\n")
+    _write(locale / "pt-PT" / "stop.voc", "parar\n")
+    _write(locale / "pt-PT" / "hello.dialog", "olá\n")
+    _write(locale / "pt-PT" / "persona.prompt", "Responde em português.\n")
+    return locale
+
+
+def test_langs_snapshot_opens_no_file_of_another_language(tmp_path,
+                                                          monkeypatch):
+    from ovos_spec_tools import resources as resources_module
+
+    locale = _en_pt_tree(tmp_path)
+    opened = []
+    real_lines = resources_module.read_resource_file
+    real_prompt = resources_module.read_prompt_file
+
+    def lines(path):
+        opened.append(path)
+        return real_lines(path)
+
+    def prompt(path):
+        opened.append(path)
+        return real_prompt(path)
+
+    monkeypatch.setattr(resources_module, "read_resource_file", lines)
+    monkeypatch.setattr(resources_module, "read_prompt_file", prompt)
+    res = LocaleResources(str(locale), langs=["en-US"])
+    assert res.load_vocabulary("stop", "en-US") == ["stop", "halt"]
+    assert res.load_dialog("hello", "en") == ["hello"]
+    assert {path.parent.name for path in opened} == {"en"}
+
+
+def test_langs_snapshot_equals_the_full_snapshot_for_its_language(tmp_path):
+    locale = _en_pt_tree(tmp_path)
+    full = LocaleResources(str(locale))
+    one = LocaleResources(str(locale), langs=["en"])
+    assert one.vocabularies("en") == full.vocabularies("en") == {
+        "stop": ["stop", "halt"]}
+
+
+@pytest.mark.parametrize("lang", ["pt-PT", "pt", "xx-XX"])
+def test_langs_snapshot_refuses_a_language_it_did_not_read(tmp_path, lang):
+    locale = _en_pt_tree(tmp_path)
+    res = LocaleResources(str(locale), langs=["en"])
+    message = rf"language '{lang}' .* langs=\['en'\]"
+    with pytest.raises(LookupError, match=message):
+        res.vocabularies(lang)
+    with pytest.raises(LookupError, match=message):
+        res.load_vocabulary("stop", lang)
+
+
+def test_langs_snapshot_refuses_a_directory_it_did_not_read(tmp_path):
+    locale = tmp_path / "locale"
+    _write(locale / "en" / "stop.voc", "stop\n")
+    _write(locale / "en-US" / "stop.voc", "quit\n")
+    res = LocaleResources(str(locale), langs=["en"])
+    assert res.load_vocabulary("stop", "en") == ["stop"]
+    message = (r"language 'en-US' is outside this LocaleResources snapshot, "
+               r"built with langs=\['en'\]")
+    with pytest.raises(LookupError, match=message):
+        res.load_vocabulary("stop", "en-US")
+
+
+def test_langs_snapshot_allows_a_listed_language_missing_from_core(tmp_path):
+    skill = tmp_path / "skill"
+    core = tmp_path / "core"
+    _write(skill / "pt-PT" / "stop.voc", "parar\n")
+    _write(skill / "en" / "stop.voc", "stop\n")
+    _write(core / "en" / "yes.voc", "yes\n")
+    res = LocaleResources(str(skill), str(core), langs=["pt-PT"])
+    assert res.vocabularies("pt-PT") == {"stop": ["parar"]}
+
+
+@pytest.mark.parametrize("tag, dirs", [
+    ("de", ["de-AT", "de-CH"]),
+    ("fr", ["fr-BE", "fr-CA", "fr-CH"]),
+    ("en-US", ["en-US", "en-us"]),
+])
+def test_langs_snapshot_breaks_a_fallback_tie_as_a_load_call_does(
+        tmp_path, monkeypatch, tag, dirs):
+    locale = tmp_path / "locale"
+    for name in dirs:
+        _write(locale / name / "word.voc", f"{name}\n")
+    expected = LocaleResources(str(locale)).load_vocabulary("word", tag)
+    # A filesystem lists entries in any order; the snapshot must not care.
+    real_iterdir = Path.iterdir
+    monkeypatch.setattr(
+        Path, "iterdir",
+        lambda self: iter(sorted(real_iterdir(self), reverse=True)))
+    res = LocaleResources(str(locale), langs=[tag])
+    assert res.load_vocabulary("word", tag) == expected == [dirs[0]]
+
+
+def test_langs_rejects_a_bare_string(tmp_path):
+    with pytest.raises(TypeError, match="langs must be a list of tags"):
+        LocaleResources(str(_en_pt_tree(tmp_path)), langs="en")
+
+
+@pytest.mark.parametrize("tag, skill_dirs, core_dirs", [
+    ("pt", ["pt-BR"], ["pt-BR", "pt-PT"]),
+    ("en", ["en-US"], ["en", "en-US"]),
+    ("de", ["de-DE"], ["de", "de-DE"]),
+    # pt-BR resolves to pt-AO in the core: found only on a second pass
+    ("pt", ["pt-BR"], ["pt-AO", "pt-PT"]),
+])
+def test_langs_snapshot_holds_what_a_load_resolves_across_sources(
+        tmp_path, tag, skill_dirs, core_dirs):
+    skill = tmp_path / "skill"
+    core = tmp_path / "core"
+    for name in skill_dirs:
+        _write(skill / name / "stop.voc", f"stop {name}\n")
+    for name in core_dirs:
+        _write(core / name / "yes.voc", f"yes {name}\n")
+    full = LocaleResources(str(skill), str(core))
+    one = LocaleResources(str(skill), str(core), langs=[tag])
+    assert one.load_vocabulary("stop", tag) == full.load_vocabulary(
+        "stop", tag) == [f"stop {skill_dirs[0]}"]
+    assert one.voc_match(f"stop {skill_dirs[0]}", "stop", tag)
+
+
+def test_langs_snapshot_lists_a_folder_name_the_custom_resolver_skips(
+        tmp_path):
+    def table(lang, available, max_distance):
+        match = {"pt": "pt-PT"}.get(lang)
+        return match if match in available else None
+
+    skill = tmp_path / "skill"
+    core = tmp_path / "core"
+    _write(skill / "pt-PT" / "stop.voc", "parar\n")
+    _write(core / "en" / "yes.voc", "yes\n")
+    res = LocaleResources(str(skill), str(core), lang_resolver=table,
+                          langs=["pt"])
+    assert res.load_vocabulary("stop", "pt") == ["parar"]
+
+
+def test_langs_snapshot_serves_a_fallback_when_one_source_lacks_the_language(
+        tmp_path):
+    skill = tmp_path / "skill"
+    core = tmp_path / "core"
+    _write(skill / "en" / "stop.voc", "stop\n")
+    _write(core / "fr" / "yes.voc", "oui\n")
+    res = LocaleResources(str(skill), str(core), langs=["en"])
+    assert res.load_vocabulary("stop", "en-GB") == ["stop"]
