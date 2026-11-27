@@ -1,4 +1,11 @@
 # 3. Locale resources
+<!-- agent-hint
+covers: how LocaleResources finds and loads the files of a locale folder
+source: ovos_spec_tools/resources.py
+generated: no
+verify: python3 docs/check_page.py docs/locale-resources.md
+see: dialog.md
+-->
 
 > **Spec coverage.** This chapter is the reference for **OVOS-INTENT-2: Locale
 > Resource Formats** (`resources.py`). `LocaleResources` is the *conformant
@@ -251,4 +258,4 @@ the constructor:
 [Dialog](dialog.md), turning a loaded `.dialog` into a spoken sentence.
 
 ---
-[← Sentence templates](templates.md) · [Home](README.md) · [Dialog →](dialog.md)
+[← Sentence templates](templates.md) · [Home](index.md) · [Next →](dialog.md)

@@ -1,4 +1,11 @@
 # 2. Sentence templates
+<!-- agent-hint
+covers: the sentence template grammar and how expand and iter_expand read it
+source: ovos_spec_tools/expansion.py
+generated: no
+verify: python3 docs/check_page.py docs/templates.md
+see: locale-resources.md
+-->
 
 > **Spec coverage.** This chapter is the reference for **OVOS-INTENT-1: the
 > Sentence Template Grammar** (`expansion.py`). `expand()` is the *Expander*
@@ -201,10 +208,25 @@ recognizes phrasings that were never enumerated. So keep templates focused and
 readable. You are not obliged to spell out every wording. Matching and
 generalization are the engine's job and are out of scope here.
 
+## Take only some samples
+
+A template with many groups expands to many samples. `iter_expand` yields them one at a time, in the order of `expand`, so you pay only for the samples that you take:
+
+```python
+from itertools import islice
+from ovos_spec_tools import iter_expand
+
+print(list(islice(iter_expand("(turn|switch) [the] (light|fan)"), 3)))
+```
+
+```text
+['turn the light', 'switch the light', 'turn light']
+```
+
 ## Next
 
 [Locale resources](locale-resources.md), where templates live on disk, and
 how to load them.
 
 ---
-[← Getting started](getting-started.md) · [Home](README.md) · [Locale resources →](locale-resources.md)
+[← Getting started](getting-started.md) · [Home](index.md) · [Next →](locale-resources.md)

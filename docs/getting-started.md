@@ -1,4 +1,11 @@
 # 1. Getting started
+<!-- agent-hint
+covers: how to install ovos-spec-tools and use each tool once
+source: pyproject.toml, ovos_spec_tools/__init__.py
+generated: no
+verify: python3 docs/check_page.py docs/getting-started.md
+see: templates.md
+-->
 
 ## What this package is
 
@@ -15,8 +22,8 @@ matching the formal specifications. Depend on it instead of rolling your own.
 ## Install
 
 ```bash
-pip install ovos-spec-tools            # core
-pip install ovos-spec-tools[langcodes] # adds the smart language fallback
+uv pip install --prerelease=allow ovos-spec-tools               # core
+uv pip install --prerelease=allow "ovos-spec-tools[langcodes]"  # adds the full language distance
 ```
 
 The core package depends only on `linguatag`. The optional `langcodes` extra
@@ -113,4 +120,4 @@ Continue with [Sentence templates](templates.md): the grammar is the
 foundation the resource loader and the dialog renderer both build on.
 
 ---
-[Home](README.md) · [Sentence templates →](templates.md)
+[Home](index.md) · [Next →](templates.md)

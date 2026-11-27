@@ -1,107 +1,60 @@
 # ovos-spec-tools
+<!-- agent-hint
+covers: what ovos-spec-tools is, how to install it, and where each topic is documented
+source: pyproject.toml, ovos_spec_tools/__init__.py
+generated: no
+verify: python3 docs/check_page.py README.md
+see: docs/index.md
+-->
 
-Reference implementation of the OVOS [formal
-specifications](https://github.com/OpenVoiceOS/architecture), the
-low-level, dependency-light primitives those specifications describe.
-
-OVOS components reimplement template expansion, resource loading, and language
-matching in several places, and the copies drift. This package is the single
-conformant implementation those components, and any third-party tool, can
-depend on.
-
-## Status
-
-| Tool | Spec | Code |
-|------|------|-------|
-| Sentence template expander | OVOS-INTENT-1 v2 | `expansion.py` |
-| Locale resource loader | OVOS-INTENT-2 |  `resources.py`  |
-| Dialog renderer | OVOS-INTENT-2 §4.2 |  `dialog.py`  |
-| Prompt renderer | OVOS-INTENT-2 §4.4 |  `prompt.py`  |
-
-| Tool | Spec | Code |
-|------|------|-------|
-| Language-tag matching | OVOS-INTENT-2 §2.2 |  `language.py` |
-| Bus message envelope | OVOS-MSG-1 |  `message.py`  |
-| Intent dispatch topics | OVOS-MSG-1 §2.1.1 / OVOS-INTENT-4 |  `intent_topics.py`  |
-| `ovos-spec-lint` locale linter | OVOS-INTENT-1 / -2 |  `lint.py`  |
+`ovos-spec-tools` is the reference implementation of the [OVOS specifications](https://github.com/OpenVoiceOS/architecture). It expands sentence templates, loads `locale/` folders, renders dialogs and prompts, matches language tags, gives the bus message envelope, and lints locale folders. OVOS components and other tools use it, so that each one does not have its own copy.
 
 ## Install
 
 ```bash
-pip install ovos-spec-tools            # core
-pip install ovos-spec-tools[langcodes] # adds the smart language fallback
+uv pip install --prerelease=allow ovos-spec-tools
 ```
 
-Requires Python 3.11+.
+The `langcodes` extra adds the full CLDR language distance. Python 3.11 or later.
 
-## Quick taste
+## Quickstart
 
 ```python
-from ovos_spec_tools import (expand, LocaleResources, render, render_prompt,
-                             closest_lang, Message)
+from ovos_spec_tools import expand, closest_lang, Message
 
-expand("(turn|switch) [the] light")          # all 4 sentences it denotes
-res = LocaleResources("my-skill/locale")
-res.load_intent("play", "en-US")             # a skill's intent samples
-render(res.load_dialog("weather", "en-US"),  # a spoken response
-       slots={"temperature": 21})
-render_prompt(res.load_prompt("system", "en-US"),  # a language-model prompt
-              slots={"query": "what time is it"})
-closest_lang("en-AU", ["pt-BR", "en-US"])    # 'en-US'
-
-# OVOS-MSG-1 envelope: a bus message and its 'send back to the asker' reply
-m = Message("ovos.intent.list", {}, {"source": "skill.id"})
-res = m.response({"intents": ["..."]})       # 'ovos.intent.list.response'
-res.serialize()                              # single UTF-8 JSON object
+print(expand("(turn|switch) [the] light"))
+print(closest_lang("en-AU", ["pt-BR", "en-US"]))
+reply = Message("ovos.intent.list", {}, {"source": "skill.id"}).response({"intents": ["..."]})
+print(reply.serialize())
 ```
 
-```bash
-ovos-spec-lint my-skill/locale               # validate a locale folder
+```text
+['turn the light', 'switch the light', 'turn light', 'switch light']
+en-US
+{"type": "ovos.intent.list.response", "data": {"intents": ["..."]}, "context": {"source": "skill.id", "destination": "skill.id"}}
 ```
+
+To check a locale folder: `ovos-spec-lint my-skill/locale`.
 
 ## Documentation
 
-A zero-to-hero guide lives in [`docs/`](docs/README.md):
+| Page | What you get there |
+| :--- | :--- |
+| [docs/index.md](docs/index.md) | The reading order of all pages |
+| [docs/templates.md](docs/templates.md) | The sentence template grammar |
+| [docs/locale-resources.md](docs/locale-resources.md) | How to load a `locale/` folder |
+| [docs/language-matching.md](docs/language-matching.md) | How language tags are standardized and matched |
+| [docs/message.md](docs/message.md) | The bus message envelope |
+| [docs/api-reference.md](docs/api-reference.md) | Each public name |
 
-1. [Getting started](docs/getting-started.md), install, and a first taste of
-   every tool.
-2. [Sentence templates](docs/templates.md), the grammar: alternatives,
-   optionals, slots, vocabulary references, malformed forms.
-3. [Locale resources](docs/locale-resources.md), the `locale/` folder, the
-   seven file roles, loading across languages, override precedence.
-4. [Dialog](docs/dialog.md), choosing and filling a spoken response, and
-   rendering language-model prompts.
-
-5. [Language matching](docs/language-matching.md), tag standardization,
-   distance, and closest-match resolution.
-6. [Bus messages](docs/message.md), the on-the-wire envelope, the
-   `forward` / `reply` / `response` derivations, and the session carrier.
-7. [Linting](docs/linting.md), validating a locale folder, on the CLI or in CI.
-8. [API reference](docs/api-reference.md), every public name, in brief.
-
-Runnable example scripts are in [`examples/`](examples/README.md).
-
-See [docs/prerelease-quirks.md](docs/prerelease-quirks.md) for what changed
-since the last stable release (there has not been one yet, so it covers
-everything since the first alpha).
-
----
+Example scripts are in [examples/](examples/README.md).
 
 ## Credits
 
-Developed by [TigreGótico](https://tigregotico.pt) for
-[OpenVoiceOS](https://openvoiceos.org).
+Developed by [TigreGótico](https://tigregotico.pt) for [OpenVoiceOS](https://openvoiceos.org). Funded through the [NGI0 Commons Fund](https://nlnet.nl/commonsfund), a fund of [NLnet](https://nlnet.nl) with financial support from the European Commission's [Next Generation Internet](https://ngi.eu) programme, under grant agreement No [101135429](https://cordis.europa.eu/project/id/101135429).
 
 [![NGI0 Commons Fund](./ngi.png)](https://nlnet.nl/project/OpenVoiceOS)
 
-This project was funded through the [NGI0 Commons Fund](https://nlnet.nl/commonsfund),
-a fund established by [NLnet](https://nlnet.nl) with financial support from the
-European Commission's [Next Generation Internet](https://ngi.eu) programme, under
-the aegis of [DG Communications Networks, Content and Technology](https://commission.europa.eu/about-european-commission/departments-and-executive-agencies/communications-networks-content-and-technology_en)
-under grant agreement No [101135429](https://cordis.europa.eu/project/id/101135429).
-
----
-
 ## License
 
-Apache 2.0
+Apache 2.0. See [LICENSE.md](LICENSE.md).

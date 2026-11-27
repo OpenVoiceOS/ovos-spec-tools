@@ -1,4 +1,11 @@
 # 4. Dialog
+<!-- agent-hint
+covers: how render and DialogRenderer choose and fill a dialog, and how render_prompt fills a prompt
+source: ovos_spec_tools/dialog.py, ovos_spec_tools/prompt.py
+generated: no
+verify: python3 docs/check_page.py docs/dialog.md
+see: language-matching.md
+-->
 
 > **Spec coverage.** This chapter is the reference for the **Dialog renderer**
 > conformance role of OVOS-INTENT-1 §7 over the `.dialog` format of
@@ -161,4 +168,4 @@ fallback. A prompt is one whole-file body and its slots are optional.
 smart fallback.
 
 ---
-[← Locale resources](locale-resources.md) · [Home](README.md) · [Language matching →](language-matching.md)
+[← Locale resources](locale-resources.md) · [Home](index.md) · [Next →](language-matching.md)

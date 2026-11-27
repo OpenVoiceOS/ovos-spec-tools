@@ -1,4 +1,11 @@
 # Spec traceability
+<!-- agent-hint
+covers: which spec section defines each public name
+source: ovos_spec_tools/__init__.py
+generated: no
+verify: python3 docs/check_page.py docs/spec-traceability.md ovos_spec_tools.__all__
+see: migration.md
+-->
 
 `ovos-spec-tools` exists for one reason: to be the **reference
 implementation of the OVOS formal specifications**. Every public symbol in
@@ -243,4 +250,4 @@ placeholders) and topics used by `ovos-bus-client` that no spec defines
 (`ovos.session.update_default`, `ovos.session.start`, `ovos.context.set`).
 
 ---
-[Home](README.md)
+[← API reference](api-reference.md) · [Home](index.md) · [Next →](migration.md)
