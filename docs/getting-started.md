@@ -1,4 +1,11 @@
 # 1. Getting started
+<!-- agent-hint
+covers: how to install ovos-spec-tools and use each tool once
+source: pyproject.toml, ovos_spec_tools/__init__.py
+generated: no
+verify: python3 docs/check_page.py docs/getting-started.md
+see: templates.md
+-->
 
 ## What this package is
 
@@ -113,4 +120,4 @@ Continue with [Sentence templates](templates.md): the grammar is the
 foundation the resource loader and the dialog renderer both build on.
 
 ---
-[Home](README.md) · [Sentence templates →](templates.md)
+[Home](index.md) · [Next →](templates.md)

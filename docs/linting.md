@@ -1,4 +1,11 @@
 # 6. Linting
+<!-- agent-hint
+covers: how to check a locale folder with ovos-spec-lint
+source: ovos_spec_tools/lint.py
+generated: no
+verify: python3 docs/check_page.py docs/linting.md
+see: api-reference.md
+-->
 
 > **Spec coverage.** This chapter is the reference for the locale linter
 > (`lint.py`). Every finding enforces a specific clause: template syntax from
@@ -160,4 +167,4 @@ A malformed template now fails the build instead of failing a user's device.
 [API reference](api-reference.md), every public name at a glance.
 
 ---
-[← Bus namespaces](bus-namespaces.md) · [Home](README.md) · [API reference →](api-reference.md)
+[← Bus namespaces](bus-namespaces.md) · [Home](index.md) · [Next →](api-reference.md)

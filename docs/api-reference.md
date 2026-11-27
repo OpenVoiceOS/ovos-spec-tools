@@ -1,4 +1,11 @@
 # 7. API reference
+<!-- agent-hint
+covers: each public name of ovos_spec_tools, in brief
+source: ovos_spec_tools/__init__.py
+generated: no
+verify: python3 docs/check_page.py docs/api-reference.md
+see: spec-traceability.md
+-->
 
 Every public name, in brief. All are importable from the top-level package:
 
@@ -15,6 +22,10 @@ For the why and the worked examples, see the chapter each section links to.
 Expand a sentence template to its sample set. `vocabularies` is a
 `name -> list[str]` dict, needed only if the template uses `<name>` references.
 Raises `MalformedTemplate`.
+
+### `iter_expand(template, vocabularies=None) -> Iterator[str]`
+
+Yield the samples of `expand`, in the same order, one at a time. Use it when you keep only some samples.
 
 ### `MalformedTemplate`
 
@@ -233,4 +244,4 @@ on warnings too).
 The installed package version string.
 
 ---
-[← Linting](linting.md) · [Home](README.md)
+[← Linting](linting.md) · [Home](index.md) · [Next →](spec-traceability.md)

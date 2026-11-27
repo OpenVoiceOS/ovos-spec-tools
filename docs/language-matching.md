@@ -1,4 +1,11 @@
 # 5. Language matching
+<!-- agent-hint
+covers: how language tags are standardized, measured and matched
+source: ovos_spec_tools/language.py
+generated: no
+verify: python3 docs/check_page.py docs/language-matching.md ovos_utils.lang
+see: message.md
+-->
 
 > **Spec coverage.** This chapter is the reference for the cross-spec BCP-47
 > language-matching rules (`language.py`). The case-insensitive tag comparison
@@ -140,4 +147,4 @@ request for English is worse than failing (OVOS-INTENT-2 §2.2's caution that
 [Linting](linting.md), checking a whole locale folder at once.
 
 ---
-[← Dialog](dialog.md) · [Home](README.md) · [Bus messages →](message.md)
+[← Dialog](dialog.md) · [Home](index.md) · [Next →](message.md)

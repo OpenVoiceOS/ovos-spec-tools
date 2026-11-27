@@ -1,4 +1,11 @@
 # Bus Messages
+<!-- agent-hint
+covers: the OVOS-MSG-1 message envelope and its forward, reply and response derivations
+source: ovos_spec_tools/message.py
+generated: no
+verify: python3 docs/check_page.py docs/message.md "<topic>.response" m.as_dict
+see: bus-namespaces.md
+-->
 
 The `Message` class is the on-the-wire envelope that OVOS components
 exchange: utterances coming in, intent matches going out, skills
@@ -219,4 +226,4 @@ quick index.
   `ovos-spec-tools` mapped to its authoritative spec section.
 
 ---
-[← Language matching](language-matching.md) · [Home](README.md) · [Bus namespaces →](bus-namespaces.md)
+[← Language matching](language-matching.md) · [Home](index.md) · [Next →](bus-namespaces.md)

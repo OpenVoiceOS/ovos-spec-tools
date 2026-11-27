@@ -1,7 +1,14 @@
 # Bus namespaces: the legacy ↔ `ovos.*` migration
+<!-- agent-hint
+covers: the spec topic names, the legacy topic map and the bridge between them
+source: ovos_spec_tools/messages.py
+generated: no
+verify: python3 docs/check_page.py docs/bus-namespaces.md
+see: linting.md
+-->
 
 OVOS bus topics span two namespaces: the Mycroft-era names
-(`speak`, `recognizer_loop:utterance`, `mycroft.skill.handler.start`, …)
+(`speak`, `recognizer_loop:utterance`, `mycroft.stop`, …)
 and the `ovos.*` namespace the specifications define
 (`ovos.utterance.speak`, `ovos.utterance.handle`,
 `ovos.intent.handler.start`, …).
@@ -15,9 +22,9 @@ and the `ovos.*` namespace the specifications define
 > **The wire bridge is live.** `ovos-bus-client` runs `NamespaceTranslator`
 > on the receive path so a deployment can cross from legacy to `ovos.*`
 > topics without a flag day. Both directions — legacy → `ovos.*` and
-> `ovos.*` → legacy — translate by default; the `emit_legacy` /
-> `modernize` / `intent_reemit_blanket` flags are live and in effect on
-> `dev`. `NamespaceTranslator` and `MIGRATION_MAP`, defined here in
+> `ovos.*` → legacy — translate by default; the `emit_legacy` and
+> `modernize` arguments of `NamespaceTranslator` (both `True` by default)
+> turn each direction on or off. `NamespaceTranslator` and `MIGRATION_MAP`, defined here in
 > `ovos_spec_tools/messages.py`, are the implementation `ovos-bus-client`
 > imports and runs.
 >
@@ -87,7 +94,6 @@ Each entry encodes one spec rename. A sample:
 | `recognizer_loop:utterance` | `UTTERANCE` | PIPELINE-1 §9.1 |
 | `speak` | `SPEAK` | PIPELINE-1 §9.6 |
 | `complete_intent_failure` | `INTENT_UNMATCHED` | PIPELINE-1 §9.3 |
-| `mycroft.skill.handler.start` | `INTENT_HANDLER_START` | PIPELINE-1 §8.1 |
 
 | Legacy topic | `SpecMessage` | Spec § |
 |---|---|---|
@@ -286,4 +292,4 @@ the OVOS-MSG-1 §5 derivation rules implemented by [`Message`](message.md).
   its authoritative spec section.
 
 ---
-[← Bus messages](message.md) · [Home](README.md) · [Linting →](linting.md)
+[← Bus messages](message.md) · [Home](index.md) · [Next →](linting.md)
