@@ -15,6 +15,8 @@ see: docs/index.md
 uv pip install --prerelease=allow ovos-spec-tools
 ```
 
+The `langcodes` extra adds the full CLDR language distance. Python 3.11 or later.
+
 ## Quickstart
 
 ```python

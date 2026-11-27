@@ -46,7 +46,9 @@ Read the pages in order. The templates page is the base for the others.
 | [dialog.md](dialog.md) | How to choose and fill a spoken response, and how to render a prompt |
 | [language-matching.md](language-matching.md) | Tag standardization, distance and the closest match |
 | [message.md](message.md) | The message envelope, `forward`, `reply`, `response`, and the session carrier |
+| [sessions-and-context.md](sessions-and-context.md) | `Session` fields, `SessionManager`, and the intent context helpers |
 | [bus-namespaces.md](bus-namespaces.md) | `SpecMessage`, the `MIGRATION_MAP` of legacy topics, and the bridge |
+| [intents.md](intents.md) | Keyword intents with `IntentBuilder`, and `voc_match` |
 | [linting.md](linting.md) | How to check a locale folder on the command line or in CI |
 | [api-reference.md](api-reference.md) | Each public name, in brief |
 | [spec-traceability.md](spec-traceability.md) | Each public name and the spec section that defines it |

@@ -285,11 +285,11 @@ the OVOS-MSG-1 §5 derivation rules implemented by [`Message`](message.md).
 
 - [Bus messages](message.md), the OVOS-MSG-1 envelope and the `forward` /
   `reply` / `response` derivations these topics ride on.
-- [Intent definitions](../README.md) — `IntentBuilder` / `Intent`, the
+- [Keyword intents](intents.md) — `IntentBuilder` / `Intent`, the
   OVOS-INTENT-4 §5 registration payloads whose dispatch topics this page
   normalizes.
 - [Spec traceability](spec-traceability.md), every public symbol mapped to
   its authoritative spec section.
 
 ---
-[← Bus messages](message.md) · [Home](index.md) · [Next →](linting.md)
+[← Sessions and context](sessions-and-context.md) · [Home](index.md) · [Next →](intents.md)

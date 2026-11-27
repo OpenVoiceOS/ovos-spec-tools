@@ -226,4 +226,4 @@ quick index.
   `ovos-spec-tools` mapped to its authoritative spec section.
 
 ---
-[← Language matching](language-matching.md) · [Home](index.md) · [Next →](bus-namespaces.md)
+[← Language matching](language-matching.md) · [Home](index.md) · [Next →](sessions-and-context.md)

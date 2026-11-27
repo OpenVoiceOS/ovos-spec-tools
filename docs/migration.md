@@ -11,9 +11,9 @@ This page tells you what changes when your code moves from the older OVOS helper
 
 ## Language tags
 
-`standardize_lang(tag)` is not a rename of the older `standardize_lang_tag`. It returns a full BCP-47 tag (`en-us` gives `en-US`), with the policy of [linguatag](https://github.com/TigreGotico/linguatag):
+`standardize_lang(tag)` is not a rename of the older `standardize_lang_tag`. It gives the canonical BCP-47 form (`en-us` gives `en-US`, and `pt` stays `pt`). The policy comes from [linguatag](https://github.com/TigreGotico/linguatag):
 
-- A bare tag is measured from its default region, where the language first appeared: `pt` is `pt-PT` and `en` is `en-GB`.
+- `lang_distance` and `closest_lang` measure a bare tag from its default region, where the language first appeared: `closest_lang("pt", ["pt-BR", "pt-PT"])` gives `pt-PT`, and `en` prefers `en-GB`.
 - Do not expect the most-populous region that `langcodes` gives for a bare tag.
 
 See [language-matching.md](language-matching.md).
@@ -25,7 +25,7 @@ See [language-matching.md](language-matching.md).
 
 ## Topic bridge
 
-`MIGRATION_MAP` and `NamespaceTranslator` hold the pairs of legacy and `ovos.*` topics, and the payload change for each pair. Use them, not a local table of legacy topics. The handler topics `ovos.intent.handler.start`, `ovos.intent.handler.complete` and `ovos.intent.handler.error` are not in the bridge: the orchestrator sends them, and `mycroft.skill.handler.*` is a separate signal of the skill framework. See [bus-namespaces.md](bus-namespaces.md).
+`MIGRATION_MAP` and `NamespaceTranslator` hold the pairs of legacy and `ovos.*` topics, and the payload change for each pair. Use them, not a local table of legacy topics. The handler topics `ovos.intent.handler.start`, `ovos.intent.handler.complete` and `ovos.intent.handler.error` are not in the bridge. Their `SpecMessage` members (`INTENT_HANDLER_START` and the others) exist. The orchestrator sends them, and `mycroft.skill.handler.*` is a separate signal of the skill framework. See [bus-namespaces.md](bus-namespaces.md).
 
 ## Dialogs
 

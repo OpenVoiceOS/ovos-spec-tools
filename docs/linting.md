@@ -167,4 +167,4 @@ A malformed template now fails the build instead of failing a user's device.
 [API reference](api-reference.md), every public name at a glance.
 
 ---
-[← Bus namespaces](bus-namespaces.md) · [Home](index.md) · [Next →](api-reference.md)
+[← Keyword intents](intents.md) · [Home](index.md) · [Next →](api-reference.md)

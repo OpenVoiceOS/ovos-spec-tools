@@ -22,8 +22,8 @@ matching the formal specifications. Depend on it instead of rolling your own.
 ## Install
 
 ```bash
-pip install ovos-spec-tools            # core
-pip install ovos-spec-tools[langcodes] # adds the smart language fallback
+uv pip install --prerelease=allow ovos-spec-tools               # core
+uv pip install --prerelease=allow "ovos-spec-tools[langcodes]"  # adds the full language distance
 ```
 
 The core package depends only on `linguatag`. The optional `langcodes` extra
