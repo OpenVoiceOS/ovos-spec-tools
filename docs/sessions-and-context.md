@@ -58,11 +58,11 @@ location
 
 | Function | Spec | Does |
 | :--- | :--- | :--- |
-| `is_live(entry, now=None)` | CONTEXT-1 §2 | Tells if an entry is live |
+| `is_live(entry)` | CONTEXT-1 §2 | Tells if an entry is live |
 | `resolve_key(key, scope, owner_id)` | CONTEXT-1 §3.1 | Gives the stored key |
 | `gate_satisfied(intent_context, ...)` | CONTEXT-1 §6 | Tells if the context gate of an intent is met |
 | `context_slot_candidates(intent_context, ...)` | CONTEXT-1 §7 | Gives slot values from live context |
-| `prune(intent_context, now=None)` | CONTEXT-1 §4 | Removes the entries that are not live |
+| `prune(intent_context)` | CONTEXT-1 §4 | Removes the entries that are not live |
 | `decrement(intent_context, only_keys=None)` | CONTEXT-1 §4.1 | Decrements `turns_remaining` |
 | `enforce_cap(intent_context, ...)` | CONTEXT-1 §2 | Limits the number of live entries, and removes the entry closest to its expiry first |
 
