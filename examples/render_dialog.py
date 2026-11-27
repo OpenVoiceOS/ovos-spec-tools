@@ -24,8 +24,10 @@ renderer = DialogRenderer(resources, "weather", rng=random.Random(1))
 for _ in range(3):
     print("  ", renderer.render("en-US", {"temperature": 21}))
 
-# Default slots are set once and reused; `.entity` fills anything left over.
-# `agenda.dialog` has a {weekday} slot and weekday.entity supplies the values.
-print("\nDialogRenderer — .entity fallback:")
-agenda = DialogRenderer(resources, "agenda", rng=random.Random(2))
-print("   no slots passed:", agenda.render("en-US"))  # {weekday} from .entity
+# Default slots are set once and reused; a per-call value overrides them. A slot
+# with neither raises UnfilledSlot: an `.entity` never fills a dialog slot.
+print("\nDialogRenderer — default slots:")
+agenda = DialogRenderer(resources, "agenda", rng=random.Random(2),
+                        slots={"weekday": "Monday"})
+print("   default:", agenda.render("en-US"))
+print("   per call:", agenda.render("en-US", {"weekday": "Friday"}))

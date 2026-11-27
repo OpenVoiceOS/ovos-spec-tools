@@ -75,24 +75,23 @@ renderer serves every language the dialog ships in.
 again, tracked **per language**, so a frequently-spoken response does not
 sound mechanical. With two phrases, consecutive renders strictly alternate.
 
-### It carries default slots and an `.entity` fallback
+### It carries default slots
 
 A slot is resolved in a clear order of precedence:
 
 1. a value passed to this `render()` call.
 2. a **default** value, set once on the constructor and reused every call.
-3. a random value from the slot's **`.entity`** value set.
-4. otherwise, `UnfilledSlot`.
+3. otherwise, `UnfilledSlot`.
 
 ```python
 renderer = DialogRenderer(res, "greeting", slots={"assistant": "OVOS"})
 renderer.render("en-US")
 ```
 
-Here `{assistant}` is filled from the default every time. A `{weekday}` slot
-that the caller does not supply is filled from `weekday.entity` if the skill
-ships one, useful for a slot whose value is a free pick from a known set
-rather than a computed value.
+Here `{assistant}` is filled from the default every time. An `.entity` value
+set never fills a dialog slot, because `.entity` is for `.intent` only
+(OVOS-INTENT-2 §4.2). A `{weekday}` slot that the caller does not supply
+raises `UnfilledSlot`, even when `weekday.entity` exists.
 
 ## Choosing between them
 
@@ -101,7 +100,7 @@ rather than a computed value.
 | Input | an explicit phrase list | a `LocaleResources` + dialog name |
 | Language | decided by the caller | per `render()` call |
 | Repetition avoidance | no | yes, per language |
-| Default slots / `.entity` fallback | no | yes |
+| Default slots | no | yes |
 
 Use `render()` when you already hold the phrases and want one sentence. Use
 `DialogRenderer` for a skill response spoken more than once.
@@ -152,8 +151,7 @@ renderer.render("en-US", {"query": "what time is it"})
 renderer.render("pt-PT", {"query": "que horas são"})   # same prompt, another language
 ```
 
-It has no phrase selection, no repetition avoidance, and no `.entity`
-fallback. A prompt is one whole-file body and its slots are optional.
+It has no phrase selection and no repetition avoidance. A prompt is one whole-file body and its slots are optional.
 
 ## Next
 

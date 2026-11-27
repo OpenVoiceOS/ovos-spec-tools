@@ -135,8 +135,9 @@ class DialogRenderer:
     Backed by a :class:`~ovos_spec_tools.resources.LocaleResources`: the dialog
     name is fixed at construction, but the **language is given per**
     :meth:`render` **call**, so one renderer serves every language the dialog
-    is shipped in. Each call loads that language's phrases, vocabularies, and
-    ``.entity`` value sets afresh.
+    is shipped in. Each call loads that language's phrases and vocabularies
+    afresh. An ``.entity`` value set never fills a dialog slot: ``.entity`` is
+    for ``.intent`` only (OVOS-INTENT-2 §4.2).
 
     Unlike the bare :func:`render`, it **avoids repeating the phrase it chose
     on the previous call** — tracked independently per language — so a
@@ -150,8 +151,8 @@ class DialogRenderer:
         """
         Args:
             resources: a :class:`~ovos_spec_tools.resources.LocaleResources`
-                (or anything with ``load_dialog``, ``vocabularies`` and
-                ``entities`` methods taking a language).
+                (or anything with ``load_dialog`` and ``vocabularies``
+                methods taking a language).
             name: the base name of the ``.dialog`` to render.
             rng: an object with a ``choice`` method; defaults to :mod:`random`.
             slots: **default** slot values, held for the renderer's lifetime
@@ -169,9 +170,8 @@ class DialogRenderer:
         """Render one phrase of the dialog in ``lang``.
 
         A slot is filled, in order of precedence, from: the per-call ``slots``;
-        then the renderer's default slots; then a random value from the slot's
-        ``.entity`` set for ``lang``. A slot none of these supply raises
-        :class:`UnfilledSlot`.
+        then the renderer's default slots. A slot neither supplies raises
+        :class:`UnfilledSlot`, even when an ``.entity`` of that name exists.
 
         The phrase chosen on the previous call **for the same language** is
         avoided when the dialog has more than one phrase.
@@ -204,15 +204,13 @@ class DialogRenderer:
         self._last[lang] = phrase
 
         return _render_phrase(phrase, effective,
-                              self.resources.vocabularies(lang), self.rng,
-                              self.resources.entities(lang))
+                              self.resources.vocabularies(lang), self.rng)
 
 
 def _render_phrase(phrase: str,
                    slots: Dict[str, object],
                    vocabularies: Optional[Dict[str, Sequence[str]]],
-                   chooser: Chooser,
-                   entities: Optional[Dict[str, Sequence[str]]] = None) -> str:
+                   chooser: Chooser) -> str:
     """Expand one phrase to a variant, then fill its slots.
 
     Expansion keeps slots opaque (OVOS-INTENT-1 §4), so it runs first and a
@@ -225,28 +223,24 @@ def _render_phrase(phrase: str,
     """
     variant = chooser.choice(
         expand(phrase, vocabularies, direction=OUTPUT_DIRECTION))
-    return _fill_slots(variant, slots, entities, chooser)
+    return _fill_slots(variant, slots)
 
 
-def _fill_slots(variant: str,
-                slots: Dict[str, object],
-                entities: Optional[Dict[str, Sequence[str]]],
-                chooser: Chooser) -> str:
-    """Replace every ``{name}`` in ``variant`` with a value.
+def _fill_slots(variant: str, slots: Dict[str, object]) -> str:
+    """Replace every ``{name}`` in ``variant`` with its value from ``slots``.
 
-    A value is taken from ``slots``; failing that, a random valid value from
-    the slot's ``.entity`` set in ``entities``; failing that, the slot has no
-    value and :class:`UnfilledSlot` is raised.
+    A name that occurs more than once takes the same value at every
+    occurrence (OVOS-INTENT-1 §3.6). A name with no value raises
+    :class:`UnfilledSlot`: an ``.entity`` value set is for ``.intent`` only
+    and never fills a dialog slot (OVOS-INTENT-2 §4.2).
     """
 
     def replace(match: "re.Match") -> str:
         name = match.group(1)
         if name in slots:
             return str(slots[name])
-        if entities and entities.get(name):
-            return str(chooser.choice(list(entities[name])))
         raise UnfilledSlot(
             f"dialog slot {{{name}}} has no value: it was not filled by the "
-            f"caller and has no .entity fallback")
+            f"caller or a default")
 
     return _SLOT_TOKEN_RE.sub(replace, variant)

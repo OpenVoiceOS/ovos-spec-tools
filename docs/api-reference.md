@@ -81,7 +81,7 @@ A stateful, multilingual renderer for the dialog `name`, backed by a
 
 - **`render(lang, slots=None) -> str`**, render one phrase in `lang`. Avoids
   repeating the previous phrase (per language). Slot precedence: per-call,
-  then default, then a random `.entity` value, then `UnfilledSlot`.
+  then default, then `UnfilledSlot`. An `.entity` never fills a slot.
 
 ### `UnfilledSlot`
 

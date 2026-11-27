@@ -512,16 +512,16 @@ def test_a_dialog_with_adjacent_slots_keeps_its_other_findings(tmp_path):
     """Control: skipping adjacency does not silence the rest of §3.6."""
     locale = tmp_path / "locale"
     _write(locale / "en-US" / "wind.dialog",
-           "Wind is {speed} {speed} strong.\n")
-    assert any("repeated slot name" in f.message
+           "Wind is {speed} {speed_unit} strong|calm.\n")
+    assert any("a pipe outside a group" in f.message
                for f in _errors(lint_locale(locale)))
 
 
 @pytest.mark.parametrize("name,content,expected_substring", [
     ("bare_pipe", "Wind is {speed}|blowing hard.\n",
      "a pipe outside a group"),
-    ("repeated_slot_name", "Wind is {speed} {speed} strong.\n",
-     "repeated slot name"),
+    ("undefined_vocabulary", "Wind is <gusty> {speed}.\n",
+     "undefined vocabulary"),
     ("unbalanced_group", "Wind is (gusty {speed}.\n",
      "unbalanced metacharacters"),
 ])

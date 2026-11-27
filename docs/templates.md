@@ -163,7 +163,7 @@ The malformed forms (OVOS-INTENT-1 §3.6):
 | Empty sample | `[hello]`, `(|)` | a sample with no words trains nothing |
 | Slot-only template (input direction only) | `{name}` | a template needs anchoring literal text |
 | Adjacent slots (input direction only) | `{a} {b}` | no word between two slots to delimit them |
-| Repeated slot name | `{x} and {x}` | a slot is defined once per sample |
+| Repeated slot name (input direction only) | `{x} and {x}`, `{x} and {date:x}` | a slot name is defined once per sample |
 | Undefined vocabulary | `<missing>` | no such vocabulary was supplied |
 | Cyclic vocabulary | `<a>`→`<b>`→`<a>` | resolution would not terminate |
 
@@ -172,8 +172,8 @@ Two are checked against the **expanded samples**, not the raw template:
 pair `{a} {b}`; and a template is malformed if *any* branch combination
 produces an empty sentence.
 
-Two forms hold in the **input direction** only (§2): adjacent slots and the
-slot-only template. The adjacent-slot rule
+Three forms hold in the **input direction** only (§2): adjacent slots, the
+slot-only template and the repeated slot name. The adjacent-slot rule
 exists so a matcher can tell where one slot's value ends and the next begins.
 A `.dialog` is output-direction: the caller gives one value per slot name and
 the renderer puts each value in place of its name, so nothing recovers a value
@@ -188,9 +188,23 @@ expand("Wind is {speed} {speed_unit}.", direction="output")
 A `.dialog` phrase that is a single slot, such as `{day}`, is well formed for
 the same reason: the caller supplies the whole line.
 
+A repeated slot name is malformed in an `.intent`, because the engine returns
+one value per slot name and a second occurrence leaves open which span of the
+utterance that value is. The comparison is on the name, so `{x} and {date:x}`
+repeats a name. In a `.dialog` the caller gives one value per name, and the
+renderer puts it in place of every occurrence. This line is well formed, and
+both occurrences read the same number:
+
+```
+You may roll at most {number} dice. {number} is the limit.
+```
+
+A repeated name adds nothing to the declared slot set. The slot-name rule of
+§3.4 holds in both directions.
 `ovos-spec-lint` selects the direction from the file role, and the dialog
-renderer always reads a phrase in the output direction. Adjacent slots and
-slot-only templates are input-direction only; every other malformed form above
+renderer always reads a phrase in the output direction. Adjacent slots,
+slot-only templates and repeated slot names are input-direction only; every
+other malformed form above
 holds in both directions.
 
 ## Templates as training data

@@ -515,9 +515,9 @@ def test_adjacent_slots_accepted_in_the_output_direction(template, expected):
 def test_other_malformed_forms_still_raise_in_the_output_direction():
     """Control: the other §3.6 forms still raise in the output direction."""
     with pytest.raises(MalformedTemplate):
-        expand("{x} and {x}", direction="output")
-    with pytest.raises(MalformedTemplate):
         expand("turn (on|off the lights", direction="output")
+    with pytest.raises(MalformedTemplate):
+        expand("turn on <missing>", direction="output")
 
 
 def test_unknown_direction_is_rejected():
