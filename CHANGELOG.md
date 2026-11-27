@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.2a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.17.2a1) (2026-11-27)
+
+[Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.17.1a2...1.17.2a1)
+
+**Merged pull requests:**
+
+- fix\(deps\): require linguatag 0.4.0a1, the first release the language tests pass on [\#200](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/200) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [1.17.1a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.17.1a2) (2026-11-19)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.17.1a1...1.17.1a2)
@@ -321,10 +329,6 @@
 ## [1.8.0a2](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.8.0a2) (2026-08-31)
 
 [Full Changelog](https://github.com/OpenVoiceOS/ovos-spec-tools/compare/1.8.0a1...1.8.0a2)
-
-**Merged pull requests:**
-
-- docs: cross-link the technical manual [\#94](https://github.com/OpenVoiceOS/ovos-spec-tools/pull/94) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [1.8.0a1](https://github.com/OpenVoiceOS/ovos-spec-tools/tree/1.8.0a1) (2026-08-17)
 
