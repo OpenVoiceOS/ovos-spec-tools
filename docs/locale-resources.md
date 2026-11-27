@@ -153,6 +153,22 @@ say) does not fail construction: the error is raised when that resource is
 actually requested, so one bad file in an unused language cannot take down
 every other language.
 
+A process that uses one or two languages can pass `langs`.
+`LocaleResources(locale_dir, langs=["en"])` reads and snapshots only the
+language directories those tags resolve to, so `en-US` finds `en/`. A load
+also resolves the directory name of one source against the other sources, so
+the snapshot also holds the directories that those names resolve to. For
+example, take `langs=["pt"]`, a skill tree with `pt-BR/`, and a core tree with
+`pt-BR/` and `pt-PT/`. The snapshot holds all three directories.
+
+A request that resolves outside the snapshot raises `LookupError`, which names
+the language and the `langs` of the instance. A request that falls back into a
+snapshotted directory is served: with `langs=["en-US"]` and no `en-GB/`
+directory, a request for `en-GB` reads `en-US/`. `find`, `load_dialog` and
+`load_prompt` also serve a file from the live user tree for any language. The
+other methods expand against the snapshot, so they raise for a language
+outside it.
+
 The optional **user** resource tree is deliberately different. It remains
 live and is checked on every call, so a user override can be created, edited,
 or removed without rebuilding the installed-resource snapshot. A live user
